@@ -147,13 +147,36 @@ Output PDF goes to `outputs/<timestamp>_learning_guide.pdf`.
 | PDF lib | **fpdf2** | Pure Python, no system deps (WeasyPrint required pango/glib which had FFI issues on macOS) |
 | Embeddings | ChromaDB default (all-MiniLM-L6-v2) | Free, local, no API cost |
 | LLM split | GPT-5-mini (agents 1+2), GPT-5 (agent 3) | Save cost on extraction, quality on generation |
+| Concurrency | `ThreadPoolExecutor` | stdlib, no extra deps; `max_workers=4` configurable via settings |
+| Domain scoping | `curriculum_scope` in state | Prevents LLM drift into unrelated topics; enforced in all prompts |
 | Progress | Print statements | Simple; upgrade to rich/tqdm later |
+
+---
+
+## Post-Prototype Improvements (Complete)
+
+### Parallelization
+All three agents now use `ThreadPoolExecutor` (controlled by `max_workers` in config, default 4):
+- **Ingest**: File summarization runs concurrently
+- **Research**: All topics researched in parallel; within each topic, the two web searches also run in parallel
+- **Generate**: All learning modules generated concurrently
+
+### Domain Scoping
+New `curriculum_scope` field flows through the entire pipeline to prevent topic drift:
+- Ingest extracts a one-sentence scope description along with enriched topic metadata (`key_techniques`, `domain_context`)
+- Research and Generate prompts enforce staying within the curriculum's domain
+- Web search queries are more targeted using techniques and domain context instead of generic topic names
+
+### Test Hardening
+PDF builder tests expanded from 1 to 20+ covering Unicode edge cases, malformed markdown, empty/long content, special characters, and structural mismatches.
+
+### Bug Fix
+- PDF title on cover page now sanitized to prevent `UnicodeEncodeError`
 
 ---
 
 ## Known Issues / Notes
 
-- **Runtime**: ~29 minutes for a single slide with 15 topics (mostly API calls). Parallelization would help.
 - **fpdf2 Unicode**: Latin-1 only. The `_sanitize()` function maps common Unicode chars from GPT output to ASCII equivalents. Remaining non-latin-1 chars are replaced with `?`.
 - **ChromaDB dedup**: Research agent deduplicates search results by MD5 hash to avoid DuplicateIDError.
 
@@ -169,7 +192,7 @@ Output PDF goes to `outputs/<timestamp>_learning_guide.pdf`.
 
 ## Verification
 
-1. `make test` — 7 unit tests pass (file parser, ChromaDB, PDF builder)
+1. `make test` — 27+ unit tests pass (file parser, ChromaDB, PDF builder)
 2. `python -m backend.run_pipeline <file>` — produces PDF in `outputs/`
 3. LangSmith dashboard shows traces for all 3 nodes
 4. PDF has cover page, TOC, chapters with market-enriched content

@@ -124,8 +124,9 @@ State is a `TypedDict` that accumulates data as it passes through each node:
 |-------|--------|------|-------------|
 | `job_id` | CLI runner | `str` | Random 12-char hex ID |
 | `file_paths` | CLI runner | `list[str]` | Input file paths |
-| `topics` | Agent 1 | `list[dict]` | `[{"name": "...", "description": "..."}]` |
+| `topics` | Agent 1 | `list[dict]` | `[{"name": "...", "description": "...", "key_techniques": [...], "domain_context": "..."}]` |
 | `raw_text` | Agent 1 | `str` | Concatenated extracted text |
+| `curriculum_scope` | Agent 1 | `str` | One-sentence description of the curriculum's domain boundaries |
 | `gap_summary` | Agent 2 | `list[dict]` | Gap analysis per topic |
 | `pdf_path` | Agent 3 | `str` | Path to output PDF |
 | `current_stage` | All agents | `str` | `starting` → `ingested` → `researched` → `complete` |
@@ -143,6 +144,7 @@ State is a `TypedDict` that accumulates data as it passes through each node:
 | PDF text extraction | PyMuPDF (fitz) | Extract text from PDF files |
 | Slide extraction | python-pptx | Extract text from PowerPoint files |
 | PDF generation | fpdf2 | Compile learning guide PDF |
+| Concurrency | ThreadPoolExecutor | Parallel agent execution (configurable `max_workers`) |
 | Configuration | pydantic-settings | Type-safe env loading |
 | Observability | LangSmith | Trace every LLM call |
 
@@ -159,8 +161,8 @@ Parses curriculum files, identifies topics, and builds the vector knowledge base
 **Process**:
 
 1. **Parse files** — Extract text page-by-page using PyMuPDF (`.pdf`) or python-pptx (`.pptx`)
-2. **Summarize** — Each file is summarized by GPT-5-mini (truncated to 15,000 chars to fit context)
-3. **Extract topics** — Combined summaries are analyzed by GPT-5-mini (JSON mode) to produce 10-25 topics, each with a name and description
+2. **Summarize** — Each file is summarized by GPT-5-mini in parallel (truncated to 15,000 chars to fit context)
+3. **Extract topics** — Combined summaries are analyzed by GPT-5-mini (JSON mode) to produce 10-25 topics, each with a name, description, key techniques, and domain context. Also extracts a one-sentence `curriculum_scope` that constrains all downstream agents
 4. **Chunk and embed** — Raw text is split into 1,500-character chunks (150 overlap) using `RecursiveCharacterTextSplitter`, then embedded into ChromaDB's `curriculum` collection
 
 **Console output**:
@@ -172,7 +174,7 @@ Parses curriculum files, identifies topics, and builds the vector knowledge base
 [Ingest] Embedded 48 chunks into ChromaDB
 ```
 
-**State updates**: `topics`, `raw_text`, `current_stage = "ingested"`
+**State updates**: `topics`, `raw_text`, `curriculum_scope`, `current_stage = "ingested"`
 
 ---
 
@@ -182,13 +184,15 @@ Parses curriculum files, identifies topics, and builds the vector knowledge base
 
 For each topic, researches current industry requirements and identifies curriculum gaps.
 
-**Process** (per topic):
+All topics are processed in parallel using `ThreadPoolExecutor`.
 
-1. **Web search** — Two Tavily searches:
-   - `"{topic} job requirements skills 2025 2026"` (5 results)
-   - `"{topic} industry trends applications 2025 2026"` (5 results)
+**Process** (per topic, concurrently):
+
+1. **Web search** — Two Tavily searches run in parallel:
+   - `"{key_techniques} skills applications in {domain_context} 2025 2026"` (5 results)
+   - `"{topic} latest developments alternatives in {domain_context} 2025 2026"` (5 results)
 2. **Curriculum retrieval** — Top 3 matching chunks from ChromaDB `curriculum` collection
-3. **Gap analysis** — GPT-5-mini compares curriculum content against industry findings (JSON mode), producing gaps and enrichments
+3. **Gap analysis** — GPT-5-mini compares curriculum content against industry findings (JSON mode), scoped to the `curriculum_scope` domain, producing gaps and enrichments
 4. **Store enrichments** — All search results and enrichments are embedded into ChromaDB `research` collection (deduplicated by MD5 hash)
 
 **Console output**:
@@ -210,14 +214,14 @@ For each topic, researches current industry requirements and identifies curricul
 
 **File**: `backend/pipeline/agent_generate.py`
 
-Generates full learning modules and compiles the final PDF.
+Generates full learning modules and compiles the final PDF. All modules are generated in parallel.
 
-**Process** (per topic):
+**Process** (per topic, concurrently):
 
 1. **Retrieve context** — Top 5 chunks from `curriculum` + top 5 from `research` collections
 2. **Get gap analysis** — Looks up the gap summary for this topic
-3. **Generate module** — GPT-5 (full model) generates a markdown module with sections: Learning Objectives, Core Content, Industry Context, Key Takeaways, Further Reading
-4. **Compile PDF** — All modules are rendered into a formatted PDF with cover page, table of contents, and one chapter per topic
+3. **Generate module** — GPT-5 (full model) generates a markdown module scoped to `curriculum_scope`, with 7 sections: Curriculum Coverage, Identified Gaps, Learning Objectives (tagged as Curriculum/Gap), Core Content, Industry Context, Key Takeaways (grouped by Curriculum/Gap/Integration), Further Reading
+4. **Compile PDF** — All modules are rendered into a formatted PDF with cover page, table of contents, and one chapter per topic (order preserved)
 
 **Console output**:
 ```
@@ -235,10 +239,12 @@ Generates full learning modules and compiles the final PDF.
 - Table of contents
 - Chapters (one per topic), each containing:
   - Chapter title and description
-  - Learning Objectives
+  - Curriculum Coverage (what the original slides teach)
+  - Identified Gaps (what's missing vs. industry demands)
+  - Learning Objectives (tagged as Curriculum or Gap)
   - Core Content
   - Industry Context
-  - Key Takeaways
+  - Key Takeaways (grouped: Curriculum, Gap, Integration)
   - Further Reading
 
 ---
@@ -290,7 +296,8 @@ Software/
 ├── Docs/
 │   ├── Prototype_plan.md     # Original system design
 │   ├── Implementation_plan.md # Build log and decisions
-│   └── Technical_assessment.md # Research on adaptive learning tech
+│   ├── Technical_assessment.md # Research on adaptive learning tech
+│   └── Changelog.md          # Detailed changelog of updates
 │
 ├── outputs/                  # Generated PDFs (gitignored)
 ├── chroma_db/                # Vector database (gitignored)
@@ -452,21 +459,21 @@ All prompts live in `backend/prompts/` and use Python string `.format()` for var
 
 Variables: `{source}`, `{text}`
 
-**`EXTRACT_TOPICS`** — Extracts 10-25 distinct topics from combined file summaries. Returns JSON with `{"topics": [{"name": "...", "description": "..."}]}`.
+**`EXTRACT_TOPICS`** — Extracts 10-25 distinct topics from combined file summaries. Returns JSON with `{"curriculum_scope": "...", "topics": [{"name": "...", "description": "...", "key_techniques": [...], "domain_context": "..."}]}`.
 
 Variables: `{summaries}`
 
 ### Research Prompt (`backend/prompts/research.py`)
 
-**`GAP_ANALYSIS`** — Compares curriculum coverage against industry job requirements and trends. Returns JSON with `{topic, curriculum_coverage, industry_demands, gaps, enrichments}`.
+**`GAP_ANALYSIS`** — Compares curriculum coverage against industry job requirements and trends, scoped to the curriculum's domain. Returns JSON with `{topic, curriculum_coverage, industry_demands, gaps, enrichments}`.
 
-Variables: `{topic_name}`, `{topic_description}`, `{curriculum_chunks}`, `{job_results}`, `{trend_results}`
+Variables: `{topic_name}`, `{topic_description}`, `{key_techniques}`, `{curriculum_scope}`, `{curriculum_chunks}`, `{job_results}`, `{trend_results}`
 
 ### Generate Prompt (`backend/prompts/generate.py`)
 
-**`GENERATE_MODULE`** — Generates a full learning module in markdown with five sections: Learning Objectives, Core Content, Industry Context, Key Takeaways, Further Reading.
+**`GENERATE_MODULE`** — Generates a full learning module in markdown with seven sections: Curriculum Coverage, Identified Gaps, Learning Objectives (tagged Curriculum/Gap), Core Content, Industry Context, Key Takeaways (grouped Curriculum/Gap/Integration), Further Reading. Content is scoped to the curriculum's domain.
 
-Variables: `{topic_name}`, `{topic_description}`, `{curriculum_chunks}`, `{research_chunks}`, `{gap_analysis}`
+Variables: `{topic_name}`, `{topic_description}`, `{key_techniques}`, `{curriculum_scope}`, `{curriculum_chunks}`, `{research_chunks}`, `{gap_analysis}`
 
 ---
 
@@ -481,6 +488,7 @@ All configuration is managed through environment variables, loaded by `backend/c
 | `OPENAI_MODEL_MINI` | No | `gpt-5-mini` | Model for extraction/analysis (Agents 1 & 2) |
 | `TAVILY_API_KEY` | Yes | — | Tavily web search API key |
 | `CHROMA_PERSIST_DIR` | No | `./chroma_db` | ChromaDB storage directory |
+| `MAX_WORKERS` | No | `4` | Thread pool size for parallel agent execution |
 | `LANGCHAIN_TRACING_V2` | No | `true` | Enable LangSmith tracing |
 | `LANGCHAIN_PROJECT` | No | `cr8-prototype` | LangSmith project name |
 
@@ -509,7 +517,7 @@ pytest backend/tests/test_chromadb_store.py::test_two_collections -v
 |-----------|-------|----------------|
 | `test_file_parser.py` | 3 | PDF extraction, non-empty pages, multiple files |
 | `test_chromadb_store.py` | 3 | Add/query, reset collections, collection isolation |
-| `test_pdf_builder.py` | 1 | PDF generation, file validity, magic bytes |
+| `test_pdf_builder.py` | 20+ | PDF generation, Unicode edge cases, malformed markdown, empty/long content, special characters, structural mismatches |
 
 **Test data**: Tests use Stanford CS224N lecture slides from `NLP_Course/CS224N_Downloads/Slides/`. The `conftest.py` provides fixtures for single-file and multi-file test scenarios, plus a temporary ChromaDB directory.
 
@@ -550,9 +558,9 @@ The research agent deduplicates document IDs using MD5 hashes. If you see this e
 
 `reset_collections()` catches both `ValueError` and `NotFoundError` when deleting collections that don't exist. This is handled gracefully.
 
-**Pipeline is slow (~30 min for 1 file)**
+**Pipeline is slow**
 
-Most time is spent on API calls (OpenAI + Tavily). The research agent makes 2 web searches per topic and 1 LLM call per topic, all sequentially. Parallelization would significantly reduce runtime.
+Most time is spent on API calls (OpenAI + Tavily). All agents now run their work in parallel via `ThreadPoolExecutor` (controlled by `MAX_WORKERS`, default 4), which significantly reduces wall-clock time compared to the original sequential execution. Adjust `MAX_WORKERS` in your `.env` to tune concurrency.
 
 **`ModuleNotFoundError: No module named 'backend'`**
 
@@ -574,7 +582,6 @@ Make sure you installed in development mode: `pip install -e ".[dev]"` (or `make
 This prototype proves the core concept: curriculum in, market-enriched learning guide out. Planned next steps (see `Docs/Prototype_plan.md` for full roadmap):
 
 - **Flask API + React frontend** — File upload UI, progress indicator, PDF download
-- **Performance** — Parallelize research agent (async per-topic), batch LLM calls
 - **Prompt iteration** — Improve content quality based on manual PDF review
 - **Video generation** — HeyGen API integration for AI-generated lecture videos
 - **Adaptive assessment** — PPO + DKVMN hybrid for personalized learning paths (see `Docs/Technical_assessment.md`)

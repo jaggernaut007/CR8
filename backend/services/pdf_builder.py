@@ -109,7 +109,7 @@ def build_pdf(
     pdf.ln(80)
     pdf.set_font("Helvetica", "B", 28)
     pdf.set_text_color(26, 26, 46)
-    pdf.multi_cell(0, 14, title, align="C")
+    pdf.multi_cell(0, 14, _sanitize(title), align="C")
     pdf.ln(10)
     pdf.set_font("Helvetica", "", 14)
     pdf.set_text_color(100, 100, 100)

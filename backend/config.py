@@ -13,6 +13,18 @@ class Settings(BaseSettings):
     # ChromaDB
     chroma_persist_dir: str = "./chroma_db"
 
+    # HeyGen (video generation) — optional, only needed for --format video/both
+    heygen_api_key: str = ""
+    heygen_avatar_id: str = ""
+    heygen_voice_id: str = ""
+
+    # Output formats — comma-separated: "pdf", "script", "video", or combinations like "pdf,script"
+    output_formats: list[str] = ["pdf"]
+    video_topic_limit: int = 2  # max topics to generate scripts/videos for (prototype cap)
+
+    # Concurrency
+    max_workers: int = 4
+
     # LangSmith
     langchain_tracing_v2: bool = True
     langchain_project: str = "cr8-prototype"
