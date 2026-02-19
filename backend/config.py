@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     video_topic_limit: int = 2  # max topics to generate scripts/videos for (prototype cap)
 
     # Concurrency
-    max_workers: int = 4
+    max_workers: int = 8
 
     # LangSmith
     langchain_tracing_v2: bool = True

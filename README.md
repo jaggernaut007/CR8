@@ -31,6 +31,7 @@ Built with LangGraph, OpenAI, ChromaDB, Tavily, fpdf2, and FastAPI.
 - [Configuration](#configuration)
 - [Testing](#testing)
 - [Troubleshooting](#troubleshooting)
+- [Deployment (GCP Cloud Run)](#deployment-gcp-cloud-run)
 - [Future Work](#future-work)
 
 ---
@@ -94,7 +95,7 @@ Output PDF is saved to `outputs/<timestamp>_learning_guide.pdf`.
 
 ```bash
 make dev
-# Opens at http://localhost:8000
+# Opens at http://localhost:8080
 ```
 
 ### Run Tests
@@ -118,7 +119,7 @@ Browser (JS fetch)     FastAPI (async uvicorn)      Pipeline Thread
     |-- POST /api/start ---->|  asyncio.create_task()     |
     |                        |    └─ asyncio.to_thread()-->|
     |<-- {status: running} --|         run_job()          |
-    |                        |                            |-- ThreadPoolExecutor(4)
+    |                        |                            |-- ThreadPoolExecutor(8)
     |-- GET /api/progress -->|                            |   (parallel topics)
     |<-- {stage, pct, logs} -|  reads ProgressCapture     |
     |   (poll every 3s)      |                            |
@@ -567,7 +568,7 @@ All configuration is managed through environment variables, loaded by `backend/c
 | `OPENAI_MODEL_MINI` | No | `gpt-5-mini` | Model for extraction/analysis (Agents 1 & 2) |
 | `TAVILY_API_KEY` | Yes | — | Tavily web search API key |
 | `CHROMA_PERSIST_DIR` | No | `./chroma_db` | ChromaDB storage directory |
-| `MAX_WORKERS` | No | `4` | Thread pool size for parallel agent execution |
+| `MAX_WORKERS` | No | `8` | Thread pool size for parallel agent execution |
 | `LANGCHAIN_TRACING_V2` | No | `true` | Enable LangSmith tracing |
 | `LANGCHAIN_PROJECT` | No | `cr8-prototype` | LangSmith project name |
 
@@ -648,7 +649,7 @@ If you see `pyo3_runtime.PanicException: range start index ... out of range`, th
 
 **Pipeline is slow**
 
-Most time is spent on API calls (OpenAI + Tavily). All agents now run their work in parallel via `ThreadPoolExecutor` (controlled by `MAX_WORKERS`, default 4), which significantly reduces wall-clock time compared to the original sequential execution. Adjust `MAX_WORKERS` in your `.env` to tune concurrency.
+Most time is spent on API calls (OpenAI + Tavily). All agents now run their work in parallel via `ThreadPoolExecutor` (controlled by `MAX_WORKERS`, default 8), which significantly reduces wall-clock time compared to the original sequential execution. Adjust `MAX_WORKERS` in your `.env` to tune concurrency.
 
 **`ModuleNotFoundError: No module named 'backend'`**
 
@@ -661,9 +662,72 @@ Make sure you installed in development mode: `pip install -e ".[dev]"` (or `make
 | `make install` | Install package in editable mode with dev deps |
 | `make test` | Run pytest with verbose output |
 | `make run ARGS="file.pdf"` | Run the pipeline (CLI) |
-| `make dev` | Start FastAPI web UI at http://localhost:8000 (hot-reload, all interfaces) |
-| `make serve` | Start FastAPI web UI at http://localhost:8000 (hot-reload, localhost only) |
+| `make dev` | Start FastAPI web UI at http://localhost:8080 (hot-reload, all interfaces) |
+| `make serve` | Start FastAPI web UI at http://localhost:8080 (hot-reload, localhost only) |
+| `make docker-build` | Build Docker image locally |
+| `make docker-run` | Run Docker container locally on port 8080 |
 | `make clean` | Remove `chroma_db/`, `outputs/`, caches |
+
+---
+
+## Deployment (GCP Cloud Run)
+
+The app deploys as a single Docker container on Google Cloud Run.
+
+```
+Browser  ──HTTPS──>  Cloud Run (cr8-pipeline)  ──>  OpenAI API
+                      │  FastAPI + Gunicorn          Tavily API
+                      │  ChromaDB (ephemeral)        HeyGen API (optional)
+                      │  uploads/ & outputs/
+                      └──> Secret Manager (API keys)
+```
+
+### Prerequisites
+
+- [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) (`gcloud` CLI)
+- Docker installed and running
+- A GCP project with billing enabled
+
+### Quick Deploy
+
+```bash
+# 1. One-time GCP setup (enable APIs, create Artifact Registry)
+./deploy.sh --setup YOUR_PROJECT_ID
+
+# 2. Create secrets (follow the printed instructions from step 1)
+echo -n 'sk-your-key' | gcloud secrets create OPENAI_API_KEY --data-file=- --replication-policy=automatic
+echo -n 'tvly-your-key' | gcloud secrets create TAVILY_API_KEY --data-file=- --replication-policy=automatic
+
+# 3. Grant Cloud Run access to secrets (see deploy.sh --setup output)
+
+# 4. Build and deploy
+./deploy.sh YOUR_PROJECT_ID
+```
+
+The deploy script builds the Docker image, pushes it to Artifact Registry, and deploys to Cloud Run. It prints the service URL when done.
+
+### Local Docker Test
+
+```bash
+make docker-build
+make docker-run
+# Opens at http://localhost:8080
+```
+
+### Configuration
+
+Cloud Run settings (configured in `deploy.sh`):
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| Memory | 2 GiB | Pipeline + ChromaDB + embeddings |
+| CPU | 2 vCPU | Parallel ThreadPoolExecutor workers |
+| Timeout | 3600s | Pipeline runs 5-15 min |
+| Min instances | 0 | Scale to zero when idle (~$0) |
+| Max instances | 1 | App enforces single-job execution |
+| CPU throttling | Off | Background threads need CPU between requests |
+
+Secrets are injected from GCP Secret Manager as environment variables. See `Docs/Deployment_guide.md` for the full step-by-step guide.
 
 ---
 
@@ -693,6 +757,7 @@ Core:
 - `fastapi>=0.115` — Async web framework
 - `uvicorn[standard]>=0.34` — ASGI server
 - `python-multipart>=0.0.9` — File upload handling
+- `gunicorn>=22.0` — Production WSGI/ASGI server
 
 Dev:
 - `pytest>=8.0` — Test framework

@@ -11,6 +11,7 @@ import zipfile
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 
 # Add project root to path so backend imports work
@@ -29,6 +30,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="CR8 Learning Pipeline", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
 
 # In-memory job registry: job_id -> ProgressCapture
@@ -135,8 +144,10 @@ def _run_pipeline_sync(file_paths: list[str], formats: list[str], capture: Progr
         capture.status = "complete"
         capture.percent = 100
     except Exception as e:
+        import traceback
         capture.status = "error"
         capture.error = str(e)
+        traceback.print_exc(file=old_stdout)
     finally:
         sys.stdout = old_stdout
 
@@ -175,6 +186,16 @@ def _zip_directory(dir_path: str, zip_path: str, extension: str | None = None):
                 filepath = os.path.join(root, f)
                 arcname = os.path.relpath(filepath, dir_path)
                 zf.write(filepath, arcname)
+
+
+# ---------------------------------------------------------------------------
+# Health check
+# ---------------------------------------------------------------------------
+
+@app.get("/healthz")
+async def healthz():
+    active_jobs = sum(1 for j in jobs.values() if j.status == "running")
+    return {"status": "ok", "active_jobs": active_jobs}
 
 
 # ---------------------------------------------------------------------------
@@ -282,4 +303,5 @@ async def download(job_id: str, file_type: str):
 if __name__ == "__main__":
     import uvicorn
     os.chdir(PROJECT_ROOT)
-    uvicorn.run("frontend.app:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", "8080"))
+    uvicorn.run("frontend.app:app", host="0.0.0.0", port=port, reload=True)
