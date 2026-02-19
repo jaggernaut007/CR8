@@ -4,3 +4,10 @@ __pycache__/
 *.pyc
 node_modules/
 .venv/
+uploads/
+outputs/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
