@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CR8 Learning Pipeline</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f7; color: #1d1d1f; min-height: 100vh; }
+    .header { background: #1a1a2e; color: #fff; padding: 20px 0; text-align: center; }
+    .header h1 { font-size: 1.5rem; font-weight: 600; }
+    .header p { font-size: 0.85rem; color: #a0a0b8; margin-top: 4px; }
+    .container { max-width: 640px; margin: 32px auto; padding: 0 16px; }
+    .card { background: #fff; border-radius: 12px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* Upload area */
+    .drop-zone { border: 2px dashed #d1d1d6; border-radius: 8px; padding: 40px 20px; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; }
+    .drop-zone:hover, .drop-zone.dragover { border-color: #4361ee; background: #f0f4ff; }
+    .drop-zone-text { font-size: 0.95rem; color: #6e6e73; }
+    .drop-zone-text strong { color: #4361ee; }
+    .file-name { margin-top: 12px; font-size: 0.9rem; color: #1d1d1f; font-weight: 500; }
+    input[type="file"] { display: none; }
+
+    /* Checkboxes */
+    .format-options { margin-top: 24px; }
+    .format-options h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 12px; color: #6e6e73; }
+    .checkbox-group { display: flex; flex-direction: column; gap: 10px; }
+    .checkbox-label { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer; }
+    .checkbox-label input[disabled] + span { color: #a0a0a5; }
+    .checkbox-label .hint { font-size: 0.75rem; color: #a0a0a5; margin-left: 4px; }
+
+    /* Button */
+    .btn { display: inline-block; padding: 12px 28px; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+    .btn-primary { background: #4361ee; color: #fff; margin-top: 24px; width: 100%; }
+    .btn-primary:hover:not(:disabled) { background: #3451d1; }
+    .btn-primary:disabled { background: #c7c7cc; cursor: not-allowed; }
+    .btn-secondary { background: #e8e8ed; color: #1d1d1f; margin-top: 16px; width: 100%; }
+    .btn-secondary:hover { background: #d1d1d6; }
+
+    /* Progress */
+    .progress-info { margin-bottom: 16px; }
+    .progress-info .filename { font-weight: 600; font-size: 0.95rem; }
+    .progress-info .stage { font-size: 0.85rem; color: #6e6e73; margin-top: 4px; }
+    .progress-bar-container { background: #e8e8ed; border-radius: 6px; height: 12px; overflow: hidden; margin: 16px 0; }
+    .progress-bar { height: 100%; background: #4361ee; border-radius: 6px; transition: width 0.5s ease; width: 0%; }
+    .progress-stats { display: flex; justify-content: space-between; font-size: 0.8rem; color: #6e6e73; }
+    .log-area { margin-top: 20px; background: #1a1a2e; border-radius: 8px; padding: 16px; max-height: 200px; overflow-y: auto; }
+    .log-area pre { font-family: "SF Mono", "Fira Code", monospace; font-size: 0.75rem; color: #a0e8af; white-space: pre-wrap; word-break: break-word; line-height: 1.6; }
+
+    /* Results */
+    .results-header { text-align: center; margin-bottom: 24px; }
+    .results-header .check { font-size: 2.5rem; }
+    .results-header h2 { font-size: 1.2rem; margin-top: 8px; }
+    .results-header p { font-size: 0.85rem; color: #6e6e73; margin-top: 4px; }
+    .download-list { display: flex; flex-direction: column; gap: 10px; }
+    .download-item { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: #f5f5f7; border-radius: 8px; }
+    .download-item .dl-name { font-size: 0.9rem; font-weight: 500; }
+    .download-item .dl-size { font-size: 0.8rem; color: #6e6e73; }
+    .download-item a { text-decoration: none; font-size: 0.85rem; font-weight: 600; color: #4361ee; }
+    .download-item a:hover { text-decoration: underline; }
+
+    /* Error */
+    .error-msg { background: #fff0f0; border: 1px solid #ffc0c0; border-radius: 8px; padding: 14px 16px; color: #cc0000; font-size: 0.85rem; margin-top: 16px; display: none; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>CR8 Learning Pipeline</h1>
+    <p>Upload curriculum, generate learning materials</p>
+  </div>
+
+  <div class="container">
+    <div class="card">
+
+      <!-- SECTION 1: Upload & Configure -->
+      <div id="sec-upload" class="section active">
+        <div class="drop-zone" id="drop-zone">
+          <div class="drop-zone-text">
+            Drag &amp; drop your <strong>PDF</strong> here<br>or click to browse
+          </div>
+          <input type="file" id="file-input" accept=".pdf">
+          <div class="file-name" id="file-name"></div>
+        </div>
+
+        <div class="format-options">
+          <h3>Output Formats</h3>
+          <div class="checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" checked disabled>
+              <span>PDF Learning Guide</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="chk-script" value="script">
+              <span>Video Scripts (.txt)</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="chk-video" value="video" disabled>
+              <span>Video (.mp4 via HeyGen)</span>
+              <span class="hint">Requires HeyGen API keys</span>
+            </label>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="btn-generate" disabled>Generate Learning Materials</button>
+        <div class="error-msg" id="upload-error"></div>
+      </div>
+
+      <!-- SECTION 2: Processing -->
+      <div id="sec-processing" class="section">
+        <div class="progress-info">
+          <div class="filename" id="proc-filename"></div>
+          <div class="stage" id="proc-stage">Starting pipeline...</div>
+        </div>
+        <div class="progress-bar-container">
+          <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <div class="progress-stats">
+          <span id="proc-percent">0%</span>
+          <span id="proc-time">Elapsed: 0s</span>
+        </div>
+        <div class="log-area">
+          <pre id="log-output"></pre>
+        </div>
+      </div>
+
+      <!-- SECTION 3: Complete -->
+      <div id="sec-complete" class="section">
+        <div class="results-header">
+          <div class="check">&#10003;</div>
+          <h2>Complete!</h2>
+          <p id="complete-time"></p>
+        </div>
+        <div class="download-list" id="download-list"></div>
+        <button class="btn btn-secondary" id="btn-new">Start New</button>
+      </div>
+
+      <!-- Error state -->
+      <div id="sec-error" class="section">
+        <div class="results-header">
+          <div class="check" style="color:#cc0000">&#10007;</div>
+          <h2>Pipeline Error</h2>
+          <p id="error-detail" style="color:#cc0000"></p>
+        </div>
+        <div class="log-area" style="margin-top:16px">
+          <pre id="error-logs"></pre>
+        </div>
+        <button class="btn btn-secondary" id="btn-retry">Start New</button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // State
+    let jobId = null;
+    let fileName = null;
+    let pollTimer = null;
+
+    // Elements
+    const secUpload = document.getElementById('sec-upload');
+    const secProcessing = document.getElementById('sec-processing');
+    const secComplete = document.getElementById('sec-complete');
+    const secError = document.getElementById('sec-error');
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const fileNameEl = document.getElementById('file-name');
+    const btnGenerate = document.getElementById('btn-generate');
+    const uploadError = document.getElementById('upload-error');
+
+    function showSection(sec) {
+      [secUpload, secProcessing, secComplete, secError].forEach(s => s.classList.remove('active'));
+      sec.classList.add('active');
+    }
+
+    // --- Upload ---
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+
+    async function handleFile(file) {
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        showError('Please select a PDF file.');
+        return;
+      }
+      uploadError.style.display = 'none';
+      fileNameEl.textContent = file.name;
+      fileName = file.name;
+
+      const form = new FormData();
+      form.append('file', file);
+
+      try {
+        const res = await fetch('/api/upload', { method: 'POST', body: form });
+        const data = await res.json();
+        if (!res.ok) { showError(data.error || 'Upload failed'); return; }
+        jobId = data.job_id;
+        btnGenerate.disabled = false;
+      } catch (err) {
+        showError('Upload failed: ' + err.message);
+      }
+    }
+
+    function showError(msg) {
+      uploadError.textContent = msg;
+      uploadError.style.display = 'block';
+    }
+
+    // --- Generate ---
+    btnGenerate.addEventListener('click', async () => {
+      if (!jobId) return;
+      const formats = ['pdf'];
+      if (document.getElementById('chk-script').checked) formats.push('script');
+      if (document.getElementById('chk-video').checked) formats.push('video');
+
+      btnGenerate.disabled = true;
+      uploadError.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: jobId, formats }),
+        });
+        const data = await res.json();
+        if (!res.ok) { showError(data.error || 'Start failed'); btnGenerate.disabled = false; return; }
+
+        document.getElementById('proc-filename').textContent = 'Processing: ' + fileName;
+        showSection(secProcessing);
+        pollTimer = setInterval(pollProgress, 3000);
+      } catch (err) {
+        showError('Failed to start: ' + err.message);
+        btnGenerate.disabled = false;
+      }
+    });
+
+    // --- Progress polling ---
+    async function pollProgress() {
+      if (!jobId) return;
+      try {
+        const res = await fetch('/api/progress/' + jobId);
+        const data = await res.json();
+        if (!res.ok) return;
+
+        // Update progress bar
+        document.getElementById('progress-bar').style.width = data.percent + '%';
+        document.getElementById('proc-percent').textContent = data.percent + '%';
+
+        // Stage
+        const stageNames = { starting: 'Starting...', Ingest: 'Ingesting & Extracting Topics', Research: 'Researching Industry Gaps', Generate: 'Generating Learning Modules', Script: 'Creating Video Scripts', Video: 'Rendering Videos' };
+        document.getElementById('proc-stage').textContent = stageNames[data.stage] || data.stage;
+
+        // Time
+        const elapsed = data.elapsed;
+        const elapsedStr = formatTime(elapsed);
+        let timeText = 'Elapsed: ' + elapsedStr;
+        if (data.percent > 5) {
+          const est = (elapsed / (data.percent / 100)) - elapsed;
+          timeText += '  |  Est. remaining: ~' + formatTime(est);
+        }
+        document.getElementById('proc-time').textContent = timeText;
+
+        // Logs
+        const logEl = document.getElementById('log-output');
+        logEl.textContent = (data.logs || []).slice(-12).join('\n');
+        logEl.parentElement.scrollTop = logEl.parentElement.scrollHeight;
+
+        // Complete
+        if (data.status === 'complete') {
+          clearInterval(pollTimer);
+          document.getElementById('complete-time').textContent = 'Finished in ' + formatTime(data.elapsed);
+          renderDownloads(data.files || []);
+          showSection(secComplete);
+        }
+
+        // Error
+        if (data.status === 'error') {
+          clearInterval(pollTimer);
+          document.getElementById('error-detail').textContent = data.error || 'Unknown error';
+          document.getElementById('error-logs').textContent = (data.logs || []).slice(-20).join('\n');
+          showSection(secError);
+        }
+      } catch (err) {
+        // Ignore transient fetch errors
+      }
+    }
+
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      return m > 0 ? m + 'm ' + s + 's' : s + 's';
+    }
+
+    function formatSize(bytes) {
+      if (!bytes || bytes === 0) return '';
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    function renderDownloads(files) {
+      const list = document.getElementById('download-list');
+      list.innerHTML = '';
+      files.forEach(f => {
+        const item = document.createElement('div');
+        item.className = 'download-item';
+        const sizeStr = f.size ? ' (' + formatSize(f.size) + ')' : '';
+        item.innerHTML = '<div><div class="dl-name">' + f.name + '</div><div class="dl-size">' + sizeStr + '</div></div>' +
+          '<a href="/api/download/' + jobId + '/' + f.type + '" download>Download</a>';
+        list.appendChild(item);
+      });
+    }
+
+    // --- Reset ---
+    document.getElementById('btn-new').addEventListener('click', resetUI);
+    document.getElementById('btn-retry').addEventListener('click', resetUI);
+
+    function resetUI() {
+      jobId = null;
+      fileName = null;
+      if (pollTimer) clearInterval(pollTimer);
+      fileNameEl.textContent = '';
+      fileInput.value = '';
+      btnGenerate.disabled = true;
+      document.getElementById('chk-script').checked = false;
+      document.getElementById('progress-bar').style.width = '0%';
+      document.getElementById('log-output').textContent = '';
+      uploadError.style.display = 'none';
+      showSection(secUpload);
+    }
+  </script>
+</body>
+</html>

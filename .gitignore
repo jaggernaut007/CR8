@@ -6,6 +6,8 @@ node_modules/
 .venv/
 uploads/
 outputs/
+Courses/
+NLP_Course/
 *.egg-info/
 dist/
 build/

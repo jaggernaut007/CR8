@@ -1,19 +1,20 @@
 # CR8 — Adaptive Learning Pipeline
 
-A 3-agent AI pipeline that transforms university curriculum materials into market-enriched learning guides. Feed in lecture PDFs, get out a structured PDF with industry context, gap analysis, and curated resources.
+A 3-agent AI pipeline that transforms university curriculum materials into market-enriched learning guides. Feed in lecture PDFs, get out a structured PDF with industry context, gap analysis, and curated resources. Includes a web UI for upload, progress tracking, and download.
 
 ```
 Curriculum PDFs  ──>  [Ingest]  ──>  [Research]  ──>  [Generate]  ──>  Learning Guide PDF
                       Agent 1        Agent 2          Agent 3
 ```
 
-Built with LangGraph, OpenAI, ChromaDB, Tavily, and fpdf2.
+Built with LangGraph, OpenAI, ChromaDB, Tavily, fpdf2, and FastAPI.
 
 ---
 
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Web UI](#web-ui)
 - [Architecture Overview](#architecture-overview)
 - [Pipeline Deep Dive](#pipeline-deep-dive)
   - [Agent 1: Ingest](#agent-1-ingest)
@@ -89,11 +90,77 @@ python -m backend.run_pipeline NLP_Course/CS224N_Downloads/Slides/*.pdf
 
 Output PDF is saved to `outputs/<timestamp>_learning_guide.pdf`.
 
+### Run the Web UI
+
+```bash
+make dev
+# Opens at http://localhost:8000
+```
+
 ### Run Tests
 
 ```bash
 make test
 ```
+
+---
+
+## Web UI
+
+A minimal FastAPI web interface for uploading PDFs, selecting output formats, monitoring progress in real time, and downloading generated files.
+
+```
+Browser (JS fetch)     FastAPI (async uvicorn)      Pipeline Thread
+    |                        |                            |
+    |-- POST /api/upload --->|  save PDF to uploads/      |
+    |<-- { job_id } ---------|                            |
+    |                        |                            |
+    |-- POST /api/start ---->|  asyncio.create_task()     |
+    |                        |    └─ asyncio.to_thread()-->|
+    |<-- {status: running} --|         run_job()          |
+    |                        |                            |-- ThreadPoolExecutor(4)
+    |-- GET /api/progress -->|                            |   (parallel topics)
+    |<-- {stage, pct, logs} -|  reads ProgressCapture     |
+    |   (poll every 3s)      |                            |
+    |                        |<--- result dict -----------|
+    |-- GET /api/progress -->|                            |
+    |<-- {complete, files} --|                            |
+    |                        |                            |
+    |-- GET /api/download -->|                            |
+    |<-- file bytes ---------|                            |
+```
+
+### Features
+
+- **PDF upload** with drag-and-drop or file picker
+- **Format selection** — PDF (always on), Script (optional), Video (disabled by default, requires HeyGen API keys)
+- **Real-time progress** — stage label, progress bar, elapsed/estimated time, scrolling log area
+- **Download** — PDF as direct download, scripts and videos as .zip files
+- **Single-page HTML** with inline CSS + vanilla JS (no build step)
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Serve the HTML UI |
+| `/api/upload` | POST | Upload a PDF, returns `{job_id, filename}` |
+| `/api/start` | POST | Start pipeline for a job, returns `{status: running}` |
+| `/api/progress/{job_id}` | GET | Poll progress: `{status, stage, percent, logs, elapsed}` |
+| `/api/download/{job_id}/{type}` | GET | Download output files (pdf, scripts, videos) |
+
+### Progress Tracking
+
+The `ProgressCapture` class intercepts pipeline `print()` output and parses stage prefixes (`[Ingest]`, `[Research]`, `[Generate]`, `[Script]`, `[Video]`) to compute progress percentage using stage weights:
+
+| Stage | Weight | Cumulative |
+|-------|--------|------------|
+| Ingest | 15% | 0-15% |
+| Research | 50% | 15-65% |
+| Generate | 25% | 65-90% |
+| Script | 8% | 90-98% |
+| Video | 2% | 98-100% |
+
+Sub-step progress (`Topic X/Y`, `Module X/Y`) is interpolated within each stage for smooth progress bar updates.
 
 ---
 
@@ -144,6 +211,7 @@ State is a `TypedDict` that accumulates data as it passes through each node:
 | PDF text extraction | PyMuPDF (fitz) | Extract text from PDF files |
 | Slide extraction | python-pptx | Extract text from PowerPoint files |
 | PDF generation | fpdf2 | Compile learning guide PDF |
+| Web framework | FastAPI + uvicorn | Async HTTP server for web UI |
 | Concurrency | ThreadPoolExecutor | Parallel agent execution (configurable `max_workers`) |
 | Configuration | pydantic-settings | Type-safe env loading |
 | Observability | LangSmith | Trace every LLM call |
@@ -262,7 +330,7 @@ Software/
 ├── backend/
 │   ├── __init__.py
 │   ├── config.py             # Pydantic-settings config (loads .env)
-│   ├── run_pipeline.py       # CLI entry point
+│   ├── run_pipeline.py       # CLI entry point + run_job() for web
 │   │
 │   ├── pipeline/
 │   │   ├── __init__.py
@@ -291,7 +359,18 @@ Software/
 │       ├── conftest.py       # Shared fixtures
 │       ├── test_file_parser.py
 │       ├── test_chromadb_store.py
-│       └── test_pdf_builder.py
+│       ├── test_pdf_builder.py
+│       └── test_run_pipeline.py  # run_job() validation + invocation
+│
+├── frontend/
+│   ├── __init__.py
+│   ├── app.py                # FastAPI server + ProgressCapture
+│   ├── templates/
+│   │   └── index.html        # Single-page UI (inline CSS + JS)
+│   └── tests/
+│       ├── __init__.py
+│       ├── test_api.py       # FastAPI endpoint tests
+│       └── test_progress_capture.py  # ProgressCapture unit tests
 │
 ├── Docs/
 │   ├── Prototype_plan.md     # Original system design
@@ -515,11 +594,16 @@ pytest backend/tests/test_chromadb_store.py::test_two_collections -v
 
 | Test File | Tests | What It Covers |
 |-----------|-------|----------------|
-| `test_file_parser.py` | 3 | PDF extraction, non-empty pages, multiple files |
-| `test_chromadb_store.py` | 3 | Add/query, reset collections, collection isolation |
-| `test_pdf_builder.py` | 20+ | PDF generation, Unicode edge cases, malformed markdown, empty/long content, special characters, structural mismatches |
+| `backend/tests/test_file_parser.py` | 3 | PDF extraction, non-empty pages, multiple files |
+| `backend/tests/test_chromadb_store.py` | 3 | Add/query, reset collections, collection isolation |
+| `backend/tests/test_pdf_builder.py` | 20+ | PDF generation, Unicode edge cases, malformed markdown, empty/long content, special characters, structural mismatches |
+| `backend/tests/test_run_pipeline.py` | 10 | `run_job()` input validation, format checking, HeyGen key requirements, pipeline invocation shape, unique job IDs |
+| `frontend/tests/test_api.py` | 28 | All FastAPI endpoints: upload (PDF/reject non-PDF), start (concurrent job blocking, format defaults), progress (running/complete/error states), download (PDF/scripts/videos as zip) |
+| `frontend/tests/test_progress_capture.py` | 32 | ProgressCapture: initial state, `get_state()` shape, stage transitions, sub-step `Topic X/Y` interpolation, write behavior, thread safety |
 
-**Test data**: Tests use Stanford CS224N lecture slides from `NLP_Course/CS224N_Downloads/Slides/`. The `conftest.py` provides fixtures for single-file and multi-file test scenarios, plus a temporary ChromaDB directory.
+**Total: 144 tests** (74 backend + 70 frontend), all passing.
+
+**Test data**: Backend tests use Stanford CS224N lecture slides from `NLP_Course/CS224N_Downloads/Slides/`. The `conftest.py` provides fixtures for single-file and multi-file test scenarios, plus a temporary ChromaDB directory. Frontend tests use mock objects and `FastAPI.TestClient`.
 
 ### Manual E2E Test
 
@@ -554,6 +638,10 @@ fpdf2 uses Helvetica (latin-1 encoding). If GPT returns Unicode characters like 
 
 The research agent deduplicates document IDs using MD5 hashes. If you see this error, the deduplication logic in `agent_research.py` may need to be extended.
 
+**ChromaDB `PanicException` on startup (version mismatch)**
+
+If you see `pyo3_runtime.PanicException: range start index ... out of range`, the `chroma_db/` directory was created by an older ChromaDB version and is incompatible with the currently installed version. Fix: `make clean` to wipe the stale database — it gets rebuilt on the next pipeline run.
+
 **ChromaDB `NotFoundError` on reset**
 
 `reset_collections()` catches both `ValueError` and `NotFoundError` when deleting collections that don't exist. This is handled gracefully.
@@ -572,7 +660,9 @@ Make sure you installed in development mode: `pip install -e ".[dev]"` (or `make
 |---------|-------------|
 | `make install` | Install package in editable mode with dev deps |
 | `make test` | Run pytest with verbose output |
-| `make run ARGS="file.pdf"` | Run the pipeline |
+| `make run ARGS="file.pdf"` | Run the pipeline (CLI) |
+| `make dev` | Start FastAPI web UI at http://localhost:8000 (hot-reload, all interfaces) |
+| `make serve` | Start FastAPI web UI at http://localhost:8000 (hot-reload, localhost only) |
 | `make clean` | Remove `chroma_db/`, `outputs/`, caches |
 
 ---
@@ -581,9 +671,10 @@ Make sure you installed in development mode: `pip install -e ".[dev]"` (or `make
 
 This prototype proves the core concept: curriculum in, market-enriched learning guide out. Planned next steps (see `Docs/Prototype_plan.md` for full roadmap):
 
-- **Flask API + React frontend** — File upload UI, progress indicator, PDF download
+- ~~**Web frontend**~~ — Done. Minimal FastAPI UI with upload, progress tracking, and download
+- **React upgrade** — Replace single HTML page with full React SPA (as envisioned in `Docs/Prototype_plan.md`)
 - **Prompt iteration** — Improve content quality based on manual PDF review
-- **Video generation** — HeyGen API integration for AI-generated lecture videos
+- **Video generation** — HeyGen API integration for AI-generated lecture videos (backend support exists, UI checkbox ready but disabled)
 - **Adaptive assessment** — PPO + DKVMN hybrid for personalized learning paths (see `Docs/Technical_assessment.md`)
 
 ---
@@ -599,7 +690,11 @@ Core:
 - `fpdf2>=2.8` — PDF generation (pure Python, no system deps)
 - `pydantic-settings>=2.0` — Environment configuration
 - `langchain-text-splitters>=0.3` — Text chunking
+- `fastapi>=0.115` — Async web framework
+- `uvicorn[standard]>=0.34` — ASGI server
+- `python-multipart>=0.0.9` — File upload handling
 
 Dev:
 - `pytest>=8.0` — Test framework
 - `ruff>=0.5` — Linter
+- `httpx>=0.27` — Async HTTP client (required by FastAPI TestClient)

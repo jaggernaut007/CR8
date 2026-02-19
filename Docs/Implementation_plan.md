@@ -47,10 +47,21 @@ Software/
       conftest.py             # Fixtures: CS224N test files, temp ChromaDB dir
       test_file_parser.py     # 3 tests
       test_chromadb_store.py  # 3 tests
-      test_pdf_builder.py     # 1 test
+      test_pdf_builder.py     # 20+ tests
+      test_run_pipeline.py    # 10 tests (run_job validation + invocation)
+
+  frontend/
+    __init__.py
+    app.py                    # FastAPI server + ProgressCapture
+    templates/
+      index.html              # Single-page UI (inline CSS + JS)
+    tests/
+      __init__.py
+      test_api.py             # 28 endpoint tests
+      test_progress_capture.py # 32 unit tests
 ```
 
-No `api/`, no `frontend/`, no web layer. Just pipeline + services + CLI runner.
+Pipeline + services + CLI runner + FastAPI web frontend.
 
 ---
 
@@ -137,19 +148,34 @@ Output PDF goes to `outputs/<timestamp>_learning_guide.pdf`.
 - CLI entry point: `python -m backend.run_pipeline <files>`
 - LangSmith traces at `cr8-prototype` project
 
+### Step 9: FastAPI Web Frontend (TDD)
+- `frontend/app.py`: FastAPI async server with `ProgressCapture` class for real-time progress tracking
+- `frontend/templates/index.html`: Single-page UI with upload, format selection, progress bar, download
+- `backend/run_pipeline.py`: Added `run_job()` function — programmatic entry point for the web layer
+- `backend/config.py`: Added `"extra": "ignore"` to handle extra `.env` keys gracefully
+- Pipeline runs in background thread via `asyncio.to_thread()`, preserving all `ThreadPoolExecutor` parallelism
+- `ProgressCapture` intercepts stdout, parses `[Stage]` prefixes, computes progress % with stage weights
+- Three API endpoints: upload PDF, start pipeline, poll progress; plus download endpoint for completed files
+- Frontend polls `/api/progress` every 3s, shows stage label, progress bar, elapsed/estimated time, scrolling logs
+- Video checkbox disabled by default (requires HeyGen keys in `.env`)
+- Single job at a time (prototype scope — `settings` is a global singleton)
+- 70 new tests: `test_api.py` (28), `test_progress_capture.py` (32), `test_run_pipeline.py` (10)
+- Dependencies added: `fastapi>=0.115`, `uvicorn[standard]>=0.34`, `python-multipart>=0.0.9`, `httpx>=0.27` (dev)
+
 ---
 
 ## Key Technical Decisions
 
 | Decision | Choice | Why |
 |----------|--------|-----|
-| Entry point | CLI script | Fastest iteration — no server overhead |
+| Entry point | CLI + FastAPI | CLI for dev iteration; FastAPI web UI for users |
 | PDF lib | **fpdf2** | Pure Python, no system deps (WeasyPrint required pango/glib which had FFI issues on macOS) |
 | Embeddings | ChromaDB default (all-MiniLM-L6-v2) | Free, local, no API cost |
 | LLM split | GPT-5-mini (agents 1+2), GPT-5 (agent 3) | Save cost on extraction, quality on generation |
 | Concurrency | `ThreadPoolExecutor` | stdlib, no extra deps; `max_workers=4` configurable via settings |
 | Domain scoping | `curriculum_scope` in state | Prevents LLM drift into unrelated topics; enforced in all prompts |
-| Progress | Print statements | Simple; upgrade to rich/tqdm later |
+| Progress | Print statements + ProgressCapture | Pipeline prints `[Stage]` prefixes; web UI captures stdout and parses progress |
+| Web framework | FastAPI + uvicorn | Async HTTP, matches Technical Assessment MVP stack recommendation |
 
 ---
 
@@ -192,7 +218,8 @@ PDF builder tests expanded from 1 to 20+ covering Unicode edge cases, malformed 
 
 ## Verification
 
-1. `make test` — 27+ unit tests pass (file parser, ChromaDB, PDF builder)
+1. `make test` — 144 tests pass (74 backend + 70 frontend)
 2. `python -m backend.run_pipeline <file>` — produces PDF in `outputs/`
-3. LangSmith dashboard shows traces for all 3 nodes
-4. PDF has cover page, TOC, chapters with market-enriched content
+3. `make dev` — web UI at http://localhost:8000, upload PDF, track progress, download output
+4. LangSmith dashboard shows traces for all 3 nodes
+5. PDF has cover page, TOC, chapters with market-enriched content

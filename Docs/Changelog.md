@@ -1,5 +1,155 @@
 # Changelog
 
+## Unreleased — Dev Server, Dependency Upgrades, ChromaDB Fix
+
+**Summary**: Added `make dev` target for development, upgraded langchain/langgraph/chromadb dependencies to latest versions, and fixed ChromaDB version incompatibility issue.
+
+---
+
+### Makefile
+
+- Added `dev` target: `uvicorn frontend.app:app --reload --host 0.0.0.0 --port 8000` (binds to all interfaces for easier testing)
+
+### Dependency Upgrades
+
+Upgraded core dependencies to resolve import errors:
+- `langchain-core` → 1.2.14
+- `langgraph` → 1.0.9
+- `langchain` → 1.2.10
+- `langchain-openai` → 1.1.10
+- `langchain-text-splitters` → 1.1.1
+- `chromadb` → 1.1.1
+
+### ChromaDB Version Fix
+
+The existing `chroma_db/` directory was created by ChromaDB ~0.5.x and was incompatible with the upgraded 1.1.x Rust-based storage engine (`PanicException: range start index out of range`). Fix: cleared stale database with `make clean` — data is rebuilt on next pipeline run since it's derived from uploaded source files.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `Makefile` | Added `dev` target |
+| `README.md` | Added `make dev` docs, ChromaDB troubleshooting |
+
+---
+
+## Unreleased — FastAPI Web Frontend, ProgressCapture, and Frontend Test Suite
+
+**Summary**: Added a minimal FastAPI web UI for uploading PDFs, selecting output formats, tracking pipeline progress in real time, and downloading generated files. Includes `run_job()` programmatic entry point, `ProgressCapture` stdout interception, and 70 new tests.
+
+---
+
+### FastAPI Web Frontend
+
+New `frontend/` package provides a single-page web interface served by FastAPI + uvicorn.
+
+**Server** (`frontend/app.py`):
+- `GET /` — serves `index.html` via `HTMLResponse`
+- `POST /api/upload` — accepts PDF upload, saves to `uploads/<job_id>/`, returns `{job_id, filename}`
+- `POST /api/start` — validates formats, checks HeyGen keys if video requested, launches pipeline via `asyncio.to_thread()`, returns `{status: running}`
+- `GET /api/progress/{job_id}` — returns `{status, stage, percent, logs[], elapsed, files[]}`
+- `GET /api/download/{job_id}/{file_type}` — `FileResponse` for PDF, zipped scripts/videos
+- Uses `asynccontextmanager` lifespan pattern (replaces deprecated `@app.on_event`)
+- Single job at a time enforced (prototype scope)
+
+**ProgressCapture class** (thread-safe via `threading.Lock`):
+- Redirects `sys.stdout` in the pipeline thread to capture all `print()` output
+- Tees to original stdout so console logging still works
+- Parses `[Ingest]`, `[Research]`, `[Generate]`, `[Script]`, `[Video]` stage prefixes
+- Computes progress % using stage weights: Ingest 15%, Research 50%, Generate 25%, Script 8%, Video 2%
+- Interpolates sub-step progress from `Topic X/Y` and `Module X/Y` patterns
+- `get_state()` returns capped logs (last 30 lines), elapsed time, file list on completion
+
+**UI** (`frontend/templates/index.html`):
+- Three states: Upload & Configure → Processing → Complete
+- Drop zone / file picker for PDF upload
+- Format checkboxes: PDF (always on), Script (optional), Video (disabled by default with "Requires HeyGen API keys" hint)
+- Progress bar with stage label, elapsed/estimated time, scrolling log area
+- Polls `/api/progress` every 3s via `fetch()`
+- Download buttons for PDF (direct), scripts (.zip), videos (.zip)
+- Inline CSS + vanilla JS, no build step, max-width 640px centered layout
+
+---
+
+### Programmatic Pipeline Entry Point
+
+**`backend/run_pipeline.py`** — new `run_job()` function:
+- Extracts core pipeline invocation into a reusable function callable by the web frontend
+- Validates format strings against `VALID_FORMATS` set
+- Checks all three HeyGen env vars if video format requested
+- Sets `settings.output_formats` before invoking pipeline
+- Generates unique `job_id` per run
+- Existing CLI `main()` unchanged
+
+---
+
+### Configuration Fix
+
+**`backend/config.py`**:
+- Added `"extra": "ignore"` to `model_config` so unknown `.env` keys (e.g., `gemini_api_key`) don't cause `ValidationError`
+
+---
+
+### New Dependencies
+
+**`pyproject.toml`**:
+- `fastapi>=0.115` — Async web framework
+- `uvicorn[standard]>=0.34` — ASGI server
+- `python-multipart>=0.0.9` — Required for FastAPI `UploadFile`
+- `httpx>=0.27` (dev) — Required by FastAPI `TestClient`
+
+---
+
+### Makefile
+
+- Added `serve` target: `uvicorn frontend.app:app --reload --port 8000`
+- Port 8000 (macOS uses port 5000 for AirPlay)
+
+---
+
+### Test Suite (70 New Tests)
+
+**`backend/tests/test_run_pipeline.py`** (10 tests):
+- `TestRunJobValidation`: rejects invalid formats, accepts all valid formats, video requires all 3 HeyGen keys
+- `TestRunJobPipelineInvocation`: sets output_formats on settings, correct initial state shape, returns pipeline result, generates unique job IDs
+
+**`frontend/tests/test_progress_capture.py`** (32 tests):
+- `TestProgressCaptureInit`: initial status, percent, stage, logs, result, error
+- `TestGetState`: required keys, elapsed time, files on complete, error on error, logs capped at 30
+- `TestStageTransitions`: Ingest/Research/Generate/Script/Video parsing, unknown prefix ignored, sequential transitions
+- `TestSubStepProgress`: Topic X/Y interpolation for Research/Generate/Ingest, percent capped at 99
+- `TestWriteBehavior`: tees to original stdout, appends to logs, multiline splitting, empty/whitespace ignored, flush
+- `TestThreadSafety`: concurrent writes (4 threads × 100 writes), concurrent read+write
+
+**`frontend/tests/test_api.py`** (28 tests):
+- `TestIndexRoute`: 200 status, HTML content-type, page title, upload elements, format checkboxes, video disabled
+- `TestUploadEndpoint`: PDF accepted with job_id, file saved to disk, rejects non-PDF/docx/no-file
+- `TestStartEndpoint`: missing job_id, nonexistent job, launches pipeline (mocked), rejects concurrent job, allows after completion, defaults to pdf format
+- `TestProgressEndpoint`: unknown job 404, running/complete/error states
+- `TestDownloadEndpoint`: unknown job 404, incomplete job 404, PDF download, scripts zip, videos zip, nonexistent type 404, missing file 404
+
+**Total**: 144 tests (74 backend + 70 frontend), all passing.
+
+---
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `frontend/app.py` | New — FastAPI server + ProgressCapture |
+| `frontend/templates/index.html` | New — Single-page web UI |
+| `frontend/__init__.py` | New — Package init |
+| `frontend/tests/__init__.py` | New — Test package init |
+| `frontend/tests/test_api.py` | New — 28 endpoint tests |
+| `frontend/tests/test_progress_capture.py` | New — 32 ProgressCapture tests |
+| `backend/run_pipeline.py` | Added `run_job()` function + `VALID_FORMATS` |
+| `backend/config.py` | Added `"extra": "ignore"` to model_config |
+| `backend/tests/test_run_pipeline.py` | New — 10 tests for `run_job()` |
+| `pyproject.toml` | Added fastapi, uvicorn, python-multipart, httpx; added `frontend/tests` to testpaths |
+| `Makefile` | Added `serve` target |
+
+---
+
 ## Unreleased — Curriculum/Gap Sections, Parallelization, Domain Scoping, and Test Hardening
 
 **Summary**: PDF chapters now explicitly show curriculum coverage and identified gaps with tagged learning objectives and structured takeaways. Also includes major performance improvement through concurrent execution, domain-scoped prompts, enriched topic extraction, and a comprehensive PDF builder test suite.

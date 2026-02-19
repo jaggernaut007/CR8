@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     langchain_tracing_v2: bool = True
     langchain_project: str = "cr8-prototype"
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()

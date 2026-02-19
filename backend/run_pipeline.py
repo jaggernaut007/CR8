@@ -100,5 +100,43 @@ def main():
     print(f"{'='*60}\n")
 
 
+def run_job(file_paths: list[str], formats: list[str]) -> dict:
+    """Run pipeline programmatically. Called by web frontend.
+
+    Returns the LangGraph result state dict.
+    Raises ValueError for invalid inputs.
+    """
+    invalid = set(formats) - VALID_FORMATS
+    if invalid:
+        raise ValueError(f"Invalid format(s): {', '.join(invalid)}")
+
+    settings.output_formats = formats
+
+    if "video" in formats:
+        missing = []
+        if not settings.heygen_api_key:
+            missing.append("HEYGEN_API_KEY")
+        if not settings.heygen_avatar_id:
+            missing.append("HEYGEN_AVATAR_ID")
+        if not settings.heygen_voice_id:
+            missing.append("HEYGEN_VOICE_ID")
+        if missing:
+            raise ValueError(f"Video requires env vars: {', '.join(missing)}")
+
+    pipeline = build_pipeline()
+    initial_state = {
+        "job_id": uuid.uuid4().hex[:12],
+        "file_paths": file_paths,
+        "topics": [],
+        "raw_text": "",
+        "curriculum_scope": "",
+        "gap_summary": [],
+        "pdf_path": "",
+        "video_dir": "",
+        "current_stage": "starting",
+    }
+    return pipeline.invoke(initial_state)
+
+
 if __name__ == "__main__":
     main()
