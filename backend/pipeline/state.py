@@ -16,6 +16,7 @@ class PipelineState(TypedDict):
 
     # After Agent 3 (Generate)
     pdf_path: str
+    ppt_path: str  # path to generated Gap Analysis PowerPoint
     video_dir: str  # directory containing per-topic video files (when --format video/both)
 
     # Tracking

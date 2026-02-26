@@ -1,5 +1,106 @@
 # Changelog
 
+## Unreleased — Gap Analysis PowerPoint, Chained Generation Flow, Slide-Synced Scripts
+
+**Summary**: Added PowerPoint generation for gap analysis, implemented a chained generation flow (PDF → PPT → Script → Video) where each output builds on the previous, and added a slide-synced video script that maps one narration section per PPT slide. UI updated with dependency-enforcing checkboxes.
+
+---
+
+### Chained Generation Flow
+
+Outputs are now generated in a dependency chain instead of independently:
+
+```
+modules_md ──→ PDF (ground truth)
+                ↓
+PDF content + research/gaps ──→ PPT (structured around PDF chapters)
+                                 ↓
+PPT slides + PDF + research ──→ Video Script (one section per slide)
+                                  ↓
+                             Script ──→ Video (HeyGen API)
+```
+
+**Key behaviors**:
+- **PDF** is always generated first as the ground truth
+- **PPT** follows the PDF's chapter order, enriching each topic with gap analysis and research data
+- **Video Script** is structured around PPT slides (`[SLIDE N: title]` sections), with narration content drawn from both the PDF modules and research data
+- **Fallback**: If PPT is not selected but scripts are, the old per-module script generation is used
+
+---
+
+### Gap Analysis PowerPoint Builder
+
+New `backend/services/ppt_builder.py` generates professional widescreen (16:9) `.pptx` files using `python-pptx`.
+
+**Slide types** (6 types, in order):
+
+| # | Slide | Visual Elements |
+|---|-------|----------------|
+| 1 | Title | Dark navy background, white title, accent line, date |
+| 2 | Executive Summary | KPI callout boxes (total gaps + topics analyzed), critical gaps list |
+| 3 | Severity Overview | Scorecard rows with colored severity badges (red/orange/green) |
+| 4–N | Topic Gap Detail | Two-column: curriculum vs. industry, impact dots, recommendation strip |
+| N+1 | Recommendations | Priority badges with affected topics |
+| N+2 | Closing | Dark navy background, next steps |
+
+**Design tokens**: Matches the existing CR8 web UI palette (`#1a1a2e` dark navy, `#4361ee` medium blue). Uses Calibri font, severity color coding (critical=red, moderate=orange, minor=green), and shape-based visual elements (rounded rectangles, ovals, header bars).
+
+---
+
+### Slide-Synced Video Script
+
+New `SCRIPT_FROM_SLIDES` prompt in `backend/prompts/video.py` takes three inputs:
+- PPT slide structure (defines script ordering)
+- PDF module content (for rich narration)
+- Research/gap analysis data (for industry context)
+
+Output format:
+```
+[SLIDE 1: Title]
+<spoken narration>
+
+[SLIDE 2: Executive Summary]
+<spoken narration>
+
+[SLIDE 3: Topic Name - Key Gaps]
+<spoken narration>
+...
+```
+
+---
+
+### UI Updates
+
+**Format dependency chain** enforced in `frontend/templates/index.html`:
+- Checking "Script" auto-checks "PPT" (scripts depend on PPT)
+- Checking "Video" auto-checks both "PPT" and "Script"
+- Unchecking "PPT" auto-unchecks "Script" and "Video"
+- Labels show hints: `PDF → PPT → Script → Video`
+
+**New format option**: "Gap Analysis PowerPoint (.pptx)" checkbox with hint "Based on PDF + research"
+
+---
+
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `backend/services/ppt_builder.py` | PowerPoint generation with 6 slide types, shapes, badges |
+| `backend/prompts/ppt.py` | `STRUCTURE_GAP_SLIDES` — LLM prompt for PDF+gap → slide JSON |
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `backend/prompts/video.py` | Added `SCRIPT_FROM_SLIDES` prompt for slide-synced scripts |
+| `backend/pipeline/state.py` | Added `ppt_path: str` to `PipelineState` |
+| `backend/pipeline/agent_generate.py` | Chained flow: PDF→PPT→Script, `_generate_script_from_slides()`, `_build_fallback_slide_data()` |
+| `backend/run_pipeline.py` | Added `"ppt"` to `VALID_FORMATS`, `ppt_path` to initial state |
+| `frontend/app.py` | Added PPT to `_collect_output_files()` and download route |
+| `frontend/templates/index.html` | PPT checkbox, dependency chain JS, hint labels |
+
+---
+
 ## Unreleased — Dev Server, Dependency Upgrades, ChromaDB Fix
 
 **Summary**: Added `make dev` target for development, upgraded langchain/langgraph/chromadb dependencies to latest versions, and fixed ChromaDB version incompatibility issue.

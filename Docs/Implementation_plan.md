@@ -1,8 +1,8 @@
 # Implementation Plan: CR8 Pipeline — CLI-First Prototype
 
-## Status: Complete
+## Status: Complete (with Chained Output Generation)
 
-The 3-agent LangGraph pipeline is working end-to-end as a CLI tool. Feed curriculum PDFs in, get a market-enriched learning guide PDF out.
+The 3-agent LangGraph pipeline is working end-to-end as a CLI tool and FastAPI web UI. Feed curriculum PDFs in, get a chained set of outputs: PDF (ground truth) → PPT (gap analysis, structured around PDF) → Video Script (synced to PPT slides) → Video (via HeyGen).
 
 ---
 
@@ -35,12 +35,14 @@ Software/
       llm.py                  # OpenAI wrapper (GPT-5 + GPT-5-mini)
       web_search.py           # Tavily API wrapper
       pdf_builder.py          # fpdf2 PDF generation with Unicode sanitization
+      ppt_builder.py          # python-pptx gap analysis PowerPoint generation
 
     prompts/
       __init__.py
       ingest.py               # SUMMARIZE_FILE + EXTRACT_TOPICS templates
       research.py             # GAP_ANALYSIS template
       generate.py             # GENERATE_MODULE template
+      ppt.py                  # STRUCTURE_GAP_SLIDES template (PDF+gaps → slide JSON)
 
     tests/
       __init__.py
@@ -61,7 +63,7 @@ Software/
       test_progress_capture.py # 32 unit tests
 ```
 
-Pipeline + services + CLI runner + FastAPI web frontend.
+Pipeline + services + CLI runner + FastAPI web frontend + chained output generation (PDF → PPT → Script → Video).
 
 ---
 
@@ -162,6 +164,16 @@ Output PDF goes to `outputs/<timestamp>_learning_guide.pdf`.
 - 70 new tests: `test_api.py` (28), `test_progress_capture.py` (32), `test_run_pipeline.py` (10)
 - Dependencies added: `fastapi>=0.115`, `uvicorn[standard]>=0.34`, `python-multipart>=0.0.9`, `httpx>=0.27` (dev)
 
+### Step 10: Gap Analysis PowerPoint + Chained Generation
+- `backend/services/ppt_builder.py`: python-pptx generation with 6 slide types (title, exec summary, severity overview, per-topic gap detail, recommendations, closing), color-coded severity badges, KPI callouts, and shape-based visual elements
+- `backend/prompts/ppt.py`: `STRUCTURE_GAP_SLIDES` — takes PDF module content + gap analysis → structured JSON for slides
+- `backend/prompts/video.py`: Added `SCRIPT_FROM_SLIDES` — takes PPT slide data + PDF content + research → slide-synced narration script
+- `backend/pipeline/agent_generate.py`: Chained flow — PDF first (ground truth), then PPT (structured around PDF chapters, enriched with research), then script (one `[SLIDE N]` section per slide, content from PDF + research). Falls back to per-module scripts when PPT not selected.
+- `backend/pipeline/state.py`: Added `ppt_path` field
+- `backend/run_pipeline.py`: Added `"ppt"` to valid formats
+- `frontend/app.py`: PPT download route + file collection
+- `frontend/templates/index.html`: PPT checkbox with dependency chain enforcement (Script→PPT, Video→Script+PPT)
+
 ---
 
 ## Key Technical Decisions
@@ -176,6 +188,10 @@ Output PDF goes to `outputs/<timestamp>_learning_guide.pdf`.
 | Domain scoping | `curriculum_scope` in state | Prevents LLM drift into unrelated topics; enforced in all prompts |
 | Progress | Print statements + ProgressCapture | Pipeline prints `[Stage]` prefixes; web UI captures stdout and parses progress |
 | Web framework | FastAPI + uvicorn | Async HTTP, matches Technical Assessment MVP stack recommendation |
+| PPT lib | **python-pptx** | Programmatic slide creation with shapes, colors, charts; already in deps |
+| PPT visuals | Shape-based (not charts) | Rounded rects for badges, ovals for dots — more reliable and modern than chart objects |
+| Output chain | PDF → PPT → Script → Video | Each output builds on the previous; ensures consistency across formats |
+| Script sync | Slide-based sections | `[SLIDE N: title]` markers map 1:1 to PPT slides; content from PDF + research |
 
 ---
 
@@ -220,6 +236,10 @@ PDF builder tests expanded from 1 to 20+ covering Unicode edge cases, malformed 
 
 1. `make test` — 144 tests pass (74 backend + 70 frontend)
 2. `python -m backend.run_pipeline <file>` — produces PDF in `outputs/`
-3. `make dev` — web UI at http://localhost:8000, upload PDF, track progress, download output
-4. LangSmith dashboard shows traces for all 3 nodes
-5. PDF has cover page, TOC, chapters with market-enriched content
+3. `python -m backend.run_pipeline --format pdf,ppt <file>` — produces PDF + PPT in `outputs/`
+4. `python -m backend.run_pipeline --format pdf,ppt,script <file>` — produces PDF + PPT + slide-synced script
+5. `make dev` — web UI at http://localhost:8000, upload PDF, track progress, download output
+6. LangSmith dashboard shows traces for all 3 nodes
+7. PDF has cover page, TOC, chapters with market-enriched content
+8. PPT has severity badges, KPI callouts, per-topic gap slides structured around PDF chapters
+9. Video script has `[SLIDE N]` sections matching PPT slide count

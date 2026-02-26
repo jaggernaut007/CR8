@@ -21,3 +21,38 @@ RULES:
 8. Keep the total text under 4500 characters (hard limit for video generation).
 
 Write the script as a single continuous block of text with paragraph breaks for natural pauses."""
+
+
+SCRIPT_FROM_SLIDES = """You are a professional educational video scriptwriter. Generate a spoken-word narration script that walks through a presentation slide by slide.
+
+You have three sources to draw from:
+1. PRESENTATION SLIDES — defines the structure and order of the script
+2. LEARNING GUIDE CONTENT — the detailed PDF content for rich, accurate narration
+3. RESEARCH & GAP DATA — industry context, gap analysis, and enrichments
+
+PRESENTATION SLIDES (this defines your script structure):
+{slide_data_json}
+
+LEARNING GUIDE CONTENT (PDF source — use for detailed explanations):
+{modules_content}
+
+RESEARCH & GAP ANALYSIS DATA (use for industry context and gap details):
+{research_context}
+
+RULES:
+1. Write one clearly labeled section per slide: [SLIDE N: <slide title>]
+2. The script STRUCTURE must follow the slides exactly — one section per slide, in order.
+3. The script CONTENT should draw from ALL sources:
+   - Use the learning guide for detailed explanations, definitions, and examples.
+   - Use the research/gap data for industry context and real-world relevance.
+   - Use the slide content for the key points to emphasize.
+4. For the Title slide: 1-2 sentences introducing the presentation (30-50 words).
+5. For the Executive Summary slide: summarize the key findings (80-120 words).
+6. For each Topic slide: explain the curriculum coverage, highlight gaps, and give recommendations (100-200 words).
+7. For the Recommendations slide: summarize top actions (80-120 words).
+8. For the Closing slide: 1-2 sentences wrapping up (20-40 words).
+9. Write ONLY spoken words — no stage directions, no markdown, no bullet points, no asterisks.
+10. Use a clear, engaging, educational tone as if presenting to university students.
+11. Use transitions between slides ("Moving on to...", "Now let's examine...", "Next, we'll look at...").
+12. Do NOT include URLs, citations, or "further reading" references.
+13. Keep the total script under 4500 characters per topic slide section (hard limit for video generation)."""

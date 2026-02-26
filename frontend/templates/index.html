@@ -85,15 +85,22 @@
         </div>
 
         <div class="format-options">
-          <h3>Output Formats</h3>
+          <h3>Output Formats <span class="hint">(PDF → PPT → Script → Video)</span></h3>
           <div class="checkbox-group">
             <label class="checkbox-label">
               <input type="checkbox" checked disabled>
               <span>PDF Learning Guide</span>
+              <span class="hint">Always generated (ground truth)</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="chk-ppt" value="ppt">
+              <span>Gap Analysis PowerPoint (.pptx)</span>
+              <span class="hint">Based on PDF + research</span>
             </label>
             <label class="checkbox-label">
               <input type="checkbox" id="chk-script" value="script">
-              <span>Video Scripts (.txt)</span>
+              <span>Video Script (.txt)</span>
+              <span class="hint">Synced to PPT slides</span>
             </label>
             <label class="checkbox-label">
               <input type="checkbox" id="chk-video" value="video" disabled>
@@ -169,6 +176,23 @@
     const btnGenerate = document.getElementById('btn-generate');
     const uploadError = document.getElementById('upload-error');
 
+    // --- Format dependency chain: PDF → PPT → Script → Video ---
+    const chkPpt = document.getElementById('chk-ppt');
+    const chkScript = document.getElementById('chk-script');
+    const chkVideo = document.getElementById('chk-video');
+
+    // Checking Script or Video auto-checks PPT (they depend on it)
+    chkScript.addEventListener('change', () => {
+      if (chkScript.checked) chkPpt.checked = true;
+    });
+    chkVideo.addEventListener('change', () => {
+      if (chkVideo.checked) { chkPpt.checked = true; chkScript.checked = true; }
+    });
+    // Unchecking PPT auto-unchecks Script and Video (they depend on PPT)
+    chkPpt.addEventListener('change', () => {
+      if (!chkPpt.checked) { chkScript.checked = false; chkVideo.checked = false; }
+    });
+
     function showSection(sec) {
       [secUpload, secProcessing, secComplete, secError].forEach(s => s.classList.remove('active'));
       sec.classList.add('active');
@@ -217,6 +241,7 @@
     btnGenerate.addEventListener('click', async () => {
       if (!jobId) return;
       const formats = ['pdf'];
+      if (document.getElementById('chk-ppt').checked) formats.push('ppt');
       if (document.getElementById('chk-script').checked) formats.push('script');
       if (document.getElementById('chk-video').checked) formats.push('video');
 
@@ -329,6 +354,7 @@
       fileNameEl.textContent = '';
       fileInput.value = '';
       btnGenerate.disabled = true;
+      document.getElementById('chk-ppt').checked = false;
       document.getElementById('chk-script').checked = false;
       document.getElementById('progress-bar').style.width = '0%';
       document.getElementById('log-output').textContent = '';

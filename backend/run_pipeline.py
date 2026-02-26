@@ -14,7 +14,7 @@ import uuid
 from backend.config import settings
 from backend.pipeline.graph import build_pipeline
 
-VALID_FORMATS = {"pdf", "script", "video"}
+VALID_FORMATS = {"pdf", "ppt", "script", "video"}
 
 
 def main():
@@ -82,6 +82,7 @@ def main():
         "curriculum_scope": "",
         "gap_summary": [],
         "pdf_path": "",
+        "ppt_path": "",
         "video_dir": "",
         "current_stage": "starting",
     }
@@ -95,6 +96,8 @@ def main():
     print(f"Topics extracted: {len(result.get('topics', []))}")
     if result.get("pdf_path"):
         print(f"PDF: {result['pdf_path']}")
+    if result.get("ppt_path"):
+        print(f"PPT: {result['ppt_path']}")
     if result.get("video_dir"):
         print(f"Video scripts: {result['video_dir']}/scripts/")
     print(f"{'='*60}\n")
@@ -132,6 +135,7 @@ def run_job(file_paths: list[str], formats: list[str]) -> dict:
         "curriculum_scope": "",
         "gap_summary": [],
         "pdf_path": "",
+        "ppt_path": "",
         "video_dir": "",
         "current_stage": "starting",
     }

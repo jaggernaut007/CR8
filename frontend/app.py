@@ -165,6 +165,13 @@ def _collect_output_files(result: dict) -> list[dict]:
             "type": "pdf",
             "size": os.path.getsize(pdf_path),
         })
+    ppt_path = result.get("ppt_path", "")
+    if ppt_path and os.path.exists(ppt_path):
+        files.append({
+            "name": os.path.basename(ppt_path),
+            "type": "ppt",
+            "size": os.path.getsize(ppt_path),
+        })
     video_dir = result.get("video_dir", "")
     if video_dir:
         scripts_dir = os.path.join(video_dir, "scripts")
@@ -281,6 +288,11 @@ async def download(job_id: str, file_type: str):
         pdf_path = result.get("pdf_path", "")
         if pdf_path and os.path.exists(pdf_path):
             return FileResponse(pdf_path, filename=os.path.basename(pdf_path))
+
+    elif file_type == "ppt":
+        ppt_path = result.get("ppt_path", "")
+        if ppt_path and os.path.exists(ppt_path):
+            return FileResponse(ppt_path, filename=os.path.basename(ppt_path))
 
     elif file_type == "scripts":
         video_dir = result.get("video_dir", "")
