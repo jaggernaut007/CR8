@@ -5,7 +5,17 @@ import pymupdf
 def extract_text(file_path: str) -> list[dict]:
     """Extract text from a PDF or PPTX file.
 
-    Returns a list of dicts: [{"text": "...", "source": "filename.pdf", "page": 1}, ...]
+    Args:
+        file_path: Absolute path to a ``.pdf`` or ``.pptx`` file.
+
+    Returns:
+        List of page dicts, each containing:
+            - ``text`` -- extracted plain text for the page/slide.
+            - ``source`` -- the original filename (basename only).
+            - ``page`` -- 1-based page or slide number.
+
+    Raises:
+        ValueError: If the file extension is not ``.pdf`` or ``.pptx``.
     """
     ext = os.path.splitext(file_path)[1].lower()
     if ext == ".pdf":

@@ -1,0 +1,132 @@
+{
+  "variant_a": "v1",
+  "variant_b": "v2",
+  "cases": [
+    {
+      "case_id": "distributional_semantics_foundation",
+      "output_type": "module",
+      "score_a": 5.0,
+      "score_b": 5.0,
+      "delta": 0.0
+    },
+    {
+      "case_id": "distributional_semantics_foundation",
+      "output_type": "ppt",
+      "score_a": 5.0,
+      "score_b": 5.0,
+      "delta": 0.0
+    },
+    {
+      "case_id": "distributional_semantics_foundation",
+      "output_type": "script",
+      "score_a": 5.0,
+      "score_b": 4.722222222222222,
+      "delta": -0.2777777777777777
+    },
+    {
+      "case_id": "self-attention_fundamentals",
+      "output_type": "module",
+      "score_a": 5.0,
+      "score_b": 5.0,
+      "delta": 0.0
+    },
+    {
+      "case_id": "self-attention_fundamentals",
+      "output_type": "ppt",
+      "score_a": 5.0,
+      "score_b": 5.0,
+      "delta": 0.0
+    },
+    {
+      "case_id": "self-attention_fundamentals",
+      "output_type": "script",
+      "score_a": 4.722222222222222,
+      "score_b": 4.722222222222222,
+      "delta": 0.0
+    },
+    {
+      "case_id": "skip-gram_word_embeddings",
+      "output_type": "module",
+      "score_a": 5.0,
+      "score_b": 5.0,
+      "delta": 0.0
+    },
+    {
+      "case_id": "skip-gram_word_embeddings",
+      "output_type": "ppt",
+      "score_a": 5.0,
+      "score_b": 5.0,
+      "delta": 0.0
+    },
+    {
+      "case_id": "skip-gram_word_embeddings",
+      "output_type": "script",
+      "score_a": 4.722222222222222,
+      "score_b": 4.722222222222222,
+      "delta": 0.0
+    },
+    {
+      "case_id": "training_procedure_for_embeddings",
+      "output_type": "module",
+      "score_a": 3.0,
+      "score_b": 5.0,
+      "delta": 2.0
+    },
+    {
+      "case_id": "training_procedure_for_embeddings",
+      "output_type": "ppt",
+      "score_a": 5.0,
+      "score_b": 5.0,
+      "delta": 0.0
+    },
+    {
+      "case_id": "training_procedure_for_embeddings",
+      "output_type": "script",
+      "score_a": 4.722222222222222,
+      "score_b": 5.0,
+      "delta": 0.2777777777777777
+    },
+    {
+      "case_id": "word_vector_geometry",
+      "output_type": "module",
+      "score_a": 3.0,
+      "score_b": 5.0,
+      "delta": 2.0
+    },
+    {
+      "case_id": "word_vector_geometry",
+      "output_type": "ppt",
+      "score_a": 5.0,
+      "score_b": 5.0,
+      "delta": 0.0
+    },
+    {
+      "case_id": "word_vector_geometry",
+      "output_type": "script",
+      "score_a": 4.444444444444445,
+      "score_b": 5.0,
+      "delta": 0.5555555555555554
+    }
+  ],
+  "aggregate_a": 4.641,
+  "aggregate_b": 4.944,
+  "per_criterion_deltas": {
+    "SEVERITY_SCORING_ACCURACY": 0.0,
+    "SCHEMA_COMPLIANCE": 0.0,
+    "GAP_CONCEPT_TEACHING_DEPTH": 0.0,
+    "ASSERTION_EVIDENCE_TITLES": 0.0,
+    "CURRICULUM_ANCHORING": 0.0,
+    "SPOKEN_WORD_QUALITY": 0.0,
+    "CROSS_OUTPUT_CONSISTENCY": 0.8,
+    "LENGTH_COMPLIANCE": 0.0,
+    "HOOK_EFFECTIVENESS": 0.0,
+    "DIAGRAM_APPROPRIATENESS": 0.0,
+    "CURRICULUM_ANCHOR_BREVITY": 0.0,
+    "MISCONCEPTION_AND_RETRIEVAL": 0.0,
+    "SIX_SECTION_STRUCTURE": 0.0,
+    "GAP_TEACHING_DEPTH": 0.4
+  },
+  "p_value": 0.1203,
+  "winner": "b",
+  "regressions": []
+}

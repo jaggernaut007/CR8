@@ -9,6 +9,20 @@ FILE: {source}
 TEXT:
 {text}"""
 
+SUMMARIZE_CHUNK = """You are a curriculum analyst. Summarize this chunk of text from a university course material file. Focus on topics, concepts, technical terms, and methods covered. Keep your summary to 100-200 words.
+
+FILE: {source}
+CHUNK {chunk_num}/{total_chunks}:
+{text}"""
+
+REDUCE_SUMMARIES = """You are a curriculum analyst. Below are summaries of consecutive chunks from a single course material file. Combine them into one coherent summary that captures all distinct topics, concepts, and technical methods covered.
+
+Keep the final summary to 300-500 words. Be specific about technical content. Remove redundancy across chunks.
+
+FILE: {source}
+CHUNK SUMMARIES:
+{chunk_summaries}"""
+
 EXTRACT_TOPICS = """You are a curriculum analyst. Given the following summaries of university course materials, identify all distinct topics taught in this curriculum.
 
 IMPORTANT: Your analysis must stay strictly within what the source material actually covers. Do not infer or add topics that are not explicitly present in the summaries.

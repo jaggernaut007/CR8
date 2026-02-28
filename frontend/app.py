@@ -1,4 +1,9 @@
-"""Minimal FastAPI frontend for the CR8 Learning Pipeline."""
+"""FastAPI frontend for the CR8 Learning Pipeline.
+
+Provides a single-page web UI for uploading curriculum PDFs, launching
+the 3-agent pipeline in a background thread, polling for real-time
+progress, and downloading generated artifacts (PDF, PPT, scripts, videos).
+"""
 
 import asyncio
 import os
@@ -201,6 +206,11 @@ def _zip_directory(dir_path: str, zip_path: str, extension: str | None = None):
 
 @app.get("/healthz")
 async def healthz():
+    """Health check endpoint.
+
+    Returns:
+        JSON with ``status`` (always ``"ok"``) and ``active_jobs`` count.
+    """
     active_jobs = sum(1 for j in jobs.values() if j.status == "running")
     return {"status": "ok", "active_jobs": active_jobs}
 
@@ -211,6 +221,11 @@ async def healthz():
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
+    """Serve the single-page HTML frontend.
+
+    Returns:
+        The contents of ``templates/index.html`` as an HTML response.
+    """
     html_path = os.path.join(TEMPLATE_DIR, "index.html")
     with open(html_path) as f:
         return HTMLResponse(content=f.read())
@@ -218,6 +233,17 @@ async def index():
 
 @app.post("/api/upload")
 async def upload(file: UploadFile = File(...)):
+    """Upload a curriculum PDF and receive a job ID.
+
+    Saves the uploaded file to a per-job directory under ``uploads/``.
+
+    Args:
+        file: PDF file upload (multipart form data).
+
+    Returns:
+        JSON with ``job_id`` and ``filename`` on success, or a 400 error
+        if the file is not a PDF.
+    """
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         return JSONResponse({"error": "Please upload a PDF file"}, status_code=400)
 
@@ -235,6 +261,18 @@ async def upload(file: UploadFile = File(...)):
 
 @app.post("/api/start")
 async def start(body: dict):
+    """Start the pipeline for a previously uploaded job.
+
+    Launches the 3-agent pipeline in a background thread.  Only one
+    job may run at a time; concurrent requests return HTTP 409.
+
+    Args:
+        body: JSON body with ``job_id`` (required) and optional
+            ``formats`` list (defaults to ``["pdf"]``).
+
+    Returns:
+        JSON with ``status: "running"`` on success.
+    """
     job_id = body.get("job_id")
     formats = body.get("formats", ["pdf"])
 
@@ -270,6 +308,15 @@ async def start(body: dict):
 
 @app.get("/api/progress/{job_id}")
 async def progress(job_id: str):
+    """Poll the current progress of a running pipeline job.
+
+    Args:
+        job_id: The job identifier returned by ``/api/upload``.
+
+    Returns:
+        JSON with ``status``, ``stage``, ``percent``, recent ``logs``,
+        ``elapsed`` seconds, and (when complete) a ``files`` list.
+    """
     capture = jobs.get(job_id)
     if not capture:
         return JSONResponse({"error": "Job not found"}, status_code=404)
@@ -278,6 +325,16 @@ async def progress(job_id: str):
 
 @app.get("/api/download/{job_id}/{file_type}")
 async def download(job_id: str, file_type: str):
+    """Download a generated artifact from a completed job.
+
+    Args:
+        job_id: The job identifier returned by ``/api/upload``.
+        file_type: One of ``"pdf"``, ``"ppt"``, ``"scripts"``, or
+            ``"videos"``.  Scripts and videos are returned as ZIP archives.
+
+    Returns:
+        A ``FileResponse`` with the requested file, or a 404 JSON error.
+    """
     capture = jobs.get(job_id)
     if not capture or not capture.result:
         return JSONResponse({"error": "Job not found or not complete"}, status_code=404)

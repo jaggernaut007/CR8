@@ -5,12 +5,21 @@ Times (serif) for headings + Helvetica (sans) for body, matching the
 Georgia + Calibri pairing in the PPT builder. Teal accent lines, navy
 chapter titles, gold callouts, and CR8 branding throughout.
 
+LaTeX math expressions are rendered as images via matplotlib and embedded
+inline.  Reference: https://py-pdf.github.io/fpdf2/Maths.html
+
 Design reference: Docs/CR8_Course_PPT_Template_Recommendation.md
 """
 
 import os
 import re
+import struct
 from datetime import datetime
+from io import BytesIO
+
+import matplotlib
+matplotlib.use("Agg")
+from matplotlib.figure import Figure
 
 from fpdf import FPDF
 
@@ -62,6 +71,185 @@ def _sanitize(text: str) -> str:
         text = text.replace(char, replacement)
     # Catch any remaining non-latin-1 chars
     return text.encode("latin-1", errors="replace").decode("latin-1")
+
+
+# ---------------------------------------------------------------------------
+# LaTeX rendering — matplotlib images + text fallback
+# ---------------------------------------------------------------------------
+
+_INLINE_LATEX_RE = re.compile(r"\\\((.+?)\\\)")
+_DISPLAY_LATEX_RE = re.compile(r"^\\\[(.+)\\\]$")
+
+# Fallback: LaTeX command → readable ASCII (used when matplotlib fails)
+_LATEX_CMD_MAP = {
+    "\\mid": "|",
+    "\\vert": "|",
+    "\\cdot": "*",
+    "\\times": "x",
+    "\\leq": "<=",
+    "\\geq": ">=",
+    "\\neq": "!=",
+    "\\approx": "~=",
+    "\\infty": "inf",
+    "\\rightarrow": "->",
+    "\\leftarrow": "<-",
+    "\\Rightarrow": "=>",
+    "\\sum": "sum",
+    "\\prod": "prod",
+    "\\log": "log",
+    "\\exp": "exp",
+    "\\nabla": "grad",
+    "\\partial": "d",
+    "\\alpha": "alpha",
+    "\\beta": "beta",
+    "\\gamma": "gamma",
+    "\\delta": "delta",
+    "\\epsilon": "epsilon",
+    "\\theta": "theta",
+    "\\lambda": "lambda",
+    "\\sigma": "sigma",
+    "\\pi": "pi",
+    "\\omega": "omega",
+    "\\quad": " ",
+    "\\qquad": "  ",
+    "\\,": " ",
+    "\\;": " ",
+    "\\!": "",
+    "\\ ": " ",
+}
+
+
+def _strip_latex_expr(expr: str) -> str:
+    """Convert a single LaTeX math expression to readable ASCII (fallback)."""
+    text = expr
+    # \text{...}, \mathbf{...}, etc. → content only
+    text = re.sub(
+        r"\\(?:text|mathbf|mathrm|textbf|textit|mathbb|mathcal|operatorname)"
+        r"\{([^}]*)\}",
+        r"\1", text,
+    )
+    text = re.sub(r"\\frac\{([^}]*)\}\{([^}]*)\}", r"\1/\2", text)
+    text = re.sub(r"\\sqrt\{([^}]*)\}", r"sqrt(\1)", text)
+    text = text.replace("^\\top", "^T")
+    text = text.replace("\\top", "T")
+    for cmd, repl in _LATEX_CMD_MAP.items():
+        text = text.replace(cmd, repl)
+    # Remaining \command → remove
+    text = re.sub(r"\\[a-zA-Z]+", "", text)
+    # Superscript/subscript braces: ^{X} → ^X, _{X} → _X
+    text = re.sub(r"([_^])\{([^}]*)\}", r"\1\2", text)
+    text = re.sub(r"  +", " ", text)
+    return text.strip()
+
+
+def _strip_latex(text: str) -> str:
+    """Strip all LaTeX notation from a text string (fallback converter)."""
+    text = _INLINE_LATEX_RE.sub(lambda m: _strip_latex_expr(m.group(1)), text)
+    text = _DISPLAY_LATEX_RE.sub(lambda m: _strip_latex_expr(m.group(1)), text)
+    text = re.sub(r"\$\$(.+?)\$\$", lambda m: _strip_latex_expr(m.group(1)), text)
+    return text
+
+
+def _render_latex_to_png(
+    expr: str, fontsize: int = 11, dpi: int = 150,
+) -> BytesIO | None:
+    """Render a LaTeX expression to a PNG buffer using matplotlib.
+
+    Returns BytesIO on success, None if rendering fails.
+    Reference: https://py-pdf.github.io/fpdf2/Maths.html
+    """
+    try:
+        fig = Figure(figsize=(0.01, 0.01), dpi=dpi)
+        fig.text(
+            0.5, 0.5, f"${expr}$",
+            fontsize=fontsize, ha="center", va="center",
+            fontfamily="serif", color="#2D3436",
+        )
+        buf = BytesIO()
+        fig.savefig(
+            buf, format="png", dpi=dpi, bbox_inches="tight",
+            pad_inches=0.02, facecolor="white", edgecolor="none",
+        )
+        buf.seek(0)
+        return buf
+    except Exception:
+        return None
+
+
+def _png_dimensions(buf: BytesIO) -> tuple[int, int]:
+    """Read (width, height) in pixels from a PNG IHDR chunk."""
+    pos = buf.tell()
+    buf.seek(16)  # 8-byte signature + 4-byte length + 4-byte "IHDR"
+    w = struct.unpack(">I", buf.read(4))[0]
+    h = struct.unpack(">I", buf.read(4))[0]
+    buf.seek(pos)
+    return w, h
+
+
+def _embed_latex_image(pdf: FPDF, buf: BytesIO, line_h: float = 6, dpi: int = 150):
+    """Embed a rendered LaTeX PNG inline at the current cursor position."""
+    w_px, h_px = _png_dimensions(buf)
+    target_h = line_h * 0.85
+    target_w = target_h * (w_px / h_px)
+
+    x, y = pdf.get_x(), pdf.get_y()
+
+    # Wrap to next line if image won't fit
+    right_edge = _PAGE_W - _MARGIN_R
+    if x + target_w > right_edge:
+        pdf.ln(line_h)
+        x = _MARGIN_L
+        y = pdf.get_y()
+
+    pdf.image(buf, x=x, y=y, w=target_w, h=target_h)
+    pdf.set_xy(x + target_w, y)
+
+
+def _render_text_with_latex(pdf: FPDF, text: str, line_h: float = 6):
+    """Render text with inline LaTeX expressions as matplotlib images.
+
+    Splits the text on ``\\( ... \\)`` patterns.  Text segments are rendered
+    with ``pdf.write()``; LaTeX segments are rendered as inline PNG images
+    via matplotlib.  Falls back to ASCII text conversion if rendering fails.
+    """
+    parts = _INLINE_LATEX_RE.split(text)
+
+    for i, part in enumerate(parts):
+        if i % 2 == 0:
+            # Text segment
+            if part:
+                pdf.write(line_h, _sanitize(part))
+        else:
+            # LaTeX segment — try matplotlib rendering
+            buf = _render_latex_to_png(part)
+            if buf is not None:
+                _embed_latex_image(pdf, buf, line_h)
+            else:
+                # Fallback: render as ASCII text
+                pdf.write(line_h, _sanitize(_strip_latex_expr(part)))
+
+
+def _render_display_math(pdf: FPDF, expr: str):
+    """Render display math ``\\[ ... \\]`` as a centered equation image."""
+    buf = _render_latex_to_png(expr, fontsize=14, dpi=200)
+    if buf is not None:
+        pdf.ln(4)
+        w_px, h_px = _png_dimensions(buf)
+        target_h = 10.0
+        target_w = target_h * (w_px / h_px)
+        if target_w > _CONTENT_W:
+            target_w = _CONTENT_W
+            target_h = target_w * (h_px / w_px)
+        x_center = _MARGIN_L + (_CONTENT_W - target_w) / 2
+        pdf.image(buf, x=x_center, y=pdf.get_y(), w=target_w, h=target_h)
+        pdf.set_y(pdf.get_y() + target_h + 2)
+        pdf.ln(4)
+    else:
+        pdf.set_font("Helvetica", "I", 10)
+        pdf.set_text_color(*_CHARCOAL)
+        fallback = _sanitize(_strip_latex_expr(expr))
+        pdf.multi_cell(0, 6, fallback, align="C")
+        pdf.ln(2)
 
 
 # ---------------------------------------------------------------------------
@@ -126,51 +314,210 @@ def _draw_teal_left_bar(pdf, x, y, height, width=1.2):
 
 
 # ---------------------------------------------------------------------------
+# Rich text renderer (handles **bold**, *italic*, and inline LaTeX)
+# ---------------------------------------------------------------------------
+
+def _render_rich_text(pdf: FPDF, text: str, base_size: int = 10):
+    """Render text with inline **bold**, *italic*, and LaTeX formatting.
+
+    If the text contains ``\\( ... \\)`` LaTeX, it delegates to
+    ``_render_text_with_latex`` which embeds matplotlib-rendered images.
+    Otherwise it handles bold/italic markdown formatting.
+    """
+    # Flatten markdown links first
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 (\2)", text)
+
+    # Check for inline LaTeX
+    if _INLINE_LATEX_RE.search(text):
+        _render_text_with_latex(pdf, text)
+        pdf.ln()
+        return
+
+    # No LaTeX — handle bold/italic
+    parts = re.split(r"(\*\*[^*]+\*\*|\*[^*]+\*)", text)
+    if len(parts) == 1:
+        # No inline formatting — plain text
+        pdf.multi_cell(0, 6, _sanitize(text))
+        return
+
+    # Use write() for inline mixed formatting
+    for part in parts:
+        if part.startswith("**") and part.endswith("**"):
+            pdf.set_font("Helvetica", "B", base_size)
+            pdf.write(6, _sanitize(part[2:-2]))
+            pdf.set_font("Helvetica", "", base_size)
+        elif part.startswith("*") and part.endswith("*") and len(part) > 2:
+            pdf.set_font("Helvetica", "I", base_size)
+            pdf.write(6, _sanitize(part[1:-1]))
+            pdf.set_font("Helvetica", "", base_size)
+        else:
+            pdf.write(6, _sanitize(part))
+    pdf.ln()
+
+
+# ---------------------------------------------------------------------------
+# Code block renderer
+# ---------------------------------------------------------------------------
+
+_CODE_BG = (240, 240, 235)  # light gray for code blocks
+
+
+def _render_code_block(pdf: FPDF, code_lines: list[str]):
+    """Render a code block with Courier font and light gray background."""
+    pdf.ln(2)
+    x_start = _MARGIN_L + 4
+    block_width = _CONTENT_W - 8
+
+    # Estimate block height
+    line_h = 5
+    block_h = len(code_lines) * line_h + 4
+
+    # Check if we need a page break
+    if pdf.get_y() + block_h > _PAGE_H - 25:
+        pdf.add_page()
+
+    y_start = pdf.get_y()
+    pdf.set_fill_color(*_CODE_BG)
+    pdf.rect(x_start, y_start, block_width, block_h, "F")
+
+    pdf.set_font("Courier", "", 8)
+    pdf.set_text_color(*_CHARCOAL)
+    pdf.set_y(y_start + 2)
+    for code_line in code_lines:
+        pdf.set_x(x_start + 3)
+        pdf.cell(block_width - 6, line_h, _sanitize(code_line), new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_y(y_start + block_h + 2)
+    pdf.ln(2)
+
+
+# ---------------------------------------------------------------------------
 # Markdown line renderer
 # ---------------------------------------------------------------------------
 
 def _render_markdown_line(pdf: FPDF, line: str):
-    """Render a single line of markdown to the PDF with Midnight Teal styling."""
-    stripped = _sanitize(line.strip())
+    """Render a single line of markdown to the PDF with Midnight Teal styling.
+
+    Handles all standard markdown: headings (#–######), bullet and numbered
+    lists, blockquotes, horizontal rules, inline HTML, inline code backticks,
+    and inline LaTeX math via matplotlib images.
+    """
+    stripped = line.strip()
+
+    # Pre-process: strip inline HTML tags
+    if "<" in stripped and ">" in stripped:
+        stripped = re.sub(r"<[^>]+>", "", stripped).strip()
+
+    # Strip inline code backticks
+    stripped = re.sub(r"`([^`]*)`", r"\1", stripped)
+
     if not stripped:
         pdf.ln(4)
         return
 
-    # Section headings (##) — navy bold Helvetica with teal accent underline
+    # --- Horizontal rules (---, ***, ___) ---
+    if re.match(r"^[-*_]{3,}\s*$", stripped):
+        pdf.ln(3)
+        _draw_teal_accent_line(pdf, _MARGIN_L + 20, pdf.get_y(), _CONTENT_W - 40, 0.4)
+        pdf.ln(5)
+        return
+
+    # --- Display math: \[ ... \] → centered equation image ---
+    display_match = _DISPLAY_LATEX_RE.match(stripped)
+    if display_match:
+        _render_display_math(pdf, display_match.group(1))
+        return
+
+    # --- Headings (deepest first; LaTeX stripped to text for headings) ---
+    h4_match = re.match(r"^#{4,6}\s+(.*)", stripped)
+    if h4_match:
+        pdf.ln(4)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_text_color(*_TEAL)
+        heading = _sanitize(_strip_latex(h4_match.group(1)))
+        pdf.cell(0, 6, heading, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
+        return
+
+    if stripped.startswith("### "):
+        pdf.ln(5)
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_text_color(*_TEAL)
+        heading = _sanitize(_strip_latex(stripped[4:]))
+        pdf.cell(0, 7, heading, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
+        return
+
     if stripped.startswith("## "):
         pdf.ln(6)
         pdf.set_font("Helvetica", "B", 13)
         pdf.set_text_color(*_DEEP_NAVY)
-        heading_text = stripped[3:]
-        pdf.cell(0, 8, heading_text, new_x="LMARGIN", new_y="NEXT")
+        heading = _sanitize(_strip_latex(stripped[3:]))
+        pdf.cell(0, 8, heading, new_x="LMARGIN", new_y="NEXT")
         # Teal accent line under heading
         _draw_teal_accent_line(pdf, _MARGIN_L, pdf.get_y(), 40)
         pdf.ln(3)
         return
 
-    # Bullet points — teal dash
+    if stripped.startswith("# "):
+        pdf.ln(6)
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.set_text_color(*_DEEP_NAVY)
+        heading = _sanitize(_strip_latex(stripped[2:]))
+        pdf.cell(0, 9, heading, new_x="LMARGIN", new_y="NEXT")
+        _draw_teal_accent_line(pdf, _MARGIN_L, pdf.get_y(), 40)
+        pdf.ln(3)
+        return
+
+    # --- Bullet points — teal dash with rich text ---
     if stripped.startswith("- ") or stripped.startswith("* "):
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(*_CHARCOAL)
         text = stripped[2:]
-        text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 (\2)", text)
-        text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
         # Teal bullet marker
         pdf.set_text_color(*_TEAL)
         pdf.cell(8)
         pdf.cell(4, 6, "-")
         pdf.set_text_color(*_CHARCOAL)
-        pdf.multi_cell(0, 6, f" {text}")
+        pdf.set_font("Helvetica", "", 10)
+        _render_rich_text(pdf, f" {text}", 10)
         pdf.ln(1)
         return
 
-    # Regular paragraph text — charcoal body
+    # --- Numbered lists — teal number with rich text ---
+    num_match = re.match(r"^(\d+)\.\s+(.*)", stripped)
+    if num_match:
+        num_label = num_match.group(1) + "."
+        text = num_match.group(2)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_text_color(*_TEAL)
+        pdf.cell(8)
+        pdf.cell(6, 6, num_label)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_text_color(*_CHARCOAL)
+        _render_rich_text(pdf, f" {text}", 10)
+        pdf.ln(1)
+        return
+
+    # --- Blockquotes / callouts — gold left bar, slate gray italic ---
+    if stripped.startswith("> "):
+        text = stripped[2:]
+        text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+        bar_y = pdf.get_y()
+        # Gold accent bar on the left
+        pdf.set_fill_color(*_WARM_GOLD)
+        pdf.rect(_MARGIN_L + 4, bar_y, 1.2, 6, "F")
+        pdf.set_font("Helvetica", "I", 9)
+        pdf.set_text_color(*_SLATE_GRAY)
+        pdf.cell(10)
+        pdf.multi_cell(0, 6, _sanitize(_strip_latex(text)))
+        pdf.ln(1)
+        return
+
+    # --- Regular paragraph text — charcoal body with rich text ---
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(*_CHARCOAL)
-    text = stripped
-    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 (\2)", text)
-    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
-    pdf.multi_cell(0, 6, text)
+    _render_rich_text(pdf, stripped, 10)
     pdf.ln(2)
 
 
@@ -190,6 +537,18 @@ def build_pdf(
     - Times (serif) for cover title and chapter headings
     - Helvetica (sans) for body text
     - Teal accent lines, navy headings, CR8 branding
+
+    The generated PDF includes a cover page, table of contents, and one
+    chapter per topic with fully rendered markdown (headings, lists,
+    code blocks, inline LaTeX via matplotlib).
+
+    Args:
+        title: Document title displayed on the cover page.
+        topics: List of topic dicts (each must have a ``"name"`` key;
+            optional ``"description"`` is shown beneath the chapter title).
+        modules_md: Parallel list of markdown strings, one per topic.
+        output_path: Filesystem path where the PDF will be written.
+            Parent directories are created automatically.
     """
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
@@ -299,8 +658,23 @@ def build_pdf(
             pdf.multi_cell(0, 6, _sanitize(topic["description"]))
             pdf.ln(4)
 
-        # Render module content
-        for line in module_md.split("\n"):
-            _render_markdown_line(pdf, line)
+        # Render module content (with code block preprocessing)
+        lines = module_md.split("\n")
+        i_line = 0
+        while i_line < len(lines):
+            line = lines[i_line]
+            # Detect triple-backtick code blocks
+            if line.strip().startswith("```"):
+                code_lines = []
+                i_line += 1
+                while i_line < len(lines) and not lines[i_line].strip().startswith("```"):
+                    code_lines.append(lines[i_line])
+                    i_line += 1
+                i_line += 1  # skip closing ```
+                if code_lines:
+                    _render_code_block(pdf, code_lines)
+            else:
+                _render_markdown_line(pdf, line)
+                i_line += 1
 
     pdf.output(output_path)

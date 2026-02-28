@@ -9,27 +9,80 @@ from backend.pipeline.state import PipelineState
 from backend.services.file_parser import extract_text
 from backend.services.llm import get_llm
 from backend.services.chromadb_store import ChromaStore
-from backend.prompts.ingest import SUMMARIZE_FILE, EXTRACT_TOPICS
+from backend.prompts.ingest import (
+    SUMMARIZE_FILE,
+    SUMMARIZE_CHUNK,
+    REDUCE_SUMMARIES,
+    EXTRACT_TOPICS,
+)
+
+_MAP_REDUCE_THRESHOLD = 15000   # chars — files longer than this use map-reduce
+_CHUNK_SIZE = 12000             # chars per map chunk
 
 
 def _summarize_file(source, texts, llm):
-    """Summarize a single file's text."""
+    """Summarize a single file's text, using map-reduce for long files."""
     file_text = "\n".join(texts)
-    if len(file_text) > 15000:
-        file_text = file_text[:15000] + "\n... [truncated]"
-    prompt = SUMMARIZE_FILE.format(source=source, text=file_text)
-    response = llm.invoke(prompt, config={"run_name": f"summarize_{source}"})
-    print(f"[Ingest] Summarized {source}")
+
+    if len(file_text) <= _MAP_REDUCE_THRESHOLD:
+        # Short file — direct summarization
+        prompt = SUMMARIZE_FILE.format(source=source, text=file_text)
+        response = llm.invoke(prompt, config={"run_name": f"summarize_{source}"})
+        print(f"[Ingest] Summarized {source} (direct)")
+        return f"## {source}\n{response.content}"
+
+    # Long file — map-reduce: split → summarize chunks → combine
+    chunks = [
+        file_text[i : i + _CHUNK_SIZE]
+        for i in range(0, len(file_text), _CHUNK_SIZE)
+    ]
+    total = len(chunks)
+    print(f"[Ingest] {source}: {len(file_text)} chars → map-reduce ({total} chunks)")
+
+    # Map phase: summarize each chunk
+    chunk_summaries = []
+    for idx, chunk in enumerate(chunks):
+        prompt = SUMMARIZE_CHUNK.format(
+            source=source, chunk_num=idx + 1, total_chunks=total, text=chunk,
+        )
+        resp = llm.invoke(prompt, config={"run_name": f"summarize_{source}_chunk{idx}"})
+        chunk_summaries.append(resp.content)
+
+    # Reduce phase: combine chunk summaries into one
+    prompt = REDUCE_SUMMARIES.format(
+        source=source,
+        chunk_summaries="\n\n---\n\n".join(
+            f"Chunk {i+1}:\n{s}" for i, s in enumerate(chunk_summaries)
+        ),
+    )
+    response = llm.invoke(prompt, config={"run_name": f"reduce_{source}"})
+    print(f"[Ingest] Summarized {source} (map-reduce, {total} chunks)")
     return f"## {source}\n{response.content}"
 
 
 def ingest_node(state: PipelineState) -> dict:
-    """Agent 1: Parse files, extract topics, populate ChromaDB curriculum collection."""
+    """Agent 1: Parse files, extract topics, populate ChromaDB curriculum collection.
+
+    Workflow:
+        1. Parse all uploaded files (PDF/PPTX) into pages of text.
+        2. Summarize each file (direct or map-reduce for long files).
+        3. Extract structured topics from combined summaries via LLM.
+        4. Chunk and embed raw text into the ChromaDB ``curriculum``
+           collection for downstream retrieval.
+
+    Args:
+        state: Pipeline state containing ``file_paths`` to process.
+
+    Returns:
+        Dict with ``topics`` (list of topic dicts), ``raw_text``
+        (concatenated extracted text), ``curriculum_scope`` (one-sentence
+        domain boundary), and ``current_stage`` set to ``"ingested"``.
+    """
     print("[Ingest] Starting...")
 
     store = ChromaStore(settings.chroma_persist_dir)
     store.reset_collections()
-    llm = get_llm("mini")
+    llm = get_llm("nano")
 
     # 1. Parse all files
     all_pages = []

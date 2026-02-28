@@ -96,11 +96,28 @@ def _research_topic(i, topic, total, store, llm, curriculum_scope):
 
 
 def research_node(state: PipelineState) -> dict:
-    """Agent 2: Research each topic, identify gaps, store enrichments."""
+    """Agent 2: Research each topic, identify gaps, store enrichments.
+
+    For each topic extracted by Agent 1, this node:
+        1. Runs parallel web searches for skills/applications and trends.
+        2. Retrieves relevant curriculum chunks from ChromaDB.
+        3. Performs LLM-based gap analysis comparing curriculum to industry.
+        4. Stores research results and enrichments in the ChromaDB
+           ``research`` collection.
+
+    Args:
+        state: Pipeline state containing ``topics`` and ``curriculum_scope``
+            from the Ingest stage.
+
+    Returns:
+        Dict with ``gap_summary`` (list of per-topic gap analysis dicts,
+        each containing ``topic``, ``gaps``, ``enrichments``, and
+        ``severity``) and ``current_stage`` set to ``"researched"``.
+    """
     print("[Research] Starting...")
 
     store = ChromaStore(settings.chroma_persist_dir)
-    llm = get_llm("mini")
+    llm = get_llm("mini", temperature=settings.temp_analysis)
     topics = state["topics"]
     curriculum_scope = state.get("curriculum_scope", "")
     total = len(topics)

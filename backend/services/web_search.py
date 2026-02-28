@@ -15,7 +15,13 @@ def _get_client() -> TavilyClient:
 def search(query: str, max_results: int = 5) -> list[dict]:
     """Search the web using Tavily.
 
-    Returns a list of dicts with keys: title, url, content, score
+    Args:
+        query: Natural-language search query.
+        max_results: Maximum number of results to return.
+
+    Returns:
+        List of result dicts, each containing ``title``, ``url``,
+        ``content``, and ``score`` keys.
     """
     client = _get_client()
     response = client.search(query=query, max_results=max_results, search_depth="basic")

@@ -1,0 +1,129 @@
+site_name: CR8 Documentation
+site_description: >-
+  CR8 is a 3-agent AI pipeline that transforms university curriculum materials
+  into market-enriched learning guides, gap analysis presentations, video scripts,
+  and AI avatar videos.
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: teal
+      accent: deep orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: deep orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [.]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            heading_level: 3
+  - minify:
+      minify_html: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.mark
+  - pymdownx.keys
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - getting-started/index.md
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+      - Configuration: getting-started/configuration.md
+      - Web UI: getting-started/web-ui.md
+  - Architecture:
+      - architecture/index.md
+      - Pipeline Overview: architecture/pipeline-overview.md
+      - Data Flow & State: architecture/data-flow.md
+      - Technology Stack: architecture/tech-stack.md
+      - Multi-Model Routing: architecture/model-routing.md
+      - Output Chain: architecture/output-chain.md
+  - Pipeline Agents:
+      - agents/index.md
+      - "Agent 1: Ingest": agents/ingest.md
+      - "Agent 2: Research": agents/research.md
+      - "Agent 3: Generate": agents/generate.md
+      - Prompt Templates: agents/prompts.md
+  - Services:
+      - services/index.md
+      - LLM Wrapper: services/llm.md
+      - ChromaDB Store: services/chromadb.md
+      - File Parser: services/file-parser.md
+      - Web Search: services/web-search.md
+      - PDF Builder: services/pdf-builder.md
+      - PPT Builder: services/ppt-builder.md
+      - Video Builder: services/video-builder.md
+  - Evaluation Framework:
+      - evals/index.md
+      - Architecture: evals/architecture.md
+      - CLI Reference: evals/cli.md
+      - Prompt Registry: evals/prompt-registry.md
+      - Writing Custom Evals: evals/custom-evals.md
+  - Deployment:
+      - deployment/index.md
+      - Docker: deployment/docker.md
+      - GCP Cloud Run: deployment/gcp-cloud-run.md
+  - Design Decisions:
+      - design/index.md
+      - Learning Module Redesign: design/learning-module-redesign.md
+      - PPT Template Design: design/ppt-template.md
+      - Model Research: design/model-research.md
+      - Video API Research: design/video-api-research.md
+      - Adaptive Assessment Research: design/adaptive-assessment.md
+      - Strategic Overview: design/strategic-overview.md
+  - API Reference:
+      - api/index.md
+      - Pipeline: api/pipeline.md
+      - Services: api/services.md
+      - Configuration: api/configuration.md
+      - Frontend Endpoints: api/frontend.md
+  - Contributing:
+      - contributing/index.md
+      - Updating Documentation: contributing/updating-docs.md
+  - Changelog: changelog.md

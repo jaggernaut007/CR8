@@ -1,0 +1,280 @@
+# Implementation Plan: CR8 Pipeline — CLI-First Prototype
+
+## Status: Complete (with Chained Output Generation)
+
+The 3-agent LangGraph pipeline is working end-to-end as a CLI tool and FastAPI web UI. Feed curriculum PDFs in, get a chained set of outputs: PDF (ground truth) → PPT (gap analysis, structured around PDF) → Video Script (synced to PPT slides) → Video (via HeyGen).
+
+---
+
+## Project Structure
+
+```
+Software/
+  pyproject.toml              # dependencies
+  Makefile                    # dev shortcuts: install, test, run, clean
+  .env                        # API keys (OpenAI, Tavily, LangSmith)
+  .env.example                # template for .env
+
+  backend/
+    __init__.py
+    config.py                 # pydantic-settings loads .env
+    run_pipeline.py           # CLI entry point: python -m backend.run_pipeline <files>
+
+    pipeline/
+      __init__.py
+      graph.py                # LangGraph StateGraph: ingest → research → generate
+      state.py                # PipelineState TypedDict
+      agent_ingest.py         # Agent 1: parse files, extract topics, embed curriculum
+      agent_research.py       # Agent 2: web search, gap analysis, store enrichments
+      agent_generate.py       # Agent 3: generate modules, compile PDF
+
+    services/
+      __init__.py
+      file_parser.py          # PyMuPDF text extraction (.pdf), python-pptx (.pptx)
+      chromadb_store.py       # ChromaDB wrapper (curriculum + research collections)
+      llm.py                  # OpenAI wrapper (nano/mini/premium tiers)
+      web_search.py           # Tavily API wrapper
+      pdf_builder.py          # fpdf2 PDF generation with Unicode sanitization
+      ppt_builder.py          # python-pptx gap analysis PowerPoint generation
+
+    prompts/
+      __init__.py
+      ingest.py               # SUMMARIZE_FILE, SUMMARIZE_CHUNK, REDUCE_SUMMARIES, EXTRACT_TOPICS
+      research.py             # GAP_ANALYSIS template
+      generate.py             # GENERATE_MODULE template
+      ppt.py                  # STRUCTURE_GAP_SLIDES template (PDF+gaps → slide JSON)
+
+    tests/
+      __init__.py
+      conftest.py             # Fixtures: CS224N test files, temp ChromaDB dir
+      test_file_parser.py     # 3 tests
+      test_chromadb_store.py  # 3 tests
+      test_pdf_builder.py     # 20+ tests
+      test_run_pipeline.py    # 10 tests (run_job validation + invocation)
+
+  frontend/
+    __init__.py
+    app.py                    # FastAPI server + ProgressCapture
+    templates/
+      index.html              # Single-page UI (inline CSS + JS)
+    tests/
+      __init__.py
+      test_api.py             # 28 endpoint tests
+      test_progress_capture.py # 32 unit tests
+```
+
+Pipeline + services + CLI runner + FastAPI web frontend + chained output generation (PDF → PPT → Script → Video).
+
+---
+
+## Setup
+
+### Prerequisites
+- Python 3.11+
+- API keys: OpenAI, Tavily, LangSmith
+
+### Install
+```bash
+cd Software
+python -m venv .venv
+source .venv/bin/activate
+make install   # pip install -e ".[dev]"
+```
+
+### Configure
+Copy `.env.example` to `.env` and fill in your API keys:
+```
+OPENAI_API_KEY=sk-...
+TAVILY_API_KEY=tvly-...
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_PROJECT=cr8-prototype
+```
+
+### Run
+```bash
+# Single file
+python -m backend.run_pipeline NLP_Course/CS224N_Downloads/Slides/01_Word_Vectors_I.pdf
+
+# Multiple files
+python -m backend.run_pipeline NLP_Course/CS224N_Downloads/Slides/*.pdf
+
+# Tests
+make test
+```
+
+Output PDF goes to `outputs/<timestamp>_learning_guide.pdf`.
+
+---
+
+## Implementation Steps (All Complete)
+
+### Step 1: Scaffolding
+- `pyproject.toml` with deps: langchain, langchain-openai, langgraph, langsmith, chromadb, pymupdf, python-pptx, tavily-python, fpdf2, pydantic-settings, jinja2, markdown
+- `Makefile`: install, test, run, clean
+- `backend/config.py`: pydantic-settings loading `.env`
+
+### Step 2: File Parser (TDD)
+- PyMuPDF page-by-page extraction for PDFs
+- python-pptx slide-by-slide extraction for .pptx
+- Returns `[{"text": "...", "source": "filename.pdf", "page": 1}, ...]`
+
+### Step 3: ChromaDB Service (TDD)
+- PersistentClient with get_or_create_collection
+- Two collections: `curriculum` (raw text chunks) and `research` (search results + enrichments)
+- Default embeddings (all-MiniLM-L6-v2) — no OpenAI embeddings needed
+
+### Step 4: LLM + Web Search Services
+- `llm.py`: `get_llm("mini")` → GPT-5-mini, `get_llm("full")` → GPT-5
+- `web_search.py`: Tavily wrapper, `search(query, max_results=5)`
+
+### Step 5: Agent 1 — Ingest
+- Parse files → summarize each (GPT-5-mini, 15k char limit per file)
+- Extract topics from combined summaries (JSON mode) → `[{name, description}]`
+- Chunk text (RecursiveCharacterTextSplitter, 1500 chars, 150 overlap) → embed into ChromaDB `curriculum`
+
+### Step 6: Agent 2 — Research
+- For each topic: 2 Tavily searches (job skills + industry trends), 5 results each
+- Retrieve top 3 curriculum chunks from ChromaDB
+- GPT-5-mini gap analysis → `{topic, gaps, enrichments}`
+- Store enrichments in ChromaDB `research` collection
+- Deduplicates document IDs to prevent ChromaDB DuplicateIDError
+
+### Step 7: Agent 3 — Generate + PDF
+- For each topic: retrieve from both ChromaDB collections
+- GPT-5 generates module markdown (objectives, content, industry context, takeaways, resources)
+- fpdf2 compiles all modules into PDF with cover page, TOC, and chapters
+- Unicode sanitization handles GPT's smart quotes, em dashes, bullets, etc.
+
+### Step 8: Pipeline Wiring + CLI
+- LangGraph StateGraph: `START → ingest → research → generate → END`
+- CLI entry point: `python -m backend.run_pipeline <files>`
+- LangSmith traces at `cr8-prototype` project
+
+### Step 9: FastAPI Web Frontend (TDD)
+- `frontend/app.py`: FastAPI async server with `ProgressCapture` class for real-time progress tracking
+- `frontend/templates/index.html`: Single-page UI with upload, format selection, progress bar, download
+- `backend/run_pipeline.py`: Added `run_job()` function — programmatic entry point for the web layer
+- `backend/config.py`: Added `"extra": "ignore"` to handle extra `.env` keys gracefully
+- Pipeline runs in background thread via `asyncio.to_thread()`, preserving all `ThreadPoolExecutor` parallelism
+- `ProgressCapture` intercepts stdout, parses `[Stage]` prefixes, computes progress % with stage weights
+- Three API endpoints: upload PDF, start pipeline, poll progress; plus download endpoint for completed files
+- Frontend polls `/api/progress` every 3s, shows stage label, progress bar, elapsed/estimated time, scrolling logs
+- Video checkbox disabled by default (requires HeyGen keys in `.env`)
+- Single job at a time (prototype scope — `settings` is a global singleton)
+- 70 new tests: `test_api.py` (28), `test_progress_capture.py` (32), `test_run_pipeline.py` (10)
+- Dependencies added: `fastapi>=0.115`, `uvicorn[standard]>=0.34`, `python-multipart>=0.0.9`, `httpx>=0.27` (dev)
+
+### Step 10: Gap Analysis PowerPoint + Chained Generation
+- `backend/services/ppt_builder.py`: python-pptx generation with 6 slide types (title, exec summary, severity overview, per-topic gap detail, recommendations, closing), color-coded severity badges, KPI callouts, and shape-based visual elements
+- `backend/prompts/ppt.py`: `STRUCTURE_GAP_SLIDES` — takes PDF module content + gap analysis → structured JSON for slides
+- `backend/prompts/video.py`: Added `SCRIPT_FROM_SLIDES` — takes PPT slide data + PDF content + research → slide-synced narration script
+- `backend/pipeline/agent_generate.py`: Chained flow — PDF first (ground truth), then PPT (structured around PDF chapters, enriched with research), then script (one `[SLIDE N]` section per slide, content from PDF + research). Falls back to per-module scripts when PPT not selected.
+- `backend/pipeline/state.py`: Added `ppt_path` field
+- `backend/run_pipeline.py`: Added `"ppt"` to valid formats
+- `frontend/app.py`: PPT download route + file collection
+- `frontend/templates/index.html`: PPT checkbox with dependency chain enforcement (Script→PPT, Video→Script+PPT)
+
+---
+
+## Key Technical Decisions
+
+| Decision | Choice | Why |
+|----------|--------|-----|
+| Entry point | CLI + FastAPI | CLI for dev iteration; FastAPI web UI for users |
+| PDF lib | **fpdf2** | Pure Python, no system deps (WeasyPrint required pango/glib which had FFI issues on macOS) |
+| Embeddings | ChromaDB default (all-MiniLM-L6-v2) | Free, local, no API cost |
+| LLM split | GPT-5-mini (agents 1+2), GPT-5 (agent 3) | Save cost on extraction, quality on generation |
+| Concurrency | `ThreadPoolExecutor` | stdlib, no extra deps; `max_workers=8` configurable via settings |
+| Domain scoping | `curriculum_scope` in state | Prevents LLM drift into unrelated topics; enforced in all prompts |
+| Progress | Print statements + ProgressCapture | Pipeline prints `[Stage]` prefixes; web UI captures stdout and parses progress |
+| Web framework | FastAPI + uvicorn | Async HTTP, matches Technical Assessment MVP stack recommendation |
+| PPT lib | **python-pptx** | Programmatic slide creation with shapes, colors, charts; already in deps |
+| PPT visuals | Shape-based (not charts) | Rounded rects for badges, ovals for dots — more reliable and modern than chart objects |
+| Output chain | PDF → PPT → Script → Video | Each output builds on the previous; ensures consistency across formats |
+| Script sync | Slide-based sections | `[SLIDE N: title]` markers map 1:1 to PPT slides; content from PDF + research |
+| Model routing | 3-tier (nano/mini/premium) | Nano for extraction, mini for analysis, premium for generation -- maximizes quality within budget |
+| Temperature | Task-specific (0.2/0.3/0.55) | Low for analysis, medium for structured output, higher for creative writing |
+| Context filtering | Per-topic instead of full corpus | 86% premium token reduction; eliminates cross-topic contamination |
+
+---
+
+## Post-Prototype Improvements (Complete)
+
+### Parallelization
+All three agents now use `ThreadPoolExecutor` (controlled by `max_workers` in config, default 8):
+- **Ingest**: File summarization runs concurrently
+- **Research**: All topics researched in parallel; within each topic, the two web searches also run in parallel
+- **Generate**: All learning modules generated concurrently
+
+### Domain Scoping
+New `curriculum_scope` field flows through the entire pipeline to prevent topic drift:
+- Ingest extracts a one-sentence scope description along with enriched topic metadata (`key_techniques`, `domain_context`)
+- Research and Generate prompts enforce staying within the curriculum's domain
+- Web search queries are more targeted using techniques and domain context instead of generic topic names
+
+### Test Hardening
+PDF builder tests expanded from 1 to 20+ covering Unicode edge cases, malformed markdown, empty/long content, special characters, and structural mismatches.
+
+### Bug Fix
+- PDF title on cover page now sanitized to prevent `UnicodeEncodeError`
+
+---
+
+## Pipeline Optimization (Complete)
+
+### Multi-Model Architecture
+The pipeline now uses a 3-tier model system with task-specific temperature presets:
+- **Nano** (gpt-5-nano, temp 0.2): File summarization, topic extraction, PPT executive summary, module validation
+- **Mini** (gpt-5-mini, temp 0.3): Gap analysis, moderate/minor module generation, PPT per-topic slides
+- **Premium** (gpt-5.1, temp 0.3-0.55): Critical module generation, video scripts
+
+Severity-based routing in `_generate_module()`: Topics with `severity: "critical"` from gap analysis use gpt-5.1; others use gpt-5-mini. This reduced premium token usage from 320K to 99K per run (69% reduction).
+
+### Token Efficiency
+- **Filtered context**: Each video script receives only its own topic's module content and gap data instead of the full corpus. Saves ~190K input tokens per run.
+- **Split PPT structuring**: `_structure_slides_parallel()` runs per-topic slide calls in parallel (gpt-5-mini) plus a single executive summary call (gpt-5-nano), replacing one monolithic LLM call with all data.
+- **ChromaDB caching**: `_build_chroma_cache()` queries ChromaDB once for all topics, reused across module generation and script generation.
+
+### Quality Gates
+- **Module validation**: `_validate_module()` checks for required `##` sections and minimum 2000-char length. Failed modules retry up to 2 times via `_generate_module()`.
+- **Severity routing**: Research agent outputs `severity` field (`critical`/`moderate`/`minor`) in gap analysis; generate agent routes accordingly.
+- **Hook variety**: Thread-safe `used_hooks` list tracks which hook types have been used. `_get_hook_guidance()` generates prompts emphasizing unused types.
+
+### Map-Reduce Summarization
+Files >15K characters use map-reduce instead of truncation:
+1. Split into 12K-char chunks
+2. Summarize each chunk independently (nano model)
+3. Combine chunk summaries into one file summary (nano model)
+
+### Richer PDF Rendering
+- `_render_rich_text()`: Handles inline `**bold**` and `*italic*` with actual font style toggling
+- `_render_code_block()`: Triple-backtick code blocks render with Courier font on light gray background
+
+---
+
+## Known Issues / Notes
+
+- **fpdf2 Unicode**: Latin-1 only. The `_sanitize()` function maps common Unicode chars from GPT output to ASCII equivalents. Remaining non-latin-1 chars are replaced with `?`.
+- **ChromaDB dedup**: Research agent deduplicates search results by MD5 hash to avoid DuplicateIDError.
+
+---
+
+## Test Data
+
+- **Quick** (1 file): `NLP_Course/CS224N_Downloads/Slides/01_Word_Vectors_I.pdf`
+- **Medium** (3 files): Slides 01, 08, 09
+- **Full** (all slides): `NLP_Course/CS224N_Downloads/Slides/*.pdf`
+
+---
+
+## Verification
+
+1. `make test` — 144 tests pass (74 backend + 70 frontend)
+2. `python -m backend.run_pipeline <file>` — produces PDF in `outputs/`
+3. `python -m backend.run_pipeline --format pdf,ppt <file>` — produces PDF + PPT in `outputs/`
+4. `python -m backend.run_pipeline --format pdf,ppt,script <file>` — produces PDF + PPT + slide-synced script
+5. `make dev` — web UI at http://localhost:8080, upload PDF, track progress, download output
+6. LangSmith dashboard shows traces for all 3 nodes
+7. PDF has cover page, TOC, chapters with market-enriched content
+8. PPT has severity badges, KPI callouts, per-topic gap slides structured around PDF chapters
+9. Video script has `[SLIDE N]` sections matching PPT slide count

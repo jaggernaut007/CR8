@@ -25,6 +25,7 @@ Do NOT recommend learning entirely different technologies that happen to be popu
 Return a JSON object with:
 {{
   "topic": "{topic_name}",
+  "severity": "critical | moderate | minor",
   "curriculum_coverage": "brief summary of what curriculum teaches about this topic",
   "industry_demands": "what industry wants WITHIN this specific domain",
   "gaps": ["gap 1", "gap 2", ...],
@@ -36,4 +37,9 @@ Return a JSON object with:
       "resources": [{{"title": "...", "url": "..."}}]
     }}
   ]
-}}"""
+}}
+
+Severity guide:
+- "critical": curriculum is significantly outdated or missing essential industry-required skills for this topic
+- "moderate": curriculum covers basics but misses important practical aspects or recent developments
+- "minor": curriculum is reasonably current with only small gaps or nice-to-have additions"""

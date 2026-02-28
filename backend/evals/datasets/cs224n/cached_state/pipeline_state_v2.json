@@ -1,0 +1,1066 @@
+{
+  "topics": [
+    {
+      "name": "Skip-gram Word Embeddings",
+      "description": "Introduction to Word2Vec-style dense word embeddings learned from large corpora using the skip-gram objective.",
+      "key_techniques": [
+        "center word vector v_w",
+        "context vector u_w",
+        "two-vector parameterization",
+        "dot-product similarity u_o^T v_c",
+        "softmax over vocabulary",
+        "predict surrounding context words",
+        "SGD optimization"
+      ],
+      "domain_context": "Word vectors and context vectors in Word2Vec-style embeddings"
+    },
+    {
+      "name": "Distributional Semantics Foundation",
+      "description": "Foundation of the idea that word meaning is defined by the linguistic context and reflected in dense vector representations.",
+      "key_techniques": [
+        "distributional semantics principle",
+        "word meaning defined by context",
+        "dense vector representations",
+        "graded similarities in geometry"
+      ],
+      "domain_context": "Distributional semantics and word meaning representations in NLP"
+    },
+    {
+      "name": "Training Procedure for Embeddings",
+      "description": "Training approach for Word2Vec-style embeddings using stochastic optimization over context windows.",
+      "key_techniques": [
+        "SGD updates after each window",
+        "mini-batch gradient descent",
+        "softmax over the vocabulary",
+        "learning rate α",
+        "gradient-based optimization"
+      ],
+      "domain_context": "Training methods for Word2Vec-style embeddings"
+    },
+    {
+      "name": "Word Vector Geometry",
+      "description": "Explanation of how semantic relationships emerge from the relative geometry of word and context vectors.",
+      "key_techniques": [
+        "vector geometry",
+        "semantic relationships from vector positions",
+        "dot product similarities",
+        "learned embeddings geometry"
+      ],
+      "domain_context": "Geometry of word embeddings in NLP"
+    },
+    {
+      "name": "Self-Attention Fundamentals",
+      "description": "Core mechanism computing queries, keys, values and attention weights via pairwise dot products and softmax.",
+      "key_techniques": [
+        "queries Q, keys K, values V",
+        "e_ij = q_i · k_j",
+        "softmax over j to produce attention weights",
+        "weighted sum of V"
+      ],
+      "domain_context": "Self-attention in NLP transformers"
+    }
+  ],
+  "gap_summary": [
+    {
+      "topic": "Skip-gram Word Embeddings",
+      "severity": "critical",
+      "curriculum_coverage": "The curriculum introduces Word2Vec-style dense embeddings and the skip-gram objective: words are mapped to dense center vectors v_w and context/output vectors u_w (two-vector parameterization), similarity is modeled by the dot product u_o^T v_c, probabilities are produced with a softmax over the vocabulary, and parameters are learned by SGD by predicting surrounding context words within a fixed window. It also presents distributional motivation and shows example vectors and intuition.",
+      "industry_demands": "Within the static dense-embedding (Word2Vec-style) domain, industry expects practical knowledge of scalable approximations to the full softmax (negative sampling and hierarchical softmax), subsampling of frequent words and unigram-power weighting used for negative draws, the common heuristics and hyperparameter choices (embedding dimension, window size, negative samples, learning rate schedules), subword approaches for OOV/rare words (fastText / n-gram embeddings), use of pre-trained embeddings and how to combine or fine-tune them (input vs. output vectors, normalization / cosine similarity), evaluation protocols (intrinsic and extrinsic), and engineering practices for large-scale training and deployment (multithreaded training, Hogwild/asynchronous SGD, memory/vocabulary pruning, quantization/serving). Industry also prefers awareness of alternative static methods (GloVe, SVD/PPMI factorization) and theoretical connections (word2vec as implicit matrix factorization) to inform method selection.",
+      "gaps": [
+        "No coverage of practical, scalable alternatives to full softmax: negative sampling and hierarchical softmax (their mechanics, why they are used, and key hyperparameters such as number of negative samples and the unigram^(3/4) distribution).",
+        "Missing subsampling / downsampling of frequent words and distance-based/context-weighting heuristics that materially improve representation quality and training speed.",
+        "No guidance on combining or choosing between the two parameter vectors (v vs u) for downstream use (common practice: use input vectors, or average input+output; also vector normalization and use of cosine similarity vs raw dot product).",
+        "Lack of instruction on subword / character n-gram extensions (fastText-style) to handle rare/OOV words and morphological variation, plus how to train/serve those models.",
+        "No discussion of alternative static embedding methods used in industry (GloVe, SVD/PPMI) and the tradeoffs versus skip-gram (local prediction vs global co-occurrence).",
+        "Omitted practical training details and engineering skills: multithreaded / Hogwild training, efficient negative sampling implementations, vocabulary construction/pruning, memory and throughput considerations, pretrained model selection and licensing.",
+        "Absent evaluation practices: intrinsic tasks (similarity, analogy) vs extrinsic downstream evaluation, pitfalls of analogy tests, and how to choose/benchmark embeddings for a production task.",
+        "No mention of theoretical analyses that connect skip-gram/negative-sampling to matrix factorization (useful for hyperparameter reasoning and model selection)."
+      ],
+      "enrichments": [
+        {
+          "title": "Negative Sampling & Hierarchical Softmax (practical approximations to softmax)",
+          "why_it_matters": "Full softmax over large vocabularies is impractical; negative sampling and hierarchical softmax are the de facto industry methods to scale skip-gram training.",
+          "key_concepts": [
+            "Negative sampling objective and intuition (binary classification of positive context vs sampled negatives)",
+            "Number of negative samples (k) and the unigram^(3/4) sampling distribution",
+            "Hierarchical softmax (binary tree of words) as an alternative",
+            "Effects on embedding quality and training speed"
+          ],
+          "resources": [
+            {
+              "title": "Efficient Estimation of Word Representations in Vector Space (Mikolov et al., 2013)",
+              "url": "https://arxiv.org/abs/1301.3781"
+            },
+            {
+              "title": "Distributed Representations of Words and Phrases and their Compositionality (Mikolov et al., 2013) — negative sampling details",
+              "url": "https://arxiv.org/abs/1310.4546"
+            },
+            {
+              "title": "word2vec Explained: deriving Mikolov et al.'s negative-sampling word-embedding method (Goldberg & Levy, 2014)",
+              "url": "https://arxiv.org/abs/1402.3722"
+            }
+          ]
+        },
+        {
+          "title": "Subsampling Frequent Words and Context Weighting",
+          "why_it_matters": "Downsampling very frequent words and weighting contexts reduce noise, speed up training, and improve vector quality for semantic tasks.",
+          "key_concepts": [
+            "Subsampling formula and hyperparameter (t)",
+            "Dynamic/context window size and distance weighting",
+            "Impact on rare vs frequent word representations"
+          ],
+          "resources": [
+            {
+              "title": "Mikolov et al. — practical training heuristics (see subsampling discussion)",
+              "url": "https://arxiv.org/abs/1310.4546"
+            },
+            {
+              "title": "Practical notes and empirical guidance (tutorials / gensim docs)",
+              "url": "https://radimrehurek.com/gensim/models/word2vec.html"
+            }
+          ]
+        },
+        {
+          "title": "Subword / Character n-gram Extensions (fastText)",
+          "why_it_matters": "Industry routinely uses subword models to handle rare words, morphological variants, and OOVs while retaining skip-gram-style training.",
+          "key_concepts": [
+            "Character n-gram representation and composition into word vectors",
+            "Training fastText with skip-gram + negative sampling",
+            "Benefits for rare words and languages with rich morphology"
+          ],
+          "resources": [
+            {
+              "title": "Enriching Word Vectors with Subword Information (Bojanowski et al., 2017; fastText)",
+              "url": "https://arxiv.org/abs/1607.04606"
+            },
+            {
+              "title": "fastText official site and pre-trained vectors",
+              "url": "https://fasttext.cc/"
+            }
+          ]
+        },
+        {
+          "title": "Alternative Static Methods: GloVe and Matrix-Factorization View",
+          "why_it_matters": "Industry chooses between local-prediction (skip-gram) and global-cooccurrence (GloVe) variants depending on corpus and task; understanding theoretical links helps pick methods and hyperparameters.",
+          "key_concepts": [
+            "GloVe objective (global co-occurrence counts and log-bilinear model)",
+            "Levy & Goldberg: connection between skip-gram with negative sampling and factorization of shifted PMI",
+            "Practical tradeoffs: training data requirements, convergence, and initialization"
+          ],
+          "resources": [
+            {
+              "title": "GloVe: Global Vectors for Word Representation (Pennington et al., 2014)",
+              "url": "https://nlp.stanford.edu/pubs/glove.pdf"
+            },
+            {
+              "title": "Neural Word Embedding as Implicit Matrix Factorization (Levy & Goldberg, 2014)",
+              "url": "https://arxiv.org/abs/1401.1081"
+            }
+          ]
+        },
+        {
+          "title": "Practical Training, Evaluation and Deployment",
+          "why_it_matters": "Beyond theory, production use requires tuning, measuring, and serving embeddings efficiently and safely.",
+          "key_concepts": [
+            "Hyperparameter tuning (dimensionality, window size, negative samples, epochs, learning rate schedule)",
+            "Intrinsic vs extrinsic evaluation, similarity vs analogy tests, and pitfalls",
+            "Implementation/engineering: multithreading (Hogwild), memory use, vocabulary pruning, quantization for serving, and licensing of pre-trained vectors"
+          ],
+          "resources": [
+            {
+              "title": "Gensim word2vec implementation documentation (practical API and training tips)",
+              "url": "https://radimrehurek.com/gensim/models/word2vec.html"
+            },
+            {
+              "title": "fastText library: training/serving and pre-trained models",
+              "url": "https://github.com/facebookresearch/fastText"
+            }
+          ]
+        },
+        {
+          "title": "Choosing and Combining v_w and u_w for Downstream Use",
+          "why_it_matters": "Curricula often present two vectors per word but omit what practitioners actually use; this choice affects retrieval and similarity computations.",
+          "key_concepts": [
+            "Use input vectors (v) versus output vectors (u) or average (v+u)/2",
+            "Normalization to unit length and using cosine similarity",
+            "When to fine-tune embeddings for downstream tasks"
+          ],
+          "resources": [
+            {
+              "title": "Practical discussions and tips in tutorials / blogs (e.g., gensim, community notes)",
+              "url": "https://radimrehurek.com/gensim/auto_examples/howtos/run_word2vec.html"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "topic": "Distributional Semantics Foundation",
+      "severity": "moderate",
+      "curriculum_coverage": "The curriculum presents the classical distributional semantics idea (Firth): word meaning arises from distributional context; explains the problem with one-hot (orthogonal) representations; motivates learning dense, low-dimensional vectors that encode graded similarity; describes context windows and building word representations from many contexts; contrasts lexical resources (WordNet) with data-driven embeddings; briefly situates pretrained static embeddings (word2vec-era) as a foundation for later contextual models.",
+      "industry_demands": "Within the distributional-semantics domain industry expects practical competence in building, selecting, and integrating dense word representations: familiarity with both prediction-based (word2vec/skip-gram/CBOW) and count-based (PPMI/SVD/LSA/GloVe) approaches; handling rare/OOV words via subword or character n-gram methods (FastText-style); knowledge of training hyperparameters (window size, negative sampling, dimensionality, learning rate), efficient training at scale, and using & adapting large pre-trained embeddings; rigorous intrinsic and extrinsic evaluation (word similarity, analogy, downstream tasks), awareness and mitigation of semantic bias, and techniques for retrofitting/specializing vectors to task-specific lexicons or constraints.",
+      "gaps": [
+        "Practical training details: hands-on guidance on hyperparameter choices (window size, negative sampling rate, number of negatives, subsampling), optimization strategies, and how they affect semantic properties is missing.",
+        "Count-based alternatives and their relation to prediction-based embeddings: the curriculum states the principle but omits PPMI, SVD/LSA, and GloVe methods and the theoretical connections (e.g., implicit matrix factorization).",
+        "Subword / morphology-aware embeddings: no coverage of subword n-gram methods (e.g., FastText) used in industry to address rare words and morphology.",
+        "Evaluation and diagnostics: lacks concrete modules on intrinsic datasets (WordSim, SimLex-999), analogy tests, and best practices for extrinsic evaluation on downstream tasks; also missing tools for interpreting embedding quality.",
+        "OOV and vocabulary management: curriculum does not present practical strategies for OOV handling, vocabulary pruning, normalization, or transfer of embeddings to new domains.",
+        "Bias measurement and mitigation: industry expects awareness of gender and social biases in embeddings and basic debiasing or auditing techniques (e.g., Bolukbasi-style methods), which are not taught.",
+        "Retrofitting / specialization: no discussion of post-hoc specialization or retrofitting embeddings to lexical resources or task-specific constraints (e.g., Faruqui et al.), commonly used in applied settings.",
+        "Scalability and deployment considerations: missing guidance on memory footprint, compression/quantization, and efficient nearest-neighbor use for semantic retrieval in production."
+      ],
+      "enrichments": [
+        {
+          "title": "Hands-on: Training and Tuning Prediction-based Embeddings",
+          "why_it_matters": "Practical hyperparameter choices and optimization strategies determine whether learned vectors capture the desired semantic relations and scale to real corpora.",
+          "key_concepts": [
+            "skip-gram vs CBOW objective",
+            "negative sampling vs hierarchical softmax",
+            "window size, sampling/subsampling, learning rate schedules, embedding dimensionality",
+            "impact of corpus size and preprocessing on embedding quality"
+          ],
+          "resources": [
+            {
+              "title": "Efficient Estimation of Word Representations in Vector Space (Mikolov et al., 2013)",
+              "url": "https://arxiv.org/abs/1301.3781"
+            },
+            {
+              "title": "word2vec practical notes (tutorials & implementations)",
+              "url": "https://radimrehurek.com/gensim/models/word2vec.html"
+            }
+          ]
+        },
+        {
+          "title": "Count-based Models and the Matrix-Factorization View",
+          "why_it_matters": "Industry practitioners need to understand alternatives to prediction-based vectors and why PPMI + SVD or GloVe can sometimes be preferable for certain datasets or interpretability.",
+          "key_concepts": [
+            "co-occurrence matrices, PMI and PPMI weighting",
+            "SVD/LSA as dimensionality reduction",
+            "GloVe global co-occurrence objectives",
+            "connections between prediction-based and count-based approaches (implicit factorization)"
+          ],
+          "resources": [
+            {
+              "title": "GloVe: Global Vectors for Word Representation (Pennington et al., 2014)",
+              "url": "https://nlp.stanford.edu/pubs/glove.pdf"
+            },
+            {
+              "title": "Neural Word Embeddings as Implicit Matrix Factorization (Levy & Goldberg, 2014)",
+              "url": "https://arxiv.org/abs/1310.4546"
+            }
+          ]
+        },
+        {
+          "title": "Subword and Morphology-aware Embeddings",
+          "why_it_matters": "Handling rare, misspelled, or morphologically rich words is a common industrial requirement; subword models encode internal structure to produce useful vectors for OOVs.",
+          "key_concepts": [
+            "character n-grams and subword composition",
+            "how subword models produce vectors for unseen tokens",
+            "trade-offs vs pure word-level embeddings"
+          ],
+          "resources": [
+            {
+              "title": "Enriching Word Vectors with Subword Information (Bojanowski et al., 2017; FastText)",
+              "url": "https://arxiv.org/abs/1607.04606"
+            }
+          ]
+        },
+        {
+          "title": "Evaluation, Diagnostics, and Downstream Validation",
+          "why_it_matters": "Robust evaluation—both intrinsic and extrinsic—prevents choosing embeddings that perform poorly on real tasks despite seeming good on toy metrics.",
+          "key_concepts": [
+            "intrinsic benchmarks: WordSim-353, SimLex-999, analogy datasets",
+            "extrinsic evaluation: classification/IR/semantic similarity tasks",
+            "diagnostics: nearest-neighbor inspection, cluster coherence, probing for attributes"
+          ],
+          "resources": [
+            {
+              "title": "SimLex-999: Evaluating Semantic Models with Genuine Similarity (Hill et al.)",
+              "url": "http://www.cl.cam.ac.uk/~fh295/simlex.html"
+            },
+            {
+              "title": "A Study of Word Embeddings for Lexical Substitution (evaluations and best practices)",
+              "url": "https://aclweb.org/anthology/P16-1167/"
+            }
+          ]
+        },
+        {
+          "title": "Bias, Auditing, and Retrofitting/Specialization",
+          "why_it_matters": "Applied systems must detect and mitigate harmful biases in embeddings and adapt generic vectors to domain-specific lexicons or constraints.",
+          "key_concepts": [
+            "measuring bias in vector space, debiasing algorithms",
+            "retrofitting embeddings to lexicons (attract/repel constraints)",
+            "task-specific specialization vs preserving generality"
+          ],
+          "resources": [
+            {
+              "title": "Retrofitting Word Vectors to Semantic Lexicons (Faruqui et al., 2015)",
+              "url": "https://aclweb.org/anthology/N15-1184"
+            },
+            {
+              "title": "Man is to Computer Programmer as Woman is to Homemaker? (Bolukbasi et al., 2016) – bias in word embeddings",
+              "url": "https://arxiv.org/abs/1607.06520"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "topic": "Training Procedure for Embeddings",
+      "severity": "moderate",
+      "curriculum_coverage": "The curriculum teaches Word2Vec-style training basics: SGD updates after each context window, mini-batch gradient descent, computing full softmax over the vocabulary, a simple global learning rate α, and gradient-based optimization with derivations of the Word2Vec objective and its gradients. It also covers some optimization basics in lecture but presents the canonical softmax-based view.",
+      "industry_demands": "Within the Word2Vec / dense-embedding training domain, industry expects training recipes that scale to very large corpora and vocabularies while remaining computationally efficient and numerically stable. Key expectations: negative-sampling / noise-contrastive / sampled-softmax alternatives to full softmax (with correct unigram smoothing and sampling tables), subsampling of frequent tokens and dynamic window strategies, careful hyperparameter choices (negatives per target, window sampling, learning rate schedules, momentum/Adam variants where appropriate), high-performance implementations (vectorized updates, multi-threaded Hogwild-style updates or batched matrix ops), streaming/sharding large corpora and checkpointing, basic regularization (vector normalization, gradient clipping), and practical evaluation/early-stopping regimes for embeddings.",
+      "gaps": [
+        "Full-softmax focus: curriculum emphasizes full softmax over the vocabulary but omits efficient, standard alternatives (negative sampling / NCE / sampled softmax) that are the de facto way to scale Word2Vec-style training to large vocabularies.",
+        "Sampling details missing: no coverage of unigram-distribution smoothing (the 0.75 exponent), how to build and use fast sampling tables, or how sampling bias affects learned vectors.",
+        "Subsampling and window strategies omitted: curriculum does not teach frequent-word subsampling, dynamic/context-window sampling probabilities, or how these affect quality and speed.",
+        "Practical optimizer choices and schedules: treatment of learning rate is simplistic (single α); missing practical schedules (decay, linear warmdown), choice/comparison of optimizers (SGD variants, momentum, when adaptive optimizers are/aren't appropriate), and per-parameter update considerations.",
+        "Implementation and scaling engineering: lacks instruction on efficient, vectorized update implementations, multi-threaded or asynchronous (Hogwild) updates, mini-batching strategies that preserve negative-sampling semantics, and memory/IO patterns for large corpora.",
+        "Numerical and stability issues: curriculum doesn't cover numerical-stability tricks (log-sum-exp, preventing overflow in softmax approximations), gradient clipping, or mixed-precision considerations for speed.",
+        "Evaluation and stopping: missing practical guidance on intrinsic (analogy, similarity) vs extrinsic evaluation, validation protocols, early stopping criteria, and hyperparameter tuning workflows specific to embeddings.",
+        "Alternatives within embedding training: limited or no coverage of common, practical variants such as Skip-gram with Negative Sampling (SGNS) as the standard training objective, hierarchical softmax for particular use-cases, or subword-aware training (FastText) which affects training procedure."
+      ],
+      "enrichments": [
+        {
+          "title": "Negative Sampling and Noise-Contrastive Approaches (SGNS / NCE / Sampled Softmax)",
+          "why_it_matters": "These sampling-based objectives replace full softmax to make training tractable for large vocabularies and are the dominant practice for Word2Vec-style embeddings.",
+          "key_concepts": [
+            "Skip-gram with Negative Sampling (SGNS)",
+            "Noise-Contrastive Estimation (NCE)",
+            "Sampled softmax and tradeoffs vs. full softmax",
+            "Choice of number of negatives and its effect on embeddings"
+          ],
+          "resources": [
+            {
+              "title": "Efficient Estimation of Word Representations in Vector Space (Mikolov et al., 2013)",
+              "url": "https://arxiv.org/abs/1301.3781"
+            },
+            {
+              "title": "Noise-contrastive estimation: A new estimation principle for unnormalized statistical models (Gutmann & Hyvärinen, 2010)",
+              "url": "https://www.jmlr.org/papers/volume13/gutmann12a/gutmann12a.pdf"
+            },
+            {
+              "title": "TensorFlow: sampled_softmax_loss documentation (practical API reference for sampled-softmax)",
+              "url": "https://www.tensorflow.org/api_docs/python/tf/nn/sampled_softmax_loss"
+            }
+          ]
+        },
+        {
+          "title": "Subsampling, Unigram Smoothing, and Context Window Strategies",
+          "why_it_matters": "Practical hyperparameters like frequent-word subsampling and unigram smoothing materially improve speed and embedding quality and should be part of any training recipe.",
+          "key_concepts": [
+            "Frequent-word subsampling (discarding high-frequency tokens)",
+            "Unigram distribution smoothing (e.g., exponent 0.75) for negative sampling",
+            "Dynamic/context-window sampling and its effect on syntactic vs semantic signals"
+          ],
+          "resources": [
+            {
+              "title": "Original word2vec paper (contains the subsampling and unigram smoothing heuristics)",
+              "url": "https://arxiv.org/abs/1301.3781"
+            },
+            {
+              "title": "Practical notes / blog posts on word2vec hyperparameters (implementation-focused guidance)",
+              "url": "https://github.com/tmikolov/word2vec/blob/master/questions-answers.md"
+            }
+          ]
+        },
+        {
+          "title": "Efficient Implementation and Scaling (Hogwild, sampling tables, batching)",
+          "why_it_matters": "Industry trains embeddings on corpora orders of magnitude larger than classroom datasets; efficient, parallel, and memory-conscious implementations are required to do this in practice.",
+          "key_concepts": [
+            "Hogwild-style asynchronous updates vs batched synchronous updates",
+            "Precomputed alias / sampling tables for O(1) negative sampling",
+            "IO/streaming of large corpora, shuffling, and checkpointing"
+          ],
+          "resources": [
+            {
+              "title": "Hogwild!: A Lock-Free Approach to Parallelizing Stochastic Gradient Descent",
+              "url": "https://arxiv.org/abs/1106.5730"
+            },
+            {
+              "title": "Official word2vec implementation (reference C code and practical implementation choices)",
+              "url": "https://github.com/tmikolov/word2vec"
+            }
+          ]
+        },
+        {
+          "title": "Alternative Embedding Training Paradigms: Hierarchical Softmax, GloVe and Subword Models (FastText)",
+          "why_it_matters": "Different training objectives (global co-occurrence, hierarchical vocab decompositions, subword training) change the optimization and sampling strategy and are commonly used in industry depending on data and use-case.",
+          "key_concepts": [
+            "Hierarchical softmax for efficient exact likelihood optimization",
+            "GloVe (global co-occurrence) objective vs local-window SGNS",
+            "FastText subword training and how subword aggregation changes updates"
+          ],
+          "resources": [
+            {
+              "title": "GloVe: Global Vectors for Word Representation",
+              "url": "https://nlp.stanford.edu/projects/glove/"
+            },
+            {
+              "title": "Enriching Word Vectors with Subword Information (FastText)",
+              "url": "https://arxiv.org/abs/1607.04606"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "topic": "Word Vector Geometry",
+      "severity": "moderate",
+      "curriculum_coverage": "The curriculum explains distributional semantics and trains dense word vectors with the Word2Vec skip‑gram objective, shows example learned vectors, emphasizes measuring similarity via the dot product (and implicitly nearest neighbors), and includes optimization/gradient details and visualizations of vector positions to illustrate semantic relationships.",
+      "industry_demands": "Within the domain of static dense word embeddings, industry expects not only the basic training objective and nearest‑neighbor similarity but also practical understanding and skills about: (1) how geometry properties (norms, anisotropy, common components) affect similarity measures and downstream use, (2) normalization and post‑processing techniques (cosine vs dot, centering, 'all‑but‑the‑top', whitening) to make geometry more meaningful, (3) handling OOV and morphological variation via subword embeddings, (4) robust evaluation (intrinsic datasets and downstream probes) and bias measurement/mitigation, (5) aligning/anchoring embedding spaces across corpora or languages (Procrustes), and (6) deployment concerns: scalable nearest‑neighbor search, compression/quantization and reproducibility.",
+      "gaps": [
+        "No explicit treatment of cosine similarity versus raw dot product and the practical consequences of vector norms (frequency-related norm effects) for similarity rankings.",
+        "Missing discussion of embedding anisotropy and the common 'mean' / dominant directions that compress semantic variance, and related post‑processing (e.g., mean removal, 'all‑but‑the‑top', whitening) that change geometry and improve usefulness.",
+        "No coverage of how to evaluate geometric properties (intrinsic benchmarks like word similarity/analogy, and diagnostics for anisotropy or nearest‑neighbor quality) or how to choose metrics for particular downstream tasks.",
+        "No instruction on handling OOV / morphological variants through subword or character‑ngram informed embeddings (e.g., FastText) which change geometry for low‑freq words.",
+        "Absence of material on alignment and comparison of embedding spaces (e.g., Procrustes-based alignment) which is important when combining corpora, updating embeddings, or building bilingual lexicons.",
+        "No treatment of social biases manifesting in geometry (biased nearest neighbors, biased directions) nor practical debiasing techniques and their geometric tradeoffs.",
+        "Limited attention to practical deployment issues that depend on geometry: approximate nearest neighbor (ANN) search, quantization and vector compression, and how geometric choices affect retrieval speed/accuracy."
+      ],
+      "enrichments": [
+        {
+          "title": "Cosine similarity, vector norms, and anisotropy",
+          "why_it_matters": "Understanding norm effects and anisotropy explains when dot product rankings are dominated by frequency and when cosine (or normalization) yields more semantically meaningful neighbors.",
+          "key_concepts": [
+            "Dot product vs cosine similarity",
+            "Norm–frequency correlation and its effect on nearest neighbors",
+            "Embedding anisotropy and dominant components"
+          ],
+          "resources": [
+            {
+              "title": "Neural Word Embedding as Implicit Matrix Factorization (Levy & Goldberg, 2014)",
+              "url": "https://arxiv.org/abs/1401.2454"
+            },
+            {
+              "title": "All-but-the-top: Simple but effective postprocessing for word representations (Mu & Viswanath, 2018)",
+              "url": "https://arxiv.org/abs/1702.01417"
+            }
+          ]
+        },
+        {
+          "title": "Post‑processing and whitening of embedding spaces",
+          "why_it_matters": "Post‑processing (centering, removing top PCs, whitening) changes the geometry to increase isotropy and improve both intrinsic metrics and downstream performance.",
+          "key_concepts": [
+            "Mean centering and top principal component removal",
+            "Isotropization / whitening",
+            "Effects on nearest‑neighbor retrieval and analogy tasks"
+          ],
+          "resources": [
+            {
+              "title": "All-but-the-top: Simple but Effective Postprocessing for Word Representations (Mu & Viswanath, 2018)",
+              "url": "https://arxiv.org/abs/1702.01417"
+            },
+            {
+              "title": "Practical Whitening for Embeddings (blog / notes): discussion of whitening and its effects",
+              "url": "https://nlp.stanford.edu/projects/glove/preprocess.html"
+            }
+          ]
+        },
+        {
+          "title": "Subword / character‑ngram embeddings (handling OOV and morphology)",
+          "why_it_matters": "Subword-aware embeddings alter the geometry for low‑frequency words and improve similarity for morphologically related tokens, a common industry need.",
+          "key_concepts": [
+            "Character n‑grams and compositional subword representations",
+            "Improved geometry for rare/OOV words",
+            "Training modifications to Word2Vec objectives to incorporate subword info"
+          ],
+          "resources": [
+            {
+              "title": "Enriching Word Vectors with Subword Information (FastText, Bojanowski et al., 2017)",
+              "url": "https://arxiv.org/abs/1607.04606"
+            }
+          ]
+        },
+        {
+          "title": "Alignment and comparison of embedding spaces",
+          "why_it_matters": "Aligning spaces via Procrustes or orthogonal maps lets practitioners transfer lexicons, compare corpora over time, and reason about geometric shifts.",
+          "key_concepts": [
+            "Orthogonal Procrustes alignment",
+            "Cross‑corpus drift and geometric comparability",
+            "Using anchor lexicons for supervised alignment"
+          ],
+          "resources": [
+            {
+              "title": "Word Translation Without Parallel Data (Conneau et al., 2018) — Procrustes alignment methods",
+              "url": "https://arxiv.org/abs/1710.04087"
+            }
+          ]
+        },
+        {
+          "title": "Bias diagnostics and geometric debiasing",
+          "why_it_matters": "Social biases manifest as directions and nearest‑neighbor artifacts in embedding geometry; industry needs methods to quantify and mitigate them while understanding tradeoffs.",
+          "key_concepts": [
+            "Bias direction identification",
+            "Hard/soft debiasing methods and their geometric effects",
+            "Evaluation of debiasing impact on semantics"
+          ],
+          "resources": [
+            {
+              "title": "Man is to Computer Programmer as Woman is to Homemaker? Debiasing Word Embeddings (Bolukbasi et al., 2016)",
+              "url": "https://arxiv.org/abs/1607.06520"
+            }
+          ]
+        },
+        {
+          "title": "Scalable nearest‑neighbor retrieval and embedding deployment",
+          "why_it_matters": "When geometry is used for retrieval, understanding ANN search, compression and how geometry affects recall/latency is essential for production systems using embeddings.",
+          "key_concepts": [
+            "Approximate nearest neighbor (ANN) methods and tradeoffs",
+            "Vector quantization / compression and its impact on geometry",
+            "Practical evaluation of retrieval quality"
+          ],
+          "resources": [
+            {
+              "title": "FAISS: A library for efficient similarity search (GitHub / papers)",
+              "url": "https://github.com/facebookresearch/faiss"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "topic": "Self-Attention Fundamentals",
+      "severity": "moderate",
+      "curriculum_coverage": "The curriculum teaches the core self-attention mechanism: per-token queries (Q), keys (K), values (V); pairwise dot products e_ij = q_i · k_j; a softmax over j to produce attention weights; and weighted sums of V. It covers multi-head attention with separate Q,K,V projections per head, matrix forms of the computations, positional representations (including RoPE), masking for causality, and adding nonlinearities via a post-attention feed-forward network.",
+      "industry_demands": "Within the domain of self-attention fundamentals, industry expects: (1) the exact, production-ready variant of dot-product attention — i.e., scaled dot-product attention with attention temperature and numerical-stability practices; (2) concrete understanding of shapes, learned projection matrices (W_Q, W_K, W_V, W_O), per-head dimensioning and why d_k is chosen; (3) implementation details: masked/causal softmax, subtract-max before softmax, attention dropout, attention masking broadcasting, and efficient batching for large sequences; (4) runtime/memory complexity awareness (O(n^2)) and familiarity with commonly-used efficient/approximate attention alternatives for long sequences (sparse patterns, Linformer, Performer/linearized attention, Nyström, Longformer/BigBird variants); (5) regularization and training-stability practices around attention (scaling, initialization, mixed-precision, gradient clipping, warmup); and (6) interpretability caveats (attention weights are not necessarily explanations) and head-level diagnostics used in industry.",
+      "gaps": [
+        "No explicit mention of scaled dot-product attention (the 1/sqrt(d_k) scaling factor) and its role in training stability and calibration of softmax.",
+        "Missing concrete description of learned projection matrices W_Q, W_K, W_V, W_O, their shapes, and per-head dimensionality choices (d_k, d_v, d_model / h).",
+        "Lacks implementation-level practices: numerical stability tricks for softmax (subtract max), masked/causal softmax broadcasting details, attention dropout, and correct application of masks during training/inference.",
+        "No coverage of residual connections + LayerNorm placement (pre-norm vs post-norm) and how that affects gradients/stability — a practical necessity when building deep stacks of attention layers.",
+        "Omitted attention performance and scaling concerns: explicit O(n^2) compute/memory cost, profiling considerations, and commonly used approximate/sparse attention variants for long sequences (industry often requires knowledge of these choices).",
+        "No discussion of variants/alternatives to plain dot-product attention used in practice for large-scale or efficiency-critical systems (e.g., Performer/linear attention, Linformer, Longformer/strided & local attention, Nyströmformer, poly-attention/higher-order attention), their trade-offs, and when to pick them.",
+        "Missing regularization and training-stability recipes applied specifically to attention layers (initialization best practices for projection matrices, attention temperature tuning, mixed-precision considerations).",
+        "No explicit guidance on diagnostic tools and practices used in industry to inspect attention (head pruning, attention-map visualizations, unit tests for masking and shape correctness) and on interpretability caveats."
+      ],
+      "enrichments": [
+        {
+          "title": "Scaled dot‑product attention and numerical-stability best practices",
+          "why_it_matters": "Scaled dot-product (include 1/sqrt(d_k)) and softmax stability are core to getting attention to train reliably at scale.",
+          "key_concepts": [
+            "Scaling factor 1/sqrt(d_k) and its effect on softmax logits",
+            "Numerical-stability: subtracting max before softmax, handling extreme logits",
+            "Masked/causal softmax broadcasting and attention dropout"
+          ],
+          "resources": [
+            {
+              "title": "Attention Is All You Need (Vaswani et al., 2017) — scaled dot-product attention",
+              "url": "https://arxiv.org/abs/1706.03762"
+            },
+            {
+              "title": "The Annotated Transformer — implementation notes and shapes",
+              "url": "http://nlp.seas.harvard.edu/2018/04/03/attention.html"
+            }
+          ]
+        },
+        {
+          "title": "Implementation & debugging checklist for Q/K/V attention",
+          "why_it_matters": "Industry expects engineers to implement attention correctly and to debug shape/mask/precision issues quickly.",
+          "key_concepts": [
+            "W_Q, W_K, W_V, W_O projection matrices and per-head reshaping/concatenation",
+            "Correct mask application (causal, padding), broadcasting rules, and unit tests",
+            "Attention-dropout, mixed-precision effects, and profiling for memory"
+          ],
+          "resources": [
+            {
+              "title": "Transformers from Scratch (PyTorch-style guides / blogs) — attention implementation walkthroughs",
+              "url": "https://pytorch.org/tutorials/beginner/transformer_tutorial.html"
+            },
+            {
+              "title": "Practical tips for implementing attention and masking (blog/notes)",
+              "url": "https://nlp.seas.harvard.edu/2018/04/03/attention.html#multi-head-attention"
+            }
+          ]
+        },
+        {
+          "title": "Efficient and approximate attention methods for long sequences",
+          "why_it_matters": "Knowledge of O(n^2) scaling and widely used approximations is required when models must handle long contexts or tight compute/memory budgets.",
+          "key_concepts": [
+            "Sparse attention patterns (local, strided, sliding window)",
+            "Low-rank / kernelized alternatives (Linformer, Performer), Nyström approximations",
+            "Trade-offs: accuracy vs memory/compute vs parallelizability"
+          ],
+          "resources": [
+            {
+              "title": "Performer: Rethinking Attention with Performers (linear attention)",
+              "url": "https://arxiv.org/abs/2009.14794"
+            },
+            {
+              "title": "Linformer: Self-Attention with Linear Complexity",
+              "url": "https://arxiv.org/abs/2006.04768"
+            },
+            {
+              "title": "Longformer: Long-Document Transformer (sparse + sliding window)",
+              "url": "https://arxiv.org/abs/2004.05150"
+            },
+            {
+              "title": "Nyströmformer: A Nyström-based efficient attention approximation",
+              "url": "https://arxiv.org/abs/2102.03902"
+            }
+          ]
+        },
+        {
+          "title": "Positional encodings, RoPE interactions, and relative biases",
+          "why_it_matters": "Positional methods affect the Q/K interaction directly; practitioners need to know how encodings are integrated and their effect on extrapolation and relative-position behavior.",
+          "key_concepts": [
+            "Absolute vs relative positional encodings and attention biases",
+            "Rotary Position Embedding (RoPE) and how it alters Q/K inner products",
+            "When to prefer relative embeddings for generalization to different lengths"
+          ],
+          "resources": [
+            {
+              "title": "RoFormer / RoPE: Rotary Position Embeddings",
+              "url": "https://arxiv.org/abs/2104.09864"
+            },
+            {
+              "title": "Discussion of relative position encodings and bias techniques (blog/papers)",
+              "url": "https://arxiv.org/abs/1803.02155"
+            }
+          ]
+        },
+        {
+          "title": "Interpretability and diagnostics for attention heads",
+          "why_it_matters": "Industry expects practitioners to evaluate whether attention heads are redundant, or problematic, and to know limits of interpreting attention weights as explanations.",
+          "key_concepts": [
+            "Head pruning and importance metrics",
+            "Limitations: attention != explanation (diagnostic studies)",
+            "Visualization and unit tests for attention maps"
+          ],
+          "resources": [
+            {
+              "title": "Attention is not Explanation (Jain & Wallace, 2019) — caveats on interpreting attention",
+              "url": "https://arxiv.org/abs/1902.10186"
+            },
+            {
+              "title": "Practical head analysis and pruning notes (blog/guide)",
+              "url": "https://arxiv.org/abs/2005.00907"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "curriculum_scope": "A compact curriculum covering Word2Vec-style dense word embeddings, Transformer-based attention models, and large-scale pretraining paradigms in natural language processing.",
+  "cached_outputs": {
+    "Skip-gram Word Embeddings": {
+      "module_md": "## Module Overview\n\nImagine you are building a search system and users type “Seattle motel” while many high‑quality documents only contain “Seattle hotel.” One‑hot word vectors can’t capture this similarity at all, but skip-gram word embeddings can learn that “motel” and “hotel” tend to appear in similar contexts and should have similar vectors. In industry, skip-gram-style models (including modern subword variants) are still a core building block for text retrieval, recommendation, and as initialization for more complex models. This module will deepen your understanding of the skip-gram objective you saw in class and extend it with the practical training tricks and variants that practitioners actually use at scale. By the end, you’ll be able not only to explain the theory, but also to reason about how to train, tune, and deploy such embeddings on large corpora. How do we get from the elegant softmax definition you learned to something that trains efficiently on billions of words?\n\n## Learning Objectives\n\n- Explain how skip-gram represents words with center vectors \\(v_w\\) and context vectors \\(u_w\\), and uses dot products and softmax to predict context words. (Curriculum)  \n- Derive and interpret the probability \\(P(o \\mid c)\\) in the skip-gram model using \\(u_o^\\top v_c\\) and a softmax over the vocabulary. (Curriculum)  \n- Describe how stochastic gradient descent (SGD) is used to optimize skip-gram embeddings from large text corpora. (Curriculum)  \n- Implement negative sampling as a scalable approximation to the skip-gram softmax objective for training on large vocabularies. (Gap)  \n- Analyze and select appropriate subword / character n‑gram extensions (e.g., fastText-style) to improve embeddings for rare and morphologically rich words in real applications. (Gap)  \n\n## Curriculum Coverage\n\nIn the course, you learned that treating words as discrete one-hot vectors fails to provide any notion of similarity: vectors like “motel” and “hotel” are orthogonal and give no indication that the underlying words are related. To address this, the curriculum introduced distributional semantics: “You shall know a word by the company it keeps.” A word’s meaning is represented by the words that tend to appear nearby in text. This idea motivates learning dense word vectors (embeddings) where semantically similar words have similar real-valued vectors, and similarity is measured via the dot product.\n\nWithin this framework, you were introduced to the Word2Vec skip-gram model (Mikolov et al., 2013). Each vocabulary word is represented by two vectors: a center (input) vector \\(v_w\\) and a context (output) vector \\(u_w\\), a two-vector parameterization. For each position \\(t\\) in a large text corpus, with center word \\(c\\) and outside (context) words \\(o\\) within a fixed window, skip-gram models the probability of each context word given the center word using a softmax over the vocabulary, where the score for a candidate context word is the dot product \\(u_o^\\top v_c\\). The training objective is to maximize the probability of the true context words around each center token. The curriculum emphasized that these parameters are learned by stochastic gradient descent (SGD): as you sweep through the corpus, you adjust \\(v_w\\) and \\(u_w\\) to increase the likelihood of observed center–context pairs, leading to embeddings that encode distributional similarity.\n\nBefore continuing, make sure you can answer:  \n- What problem with one-hot word vectors motivates learning dense word embeddings?  \n- In the skip-gram model, why do we maintain both a center vector \\(v_w\\) and a context vector \\(u_w\\) for each word?  \n- How does the dot product \\(u_o^\\top v_c\\) and a softmax over the vocabulary define \\(P(o \\mid c)\\) in skip-gram?\n\n## Identified Gaps\n\nThe curriculum gives you a solid conceptual foundation for skip-gram: why dense vectors are useful, how the center and context vectors interact via dot products, and how a softmax over the vocabulary defines a probabilistic objective optimized with SGD. However, the materials stop at the idealized formulation and do not cover how practitioners scale this model to very large corpora and vocabularies.\n\nIn industry, a critical gap is understanding and implementing practical alternatives to the full softmax, especially negative sampling and hierarchical softmax (Critical). These are essential for making skip-gram training feasible on realistic datasets. Closely related are training heuristics like subsampling frequent words and context-weighting strategies that strongly influence both speed and embedding quality (Important). There is also a gap around subword / character n‑gram extensions (fastText-style) that are widely used to handle rare and morphologically complex words (Important). Finally, practical concerns like how to evaluate and choose between different static embeddings, and how to combine or select between input and output vectors for downstream tasks, are underdeveloped (Nice-to-have). Treat these gaps as opportunities to acquire skills that move you from “can explain skip-gram” to “can deploy it in production.”\n\n## Core Content\n\n### What You Need to Learn\n\n#### 1. Scaling Skip-gram with Negative Sampling\n\nBuilding on your understanding of the softmax-based skip-gram objective \\(P(o \\mid c)\\), the main practical obstacle is that computing a full softmax over a large vocabulary is expensive: each update would need a dot product with every word’s context vector. Negative sampling is a widely used approximation that reframes training as a set of binary classification problems: distinguish observed (center, context) pairs from randomly sampled “noise” pairs.\n\n- **Definition:** Negative sampling replaces the softmax objective with a logistic loss that encourages high dot products \\(u_o^\\top v_c\\) for true context words and low dot products \\(u_{w^-}^\\top v_c\\) for sampled negative words \\(w^-\\).  \n- **Intuition:** Instead of redistributing probability mass over the entire vocabulary, you focus on contrasting each positive pair against a small set of sampled negatives.\n\nA simplified negative sampling objective for a single center–context pair \\((c, o)\\) is:\n\n\\[\n\\log \\sigma(u_o^\\top v_c) + \\sum_{i=1}^k \\log \\sigma(-u_{w_i^-}^\\top v_c)\n\\]\n\nwhere \\(\\sigma(\\cdot)\\) is the sigmoid, and each \\(w_i^-\\) is a negative word sampled from a noise distribution (often based on word frequencies). You maximize this objective over the corpus via SGD: each gradient step only touches the vectors for the center word, the true context word, and a small set of \\(k\\) negatives.\n\nA typical application workflow with negative sampling:\n\n1. **Prepare data:**  \n   - Build your vocabulary from a large corpus.  \n   - Generate training pairs \\((c, o)\\) by sliding a window over text, as in the standard skip-gram setup.\n\n2. **Define noise distribution and sampling hyperparameters:**  \n   - Choose a distribution over words for sampling negatives (commonly a smoothed unigram distribution).  \n   - Set the number of negative samples \\(k\\) per positive pair based on dataset size and compute budget.\n\n3. **Train with SGD:**  \n   - For each positive pair \\((c, o)\\):  \n     1. Sample \\(k\\) negative words \\(\\{w_1^-, \\dots, w_k^-\\}\\) from the noise distribution.  \n     2. Compute the objective \\(\\log \\sigma(u_o^\\top v_c) + \\sum_i \\log \\sigma(-u_{w_i^-}^\\top v_c)\\).  \n     3. Take gradient steps on \\(v_c\\), \\(u_o\\), and \\(u_{w_i^-}\\).  \n   - Iterate over the corpus for multiple epochs.\n\nIn current industry practice, many libraries (e.g., those inspired by Mikolov et al.’s implementations) default to skip-gram with negative sampling, because it offers a good trade-off between speed and embedding quality on large-scale web text, logs, and product catalogs. When you see references to “skip-gram word embeddings” in production systems, they are often trained with negative sampling under the hood.\n\nBeyond negative sampling, **hierarchical softmax** provides another softmax approximation: it organizes words into a binary tree and models \\(P(o \\mid c)\\) as a product of probabilities along the path to word \\(o\\), reducing computation per update from \\(O(|V|)\\) to \\(O(\\log |V|)\\). While less emphasized in many modern toolkits than negative sampling, it remains part of the standard toolkit for scaling skip-gram-style models.\n\n#### 2. Subword / Character n‑gram Extensions (fastText-style)\n\nYour course presents skip-gram at the word level: each token type has its own \\(v_w\\) and \\(u_w\\). In practice, this can struggle with rare words, misspellings, and morphologically rich languages. Building on the same skip-gram training idea (predicting nearby words), subword models decompose each word into character n‑grams and learn embeddings for these n‑grams, which are then composed to form word vectors.\n\n- **Definition:** A subword skip-gram model represents a word as a bag of character n‑grams; its embedding is typically the sum or average of its n‑gram vectors. Training still uses skip-gram-style prediction (often with negative sampling), but the parameters correspond to subword units rather than just whole words.  \n- **Intuition:** If you know vectors for “bank”, “ing”, and “banking”, you can leverage shared n‑grams across “banking”, “banked”, “unbanked”, etc., improving representations for infrequent forms.\n\nA conceptual workflow for applying subword skip-gram:\n\n1. **Define subword units:**  \n   - Choose a range of n‑gram lengths (e.g., character 3–6 grams).  \n   - For each word, generate all n‑grams within that range, sometimes marking word boundaries specially.\n\n2. **Initialize embeddings:**  \n   - Assign an embedding vector to each subword n‑gram.  \n   - Optionally assign a separate vector to the whole word, depending on the design.\n\n3. **Train with skip-gram + negative sampling:**  \n   - For each center word \\(c\\), build its vector \\(v_c\\) as the sum/average of its n‑gram embeddings.  \n   - Predict context words using the same negative sampling objective as above.  \n   - Update both context word vectors and the subword n‑gram vectors contributing to \\(v_c\\).\n\nIn industry, subword extensions to skip-gram are routinely used to handle open-vocabulary and noisy text scenarios such as social media posts, user queries, and product names. They allow models to generalize from seen pieces (n‑grams) to unseen full words, which is particularly helpful for rare or newly coined terms. While your curriculum focuses on word-level embeddings, recognizing that the same skip-gram training principle extends to subword units is key to applying these ideas in modern systems.\n\n#### Brief Notes on Remaining Gaps\n\n- **Subsampling frequent words and context weighting:** These heuristics reduce the influence of extremely common words (e.g., “the”, “and”) and emphasize closer context positions, which improves training speed and semantic quality; see the Mikolov et al. papers and toolkit documentation referenced in Further Reading.  \n- **Choosing/combining \\(v_w\\) and \\(u_w\\) for downstream use:** Practitioners often use input vectors, context vectors, or their average, typically with cosine similarity; implementation guides and library examples discuss these choices in detail.  \n- **Practical training, evaluation, and deployment:** Real systems require careful hyperparameter tuning, intrinsic and extrinsic evaluation, and efficient implementations; toolkit documentation and tutorials provide concrete guidance on these topics.  \n- **Alternative static methods and matrix-factorization views:** Methods like GloVe and analyses linking skip-gram with negative sampling to matrix factorization help in method selection and interpretation; see the suggested research papers for deeper theory.\n\n### Common Misconceptions\n\n- **Misconception 1: “Negative sampling is just a faster way to compute the same softmax probabilities.”**  \n  This is incorrect: negative sampling changes the training objective from multiclass probability estimation to a set of binary classification tasks. While it often yields embeddings with similar semantic properties, it does not produce the exact same conditional probabilities as the full softmax model.\n\n- **Misconception 2: “Subword / n‑gram models are a completely different technique from skip-gram.”**  \n  In reality, subword models reuse the same skip-gram idea of predicting context from a center representation; they simply change how the center (and sometimes context) representations are computed—from single word vectors to compositions of n‑gram vectors.\n\n- **Misconception 3: “Once I know the theoretical skip-gram objective, implementation details like sampling strategies don’t matter much.”**  \n  In practice, choices like negative sampling versus hierarchical softmax, the number of negative samples, and whether to subsample frequent words significantly affect speed, stability, and semantic quality, and are central to deploying skip-gram embeddings effectively.\n\n## Industry Context\n\nSkip-gram word embeddings are directly relevant for roles such as:  \n- Machine Learning Engineer (NLP)  \n- Data Scientist focusing on search/recommendation  \n- NLP Research Engineer working on representation learning and pretraining\n\nA typical real-world use case is improving search relevance in an e-commerce platform. Product queries often contain synonyms, brand variations, or misspellings that don’t match the product catalog exactly at the token level. By training skip-gram embeddings (often with negative sampling and possibly subword extensions) on historical queries and product descriptions, the system learns vectors where semantically related terms (e.g., “sneakers”, “running shoes”) are close. These embeddings can then be used to expand queries, compute similarity between queries and products, and improve ranking, leading to better click-through and conversion rates.\n\nEmployers hiring for such roles look for candidates who can move from theory to implementation: understanding the skip-gram architecture and objective, but also knowing how to choose between full softmax and approximations, tune hyperparameters like window size and negative samples, decide whether subword modeling is necessary, and evaluate embeddings on both intrinsic tasks and downstream metrics. A strong grasp of these details signals that you can adapt classical embedding techniques to the constraints and goals of a production system.\n\n## Practice & Review\n\n### Quick Check\n\n1. In the basic skip-gram model, what role does the dot product \\(u_o^\\top v_c\\) play?  \n> Answer: It provides a similarity score between the center word \\(c\\) and a candidate context word \\(o\\), which is then used inside a softmax to define \\(P(o \\mid c)\\).\n\n2. Why does the standard skip-gram formulation maintain both a center vector \\(v_w\\) and a context vector \\(u_w\\) for each word?  \n> Answer: Because the model distinguishes between a word’s role as a center versus as a context word, so it uses two separate parameter sets to capture these potentially different interactions.\n\n3. Conceptual: How does negative sampling make skip-gram training more scalable for large vocabularies?  \n> Answer: It replaces the full softmax over all words with a logistic loss that only involves the true context word and a small number of sampled negative words per update, greatly reducing computation.\n\n4. Application: Suppose you are modeling a language with many rare inflected forms. How could you extend your skip-gram model to better handle these words, and how does this relate to the original objective you learned in class?  \n> Answer: You can adopt a subword / character n‑gram extension where each word’s embedding is composed from its n‑grams, but still train with the same skip-gram objective of predicting surrounding words (often with negative sampling), allowing shared n‑grams to support rare forms.\n\n### Apply It\n\nYou are tasked with building word embeddings from a large news corpus to support a document similarity feature for an internal knowledge search tool. The vocabulary is large, and many domain-specific terms are rare or appear in multiple morphological variants. Training a full softmax skip-gram model as defined in your course notes is prohibitively slow on this data.\n\nTasks:  \n1. Propose a training objective based on skip-gram that replaces the full softmax with a scalable approximation, and outline how you would generate training instances.  \n2. Describe how you would incorporate subword information to improve representations of rare and morphologically complex terms while keeping the skip-gram prediction framework.  \n3. List two hyperparameters that are especially important in this setup (e.g., related to sampling) and explain how you would choose reasonable starting values.  \n4. Specify what intrinsic or simple downstream evaluation you would run to check whether your embeddings are capturing useful semantic relationships for the search task.\n\nExpected outcome: A brief design document (1–2 pages) that describes your adapted skip-gram training approach (including negative sampling and subword modeling), key hyperparameters, and an evaluation plan that demonstrates readiness to plug the embeddings into the search system.\n\n## Key Takeaways\n\n- Curriculum: One-hot vectors treat words as independent symbols and cannot express similarity, motivating dense word embeddings.  \n- Curriculum: Distributional semantics defines a word’s meaning by the contexts in which it appears, leading to models like skip-gram.  \n- Curriculum: Skip-gram assigns each word a center vector \\(v_w\\) and a context vector \\(u_w\\) and models \\(P(o \\mid c)\\) via a softmax over dot products \\(u_o^\\top v_c\\).  \n- Curriculum: The model predicts surrounding context words within a fixed window around each center word.  \n- Curriculum: Embeddings are learned by maximizing the likelihood of observed center–context pairs using stochastic gradient descent over a large corpus.\n\n- Gap: Negative sampling and hierarchical softmax are practical approximations that make skip-gram training feasible on large vocabularies by avoiding full softmax computation.  \n- Gap: Subword / character n‑gram extensions reuse the skip-gram objective while representing words through their constituent n‑grams, improving performance on rare and morphologically rich words.  \n- Gap: Additional heuristics like subsampling frequent words, context weighting, and careful vector selection (\\(v_w\\), \\(u_w\\), or their combination) are important for real-world quality and efficiency.  \n- Gap: Understanding practical training, tuning, and evaluation practices is essential for moving from classroom understanding to deployable embedding models.\n\n- Integration: The theoretical skip-gram model you learned (center and context vectors, dot-product softmax, SGD) is the foundation on which scalable techniques like negative sampling and subword modeling are built.  \n- Integration: Mastery of both the core objective and its practical variants enables you to design, train, and evaluate word embeddings that are both theoretically sound and production-ready.\n\n## Reflection\n\n- What was the most important thing you learned in this module?  \n- Which gap area do you feel least confident about? What would help you strengthen it?  \n- How does Skip-gram Word Embeddings connect to other topics you have studied?\n\n## Further Reading\n\n- [Efficient Estimation of Word Representations in Vector Space (Mikolov et al., 2013)](https://arxiv.org/abs/1301.3781) (Research Paper) (Intermediate) – Introduces the Word2Vec family and discusses practical training strategies for learning skip-gram embeddings efficiently.  \n- [Distributed Representations of Words and Phrases and their Compositionality (Mikolov et al., 2013) — negative sampling details](https://arxiv.org/abs/1310.4546) (Research Paper) (Advanced) – Provides details on negative sampling and other improvements for skip-gram, along with empirical results.  \n- [word2vec Explained: deriving Mikolov et al.'s negative-sampling word-embedding method (Goldberg & Levy, 2014)](https://arxiv.org/abs/1402.3722) (Research Paper) (Advanced) – Offers a thorough derivation and analysis of the skip-gram with negative sampling objective.  \n- [Word Embeddings in NLP: From Bag-of-Words to Transformers (Part ...)](https://arxiv.org/abs/1607.04606) (Research Paper) (Intermediate) – Places word2vec-style embeddings in the broader context of modern NLP, helping you see how skip-gram connects to later pretraining paradigms.  \n- [Subword / Character n-gram Extensions (fastText)](https://fasttext.cc/) (Documentation) (Intermediate) – Describes an industry-strength library that extends skip-gram training with subword information and provides pretrained vectors.",
+      "ppt_json": {
+        "topic_name": "Skip-gram Word Embeddings",
+        "slide_title": "Skip-gram requires sampled objectives to scale to real-world vocabularies.",
+        "severity": "critical",
+        "curriculum_anchor": "Students know skip-gram learns center (v) and context (u) vectors using dot-product softmax and SGD to predict nearby words.",
+        "gap_concepts": [
+          {
+            "concept_name": "Negative sampling",
+            "definition": "An efficient training approximation that replaces the full softmax with small binary classification problems contrasting positives against sampled negatives.",
+            "why_it_matters": "Industry uses negative sampling to train embeddings on billions of tokens without computing a full-vocabulary softmax.",
+            "how_it_works": "For each observed (center, context) pair sample k negatives from a noise distribution (commonly unigram^0.75). Increase the dot product for the positive pair and decrease dot products for the negatives using SGD. Example: for center='hotel' and context='Seattle', push 'Seattle' closer to 'hotel' while pushing k sampled unrelated words away.",
+            "impact": "high",
+            "diagram_type": "process_flow",
+            "diagram_data": {
+              "nodes": [
+                "Corpus pair (c,o)",
+                "Sample negatives",
+                "Compute dot-products",
+                "Contrastive loss",
+                "SGD update"
+              ],
+              "labels": [
+                "Observed center/context",
+                "Draw k noise words",
+                "u_o^T v_c and u_n^T v_c",
+                "Positive vs negatives",
+                "Adjust vectors"
+              ]
+            }
+          },
+          {
+            "concept_name": "Subword skip-gram",
+            "definition": "Compose word embeddings from character n-gram vectors so rare or unseen words get meaningful representations.",
+            "why_it_matters": "Subword models handle rare inflections, misspellings, and morphological variation common in production text.",
+            "how_it_works": "Precompute character n-grams (e.g., 3–6 chars) for each word and assign vectors to each n-gram. Build a word vector by summing or averaging its n-gram vectors and train these subword vectors with skip-gram (usually with negative sampling). Example: 'banking' is represented by n-grams like 'ban','ank','nki','kin','ing', allowing reasonable vectors for unseen forms.",
+            "impact": "high",
+            "diagram_type": "comparison",
+            "diagram_data": {
+              "nodes": [
+                "Word token",
+                "Character n-grams",
+                "Composed vector"
+              ],
+              "labels": [
+                "Single id lookup",
+                "Pieces (e.g., 3–6 chars)",
+                "Sum/avg of n-gram vectors"
+              ]
+            }
+          }
+        ],
+        "misconception": {
+          "wrong": "Negative sampling is a different model that replaces skip-gram's goals.",
+          "right": "Negative sampling is a scalable approximation; it preserves skip-gram's center/context vectors and dot-product objective while avoiding full softmax."
+        },
+        "top_recommendations": [
+          "Train with negative sampling using unigram^0.75 noise",
+          "Tune negative samples k (e.g., 5–20) and learning rate schedule",
+          "Subsample frequent words to reduce noise and speed training",
+          "Use subword n-grams (3–6 chars) for morphologically rich languages",
+          "Prefer input vectors or average input+output for retrieval",
+          "Evaluate embeddings on extrinsic downstream tasks"
+        ]
+      },
+      "script": "Most students can derive the skip-gram softmax, but freeze the first time they’re asked to train embeddings on a billion‑word corpus. The missing piece is how you actually make skip-gram scale.\n\nYou’ve already learned about skip-gram with center vectors v, context vectors u, dot products, and a softmax trained by SGD to predict nearby words. That’s a solid foundation, but there are some crucial scaling tricks your course didn’t cover, and industry absolutely expects you to know them.\n\nLet’s start with negative sampling. Instead of computing a giant softmax over the whole vocabulary for every center word, we turn each observed center–context pair into a tiny binary classification game: “Is this a real neighbor, or a fake one?” The key insight is that we keep the same basic goal and the same v and u vectors, but we change how we train them so it’s computationally cheap.\n\nWhy does this matter? In real systems, vocabularies can have millions of words. A true softmax would mean a dot product with every single word vector on every update, which just isn’t happening in production. Negative sampling lets you get word2vec‑quality embeddings from web‑scale data on reasonable hardware.\n\nHere’s how it works. For each real pair, say center “hotel” and context “Seattle,” you sample k “noise” words from a distribution over the vocabulary, often proportional to unigram frequency raised to the 0.75 power. If you’re looking at the slide, the process flow shows this: you start from the corpus pair, sample negatives, compute dot products, apply a contrastive loss, then update with SGD. Concretely, you push the dot product u_Seattleᵀ v_hotel up using a sigmoid, and you push the dot products for each negative word down. Each step only touches v for “hotel,” u for “Seattle,” and u for those k negatives. That’s the magic: constant work per update, no matter how huge the vocab is.\n\nNow let’s shift to subword skip-gram. The standard model gives each word its own vector. That’s fine for “bank,” but terrible for rare forms like “unbanked” or misspellings like “ban king.” The key idea here is to build a word’s embedding from character n‑grams, so related forms share parameters.\n\nIf you glance at the comparison diagram, you’ll see this difference. Plain skip-gram does a single ID lookup per word. Subword skip-gram first breaks the word into overlapping character n‑grams, like “ban,” “ank,” “nki,” “kin,” “ing” for “banking,” then sums or averages those n‑gram vectors to get the word vector. Training is still skip-gram with negative sampling: you use that composed center vector to predict context words and update all the involved n‑gram vectors. This is where it gets important for real text: it lets your model handle inflections, brand variants, and typos with far fewer “unknown” or useless vectors.\n\nNow, a lot of students walk away thinking negative sampling is some totally different model that replaces skip-gram’s original goal. But here’s the thing—it’s really just a scalable approximation. You’re still learning center and context vectors, still using dot products to capture similarity, still trying to separate true neighbors from random words. You’ve just swapped the full softmax for a more efficient training objective.\n\nBefore I wrap up, I want you to pause for a moment and think about this: if someone gave you a 10‑million word vocabulary, how would you explain, in your own words, why negative sampling is basically mandatory?\n\nSo here’s what I want you to take away from this. First, negative sampling turns skip-gram into a contrastive, binary task that makes training on massive vocabularies feasible. Second, the underlying representation idea doesn’t change—you still have v and u, and dot products signal similarity. Third, subword skip-gram composes word vectors from character n‑grams, which is crucial for rare and messy real‑world words. If you can explain those ideas clearly, you’re ready to talk about skip-gram the way practitioners do."
+    },
+    "Distributional Semantics Foundation": {
+      "module_md": "## Module Overview\nImagine you are building a search engine and a user types \"Seattle motel\" — you want the system to also match documents mentioning \"Seattle hotel.\" One-hot word encodings treat \"motel\" and \"hotel\" as orthogonal, so they fail to capture this notion of similarity. Distributional semantics fixes this by learning dense vectors that place semantically related words near each other based on the company they keep.\n\nThis topic matters in industry because dense word representations remain a foundational building block for semantic search, recommendation, retrieval, and as input to larger pretrained models. Beyond coursework, this module teaches practical skills employers expect: how to train and tune prediction-based embeddings (word2vec-style), and how to relate these to count-based, matrix-factorization approaches used in production.\n\nBy the end, you will be able to both reason about why embeddings work (the distributional principle) and actually build, tune, and evaluate embeddings appropriate for real-world tasks. Ready to turn co-occurrence counts into vectors you can use in production?\n\n## Learning Objectives\n- Explain the distributional semantics principle and how word meaning is defined by nearby context words (Curriculum)\n- Describe why one-hot representations lack graded similarity and how dense vectors encode semantic similarity in geometry (Curriculum)\n- Implement skip-gram training with negative sampling for learning dense word vectors on a medium-sized corpus (Gap)\n- Apply PPMI weighting and truncated SVD to build count-based embeddings and compare them to prediction-based embeddings on an intrinsic task (Gap)\n- Evaluate embedding quality using intrinsic (e.g., word similarity) and extrinsic (downstream retrieval/classification) diagnostics and select hyperparameters accordingly (Gap)\n\n## Curriculum Coverage\nThe curriculum introduces the core problem: words as discrete symbols (one-hot vectors) are orthogonal and provide no natural notion of similarity. It presents distributional semantics as the central idea: \"You shall know a word by the company it keeps\" (Firth), meaning a word's meaning can be derived from the words that frequently appear nearby within a context window. The course shows how many contexts of a word are aggregated to build a representation and motivates learning dense vectors that encode graded similarity in geometric space as a resolution to shortcomings in discrete or lexicon-based approaches like WordNet.\n\nTechniques taught include the distributional semantics principle, the idea that word meaning is defined by context, and the use of dense vector representations to capture graded similarities (semantic proximity) in geometry. The curriculum emphasizes conceptual motivation and situates pretrained static embeddings (the word2vec era) as a practical starting point for later contextual models. It highlights limitations of lexical resources (incompleteness, static synonym lists, outdated senses) and underscores that context-sensitive meaning requires more than a static thesaurus.\n\nBefore continuing, make sure you can answer:\n- What problem arises when words are represented as one-hot vectors?\n- What does the distributional hypothesis (Firth) state about word meaning?\n- Why are dense vectors preferred over discrete synonym lists like WordNet for encoding similarity?\n\n## Identified Gaps\nThe curriculum gives strong conceptual grounding but industry expects additional practical competencies. Several gaps appear as opportunities to gain employable skills:\n\n- Practical training details (Critical): The curriculum does not cover hands-on hyperparameter choices and optimization strategies (window size, negative sampling rate, number of negatives, subsampling, learning rate schedules). These determine whether embeddings capture the semantic relations needed in production systems and are frequently required in job tasks.\n- Count-based alternatives and theoretical connections (Important): The course does not teach PPMI, SVD/LSA, or GloVe and how count-based models relate to prediction-based models via implicit matrix factorization. Understanding these methods helps in deciding models for different datasets and in interpreting embeddings.\n- Additional useful areas (Nice-to-have): subword/morphology-aware models for OOV handling, robust evaluation and diagnostics, debiasing and retrofitting techniques, and deployment/scale considerations. These are important in many roles but follow once the two critical gaps above are handled.\n\nEach gap is an opportunity: mastering them increases your ability to build, evaluate, interpret, and deploy embeddings in real-world systems.\n\n## Core Content\n\n### What You Need to Learn\n\nGap 1 — Practical training and tuning of prediction-based embeddings (skip-gram + negative sampling)\n- Building on what you learned about distributional semantics and dense vectors, skip-gram with negative sampling (SGNS) is a prediction-based method that learns embeddings by making a target word predictive of its context words and distinguishing true context pairs from random (negative) pairs.\n- Definition: SGNS trains two sets of vectors (target and context) so that the dot product of a target and an observed context word is high, while dot products between the target and sampled negative words are low; negative sampling replaces a costly softmax with a logistic loss on sampled negatives.\n- How it works — detailed walkthrough:\n  1. For each word token w_t in the corpus, collect context tokens within a window of size k (e.g., k = 2–10; tune by task).\n  2. For each observed pair (w_target, w_context), update embeddings to increase sigma(u_target · v_context).\n  3. Sample N negative words from a noise distribution (often unigram counts raised to 3/4) and update embeddings to decrease sigma(u_target · v_neg).\n  4. Repeat over corpus for multiple epochs, with a learning rate schedule and optional subsampling of frequent words.\n- Step-by-step application (practical recipe):\n  1. Preprocess corpus: tokenize, normalize (lowercase), build vocabulary with min frequency threshold to prune rare tokens.\n  2. Choose hyperparameters to tune: embedding dimensionality (e.g., 100–300), window size, number of negative samples (commonly 5–20), subsampling threshold for frequent words, learning rate and epochs.\n  3. Initialize vectors (small random values), and train using SGNS with minibatching or streaming updates.\n  4. Monitor intrinsic measures (nearest neighbors, analogy or similarity sets) and a small held-out downstream task (e.g., simple classification) to detect overfitting or poor semantic structure.\n- Industry example: A search relevance team trains SGNS on query logs and document text to produce embeddings used to expand queries (\"motel\" -> nearest neighbors include \"hotel\", \"inn\"). They tune window size and negatives by checking retrieval-lift on a held-out click-based relevance metric and inspecting nearest neighbors for top queries.\n\nGap 2 — Count-based models and the matrix-factorization view (PPMI + SVD and GloVe)\n- Building on your knowledge that co-occurring context words define meaning, count-based methods explicitly construct co-occurrence matrices and reduce them to dense representations.\n- Definition: Construct a word-by-context co-occurrence matrix C where C[i,j] counts how often word i appears with context j (within a window). Transform counts into association measures like pointwise mutual information (PMI) and then apply dimensionality reduction (truncated SVD) to obtain dense embeddings.\n- How it works — detailed walkthrough (PPMI + SVD):\n  1. Count co-occurrences across corpus into matrix C (rows = target words, columns = contexts or words).\n  2. Convert counts to PMI: PMI(i,j) = log ( P(i,j) / (P(i) P(j)) ); then replace negative PMIs with zero to get PPMI.\n  3. Perform truncated SVD on the PPMI matrix: PPMI ≈ U_k Σ_k V_k^T; use U_k Σ_k^(1/2) (or U_k Σ_k) as word vectors of dimension k.\n  4. Optionally post-process (e.g., length-normalize).\n- Relationship to prediction-based methods: Theoretical work shows SGNS is implicitly factorizing a shifted PMI matrix — this explains why prediction-based and count-based methods often produce similar semantic structure and helps choose methods based on data and compute constraints.\n- Step-by-step application (practical recipe):\n  1. Build co-occurrence counts with appropriate window and weighting (symmetric vs asymmetric windows).\n  2. Compute PPMI and apply SVD with a chosen k (e.g., 100–300).\n  3. Evaluate with intrinsic diagnostics; choose PPMI vs raw counts depending on whether rare co-occurrences should be emphasized.\n- Industry example: A recommendation team with limited compute builds PPMI+SVD embeddings from product co-occurrence in user sessions because matrix factorization on counts allows batch SVD and easier interpretability and deterministic outputs; they compare to SGNS and find similar nearest neighbors for frequent items.\n\nBrief summaries of other gaps\n- Subword/morphology-aware embeddings: encode character n-grams so OOV and rare forms get reasonable vectors; important for morphologically rich languages and misspellings. Learn more in the FastText paper below. (Where to learn more: Further Reading)\n- Evaluation & diagnostics: use intrinsic datasets (word similarity) and extrinsic downstream tests, plus nearest-neighbor inspection and cluster coherence. This matters to choose embeddings that transfer to production.\n- Bias and retrofitting: auditing for gender or social bias and retrofitting vectors to lexicons (attract/repel) are practical post-processing steps when deploying embeddings in sensitive applications.\n- Scalability and deployment: reducing memory footprint and using approximate nearest neighbor indices are common production concerns.\n\n### Common Misconceptions\n- Misconception: \"Higher dimensional embeddings are always better.\"\n  - Why it's wrong: Dimensionality interacts with corpus size and task; too-high dimensions can overfit and increase compute/memory without semantic gains.\n  - Correct view: Choose dimensionality in concert with corpus size and evaluate on your downstream metric.\n- Misconception: \"Prediction-based embeddings (word2vec) and count-based embeddings (PPMI+SVD) are entirely different families.\"\n  - Why it's wrong: There is a theoretical connection — SGNS can be seen as implicitly factorizing a shifted PMI matrix.\n  - Correct view: They are different algorithms with different trade-offs (stochastic training vs batch factorization), but often yield similar semantic structures.\n- Misconception: \"Embeddings eliminate the need for lexicons like WordNet.\"\n  - Why it's wrong: Embeddings capture distributional similarity but can miss fine-grained lexical relations and may encode undesired biases.\n  - Correct view: Use embeddings together with lexicons and task-specific constraints when precise lexical relations or ethical considerations matter.\n\n## Industry Context\nRoles where this skill is valued:\n- NLP Engineer / Research Engineer (embedding training and evaluation)\n- Search/Relevance Engineer or IR Scientist (query-document matching using embeddings)\n- ML Engineer or Data Scientist working on recommender systems (item embeddings from co-occurrence)\n\nReal-world use case (search relevance): A search product team needs to improve recall for customer queries with varied phrasing. They train SGNS embeddings on a mix of query logs and document text, tune window sizes and negative sampling by measuring click-through lift on a held-out set, and deploy embeddings to expand queries and score candidate documents by cosine similarity. The outcome is improved query recall and a measurable increase in relevant clicks for variants like \"Seattle motel\" matching \"hotel\" documents.\n\nWhat employers look for:\n- Experience training and tuning embeddings (hyperparameters, negative sampling, subsampling).\n- Ability to evaluate embeddings intrinsically and extrinsically and to select methods (prediction-based vs count-based) based on data and compute constraints.\n- Practical skills in vocabulary management, OOV handling (subword techniques), and basic bias auditing or retrofitting when deploying embeddings in user-facing systems.\n\n## Practice & Review\n\n### Quick Check\n1. What does the distributional hypothesis state about how word meaning can be inferred?  \n> Answer: It states that a word's meaning is given by the words that frequently appear nearby (the company it keeps).  \n2. Why are one-hot vectors insufficient for measuring word similarity?  \n> Answer: One-hot vectors are orthogonal (no shared components), so there is no natural graded notion of similarity between different words.  \n3. Conceptual: What is the core difference in training objective between SGNS and PPMI+SVD approaches?  \n> Answer: SGNS is a prediction-based stochastic objective that discriminates observed context pairs from sampled negatives, while PPMI+SVD is a count-based approach that computes association measures from co-occurrence counts and then applies matrix factorization to get dense vectors.  \n4. Application: Given a small domain corpus with many rare terms, what practical choices from Core Content would you make to produce usable embeddings?  \n> Answer: Use subword or character n-gram modeling (e.g., FastText-style) to handle rare/OOV terms, choose appropriate pruning thresholds, and consider PPMI+SVD or SGNS with smaller dimensionality and tuned subsampling to stabilize rare-word estimates.\n\n### Apply It\nScenario: You are asked to improve semantic matching in an internal document retrieval system that currently uses keyword matching. The dataset is a 50M-token corpus of company documents and user queries, and you must produce embeddings to expand queries and measure retrieval improvements over a development set.\n\nTasks:\n- Train SGNS embeddings on the corpus, tuning window size, negative samples, and subsampling, and produce nearest-neighbor lists for frequent queries.\n- Build PPMI+SVD embeddings from the same corpus and compare nearest neighbors for a selection of query terms; document differences.\n- Evaluate both embedding sets on a held-out retrieval task (e.g., precision@k on query-document relevance) and choose the best approach for deployment.\nExpected deliverable: A short report with (1) selected hyperparameters and training logs, (2) examples of nearest neighbors for target queries, (3) retrieval evaluation results comparing SGNS and PPMI+SVD, and (4) recommended embeddings and deployment notes (OOV handling, memory considerations).\n\n## Key Takeaways\n- Curriculum: Distributional semantics frames word meaning via context — \"know a word by the company it keeps.\"\n- Curriculum: One-hot representations are orthogonal and do not provide graded similarity; dense vector representations encode similarity geometrically.\n- Curriculum: Pretrained static embeddings (word2vec-era) are a practical foundation for later contextual models and fix many limitations of lexical resources.\n- Gap: Training prediction-based embeddings requires tuning hyperparameters (window, negatives, subsampling, learning rate) — these choices materially affect semantic quality.\n- Gap: Count-based methods (PPMI + SVD, GloVe) offer an alternative view and are theoretically connected to prediction-based methods via implicit matrix factorization.\n- Gap: Subword models, evaluation diagnostics, bias auditing, and retrofitting are common industry requirements beyond the basic curriculum.\n- Gap: Choosing between prediction-based and count-based approaches depends on corpus size, compute constraints, and interpretability needs.\n- Integration: Understanding both the distributional principle and practical training/factorization methods lets you build embeddings that work in production retrieval or recommendation systems.\n- Integration: Use intrinsic nearest-neighbor inspection plus extrinsic downstream evaluation to pick hyperparameters and embedding methods for real tasks.\n\n## Reflection\n- What was the most important thing you learned in this module?\n- Which gap area do you feel least confident about? What would help you strengthen it?\n- How does Distributional Semantics Foundation connect to other topics you have studied?\n\n## Further Reading\n- [Efficient Estimation of Word Representations in Vector Space (Mikolov et al., 2013)](https://arxiv.org/abs/1301.3781) (Research Paper) (Intermediate) — Describes the skip-gram and CBOW architectures and negative sampling, useful for implementing and tuning prediction-based embeddings.  \n- [GloVe: Global Vectors for Word Representation (Pennington et al., 2014)](https://nlp.stanford.edu/pubs/glove.pdf) (Research Paper) (Intermediate) — Presents a global co-occurrence objective and connects count-based statistics to dense vectors.  \n- [Enriching Word Vectors with Subword Information (FastText) (Bojanowski et al., 2017)](https://arxiv.org/abs/1607.04606) (Research Paper) (Intermediate) — Explains subword n-gram methods for handling rare and OOV words in production contexts.  \n- [Neural Word Embeddings as Implicit Matrix Factorization (Levy & Goldberg, 2014)](https://arxiv.org/abs/1310.4546) (Research Paper) (Advanced) — Explores the theoretical connection between prediction-based and count-based embeddings, helpful for principled method selection.",
+      "ppt_json": {
+        "topic_name": "Distributional Semantics Foundation",
+        "slide_title": "Embeddings encode graded similarity by learning from contextual co-occurrence statistics.",
+        "severity": "moderate",
+        "curriculum_anchor": "Word meaning arises from nearby words; dense vectors capture graded similarity unlike orthogonal one-hot encodings.",
+        "gap_concepts": [
+          {
+            "concept_name": "Prediction-based training",
+            "definition": "Train word vectors by predicting context or target words (skip-gram or CBOW), using approximations like negative sampling for scalability.",
+            "why_it_matters": "Industry relies on tuned prediction-based models to produce scalable embeddings that reflect desired semantic relations.",
+            "how_it_works": "Preprocess text and build vocabulary, choose a symmetric window size, and train skip-gram (predict context from target) or CBOW with negative sampling and subsampling of frequent words. Tune embedding dimensionality, learning rate, window, and number of negatives; monitor loss and nearest neighbors (e.g., 'motel' should neighbor 'hotel').",
+            "impact": "high",
+            "diagram_type": "process_flow",
+            "diagram_data": {
+              "nodes": [
+                "Tokenize Corpus",
+                "Define Context Window",
+                "Train Skip-gram + NS",
+                "Tune Hyperparameters",
+                "Inspect Nearest Neighbors"
+              ],
+              "labels": [
+                "Preprocess text",
+                "Window size (e.g., 2–10)",
+                "Objective + negative sampling",
+                "Dimensionality, lr, negatives",
+                "Qualitative sanity checks"
+              ]
+            }
+          },
+          {
+            "concept_name": "Count-based factorization",
+            "definition": "Construct a word×context co-occurrence matrix, convert counts to PMI/PPMI, and reduce dimensionality via truncated SVD or fit GloVe-style objectives.",
+            "why_it_matters": "Provides interpretable, stable vectors and can be preferable on smaller or domain-specific corpora.",
+            "how_it_works": "Count context co-occurrences within a chosen window, compute PPMI to emphasize informative pairs, then apply truncated SVD to obtain low-dimensional embeddings; e.g., PPMI+SVD on legal text yields interpretable axes for concepts.",
+            "impact": "medium",
+            "diagram_type": "comparison",
+            "diagram_data": {
+              "nodes": [
+                "Co-occurrence Matrix",
+                "PPMI Weighting",
+                "Truncated SVD",
+                "Dense Embeddings"
+              ],
+              "labels": [
+                "Counts by window",
+                "Association scores",
+                "Dimensionality reduction",
+                "Interpretable vectors"
+              ]
+            }
+          },
+          {
+            "concept_name": "Subword / OOV handling",
+            "definition": "Represent words as compositions of character n-grams or subword units so unseen or rare tokens get meaningful vectors.",
+            "why_it_matters": "Prevents OOV failures, handles misspellings, morphology, and rare proper nouns in production systems.",
+            "how_it_works": "Build n-gram vectors (e.g., FastText) and sum/average them to form word embeddings; for example, character n-grams let the system produce useful vectors for misspelled queries or rare place names without retraining the whole vocabulary.",
+            "impact": "medium",
+            "diagram_type": "none",
+            "diagram_data": {
+              "nodes": [
+                "Character n-grams",
+                "Compose Vectors",
+                "Robust OOV Outputs"
+              ],
+              "labels": [
+                "Subword units (e.g., 3–6)",
+                "Sum or avg n-gram vectors",
+                "Usable vectors for rare tokens"
+              ]
+            }
+          }
+        ],
+        "misconception": {
+          "wrong": "Static pretrained embeddings are always sufficient for downstream tasks.",
+          "right": "Static embeddings are a strong start but should be validated and often adapted or retrained for specific downstream needs."
+        },
+        "top_recommendations": [
+          "Train skip-gram with negative sampling; tune window and negatives.",
+          "Run PPMI+SVD or GloVe as a baseline for interpretability.",
+          "Use subword (FastText) to mitigate OOV and misspellings.",
+          "Evaluate both intrinsically and on a downstream validation task.",
+          "Audit embeddings for bias and apply simple debiasing if needed.",
+          "Document preprocessing, vocab policy, and deployment memory budget."
+        ]
+      },
+      "script": "Most students think embeddings are just vectors you download and plug into a model. Here’s the catch: in real jobs, you’re often the one who has to actually train and tune them so they behave sensibly.\n\nYou’ve already learned that word meaning comes from nearby words, and that dense vectors can capture graded similarity in a way one-hot vectors never could. That’s a solid foundation, but there are a few key pieces your course didn’t really unpack: how prediction-based models like word2vec are trained, what count-based factorization is actually doing, and how subword modeling saves you when new or misspelled words show up.\n\nLet’s start with prediction-based training. Instead of just counting co-occurrences, these models learn vectors by trying to predict context. In skip-gram, you take a target word like “motel” and ask the model to score real context words like “Seattle” or “reservation” higher than random negatives like “banana” or “voltage.” The key insight is that if two words share similar contexts, their vectors get pushed into similar regions of space. In practice, you tokenize your corpus, build a vocabulary, pick a symmetric window size, and train with negative sampling so it’s scalable. If you’re looking at the slide, you can see that process flow: first tokenize the corpus, then define a context window, train skip-gram with negative sampling, tune things like dimensionality, learning rate, and number of negatives, and finally inspect nearest neighbors. This is where it gets important: you don’t just stare at the loss; you sanity-check neighbors. If “motel” isn’t near “hotel” and “inn,” your setup or hyperparameters probably need work.\n\nNow let’s shift to count-based factorization. Here you start from an explicit word-by-context matrix: how often each word appears near each other word. Raw counts are noisy, so you transform them into association scores like PPMI, which boosts informative pairs and downweights boring frequent words. Then you apply truncated SVD to compress that huge matrix into low-dimensional vectors. On the slide’s comparison diagram, that’s the path from co-occurrence matrix, to PPMI weighting, to SVD, to dense embeddings. The key insight here is that this gives you stable, often interpretable vectors, and it can be great on smaller or domain-specific corpora, like legal text or medical notes.\n\nBuilding on that, we need to talk about subword and out-of-vocabulary handling. Real systems constantly see rare names, typos, and new slang. If your model only has whole-word vectors, anything unseen collapses to an “UNK” token, which is useless. Subword models fix this by representing words as combinations of character n-grams. Think of splitting “banking” into chunks like “ban,” “ank,” “nki,” “kin,” “ing.” Each n-gram has a vector, and you sum or average them to get the word’s embedding. The payoff is huge: even if the exact token “banx” never appeared, its character n-grams overlap with “bank,” so you still get a meaningful vector.\n\nNow, a lot of students walk away thinking, “As long as I grab some static pretrained embeddings, I’m done.” But here’s the thing: those are trained on generic data with generic choices. For a specific search, recommendation, or domain task, you usually need to validate them, adapt them, or retrain with tuned windows, negatives, and maybe subword modeling that matches your data.\n\nBefore I wrap up, pause for a moment and think about this: if you had to improve “Seattle motel” search tomorrow, would you start with prediction-based training, a count-based PPMI+SVD setup, or a subword model, and why?\n\nSo here’s what I want you to take away from this. Prediction-based training like skip-gram with negative sampling learns similarity by predicting real contexts over random negatives, and hyperparameters really matter. Count-based PPMI+SVD builds embeddings by factorizing a weighted co-occurrence matrix and can be more stable and interpretable. Subword modeling lets you assign useful vectors to rare, misspelled, or brand-new words. If you understand and can choose among these, you’re much closer to building embeddings that actually work in the systems you’ll build next."
+    },
+    "Training Procedure for Embeddings": {
+      "module_md": "## Module Overview\nImagine you are building a semantic search feature for a large e-commerce site and need compact vector representations of words learned from billions of product descriptions so that similar queries retrieve relevant products. Training Procedure for Embeddings—how you form training windows, compute gradients, and optimize embedding vectors—directly affects retrieval quality, training speed, and deployability at industry scale. Right now industry expects not only the canonical SGD/softmax training taught in coursework but also sampling-based objectives, subsampling heuristics, and efficient parallel implementations to scale to large vocabularies and corpora. This module explains those practical extensions and shows how to implement them alongside the curriculum techniques to produce high-quality, scalable embeddings. Ready to learn how to go from classroom softmax updates to production-ready, efficient embedding training?\n\n## Learning Objectives\n- Explain the Word2Vec-style training loop, including SGD updates after each context window and the softmax objective, and state the role of the learning rate α (Curriculum)\n- Implement mini-batch gradient descent that applies parameter updates after processing batches of context windows (Curriculum)\n- Describe and contrast full-vocabulary softmax with sampling-based alternatives such as negative sampling and noise-contrastive estimation (Gap)\n- Apply Skip-gram with Negative Sampling (SGNS) to replace full softmax in a training pipeline and implement unigram-distribution smoothing for negatives (Gap)\n- Analyze and decide between synchronous batched updates and asynchronous Hogwild-style updates, and design an efficient negative-sampling pipeline that uses precomputed sampling tables (Gap)\n\n## Curriculum Coverage\nThe course material presents Word2Vec-style word vectors and the training procedures used to learn them. Core concepts taught include the idea that word meaning can be captured by real-valued vectors and that these vectors are learned by defining a prediction problem over context windows. The curriculum derives the objective gradients for Word2Vec and covers basic optimization practices: performing stochastic gradient descent (SGD) updates after processing each context window, the alternative of mini-batch gradient descent (updating after a batch of windows), using a softmax over the vocabulary as the canonical output distribution, and controlling optimization with a global learning rate α. The lectures also introduce gradient-based optimization fundamentals required to implement these updates.\n\nThe treatment emphasizes theory and derivation of the objective and gradients, and gives a foundational view of optimization basics relevant to embedding training. Practical implementation details beyond the canonical softmax (such as scale-oriented sampling heuristics, negative sampling, or large-scale engineering techniques) are not the primary focus of the curriculum's presented slides. \n\nBefore continuing, make sure you can answer:\n- What does performing an SGD update \"after each window\" mean in the Word2Vec training loop?\n- How does the softmax over the vocabulary enter the Word2Vec objective, and what role does the learning rate α play?\n\n## Identified Gaps\nThe curriculum gives a solid theoretical grounding in softmax-based Word2Vec training and SGD, but industry practice expects additional skills that let embeddings scale and perform well on large corpora. Key gaps include (1) sampling-based training objectives such as negative sampling, noise-contrastive estimation, and sampled-softmax that are the common practical alternatives to full softmax; (2) sampling and preprocessing heuristics like unigram-distribution smoothing and frequent-word subsampling; and (3) engineering practices for efficient large-scale training such as precomputed sampling tables, Hogwild-style asynchronous updates, batching strategies, and checkpointing. \n\nThese gaps are opportunities: mastering them improves employability for roles that train embeddings at scale and enables moving from correct but slow classroom implementations to production systems. Priorities: negative-sampling and sampling heuristics are (Critical) because they are the dominant method for scaling Word2Vec-style training; efficient implementation and parallel updates are (Important) because they determine whether you can train on web-scale corpora in a reasonable time; optimizer schedules and evaluation practices are (Important) to ensure convergence and model quality in practice.\n\n## Core Content\n\n### What You Need to Learn\n\nGap 1 — Negative Sampling / Noise-Contrastive Estimation (Critical)\nBuilding on the curriculum concept of optimizing a softmax over the full vocabulary using SGD updates after each context window, negative sampling and related methods replace the expensive full-vocabulary softmax with a binary classification-style objective that is tractable for large vocabularies.\n\nDefinition\n- Negative sampling (as used in Skip-gram with Negative Sampling, SGNS) trains the model to distinguish observed (target, context) pairs from sampled noise pairs. Instead of computing a full softmax normalization across all vocabulary entries, the model scores a small set of negative examples per positive example.\n\nHow it works — walkthrough\n1. For each observed center word w and context word c (a positive pair), compute the dot product score s = u_c · v_w (where v_w is the center-word vector and u_c is the context-word vector).\n2. Treat the positive pair as a positive example and sample K negative context words {n1..nK} from a noise distribution (see unigram smoothing below).\n3. Maximize the objective that pushes s up for the positive pair and pushes scores for negative pairs down. Concretely, this is frequently implemented with sigmoid cross-entropy losses on the positive and negative examples rather than a full softmax.\n4. Update only the vectors for the center word, the positive context, and the sampled negatives — this reduces per-step computation from O(|V|) to O(K).\n\nApplication step-by-step\n1. Prepare a noise sampling distribution (see next gap for details).\n2. During training, for each context window and each center–context positive pair:\n   1. Sample K negatives from the noise distribution.\n   2. Compute positive and negative logits (dot products).\n   3. Compute sigmoid losses and gradients for the positive and negatives.\n   4. Apply SGD or a mini-batch optimizer to update involved vectors only.\n3. Repeat across corpus; use learning-rate schedule or optimizer of choice.\n\nIndustry practice example\n- In practice, SGNS is the standard way to scale Word2Vec-style embeddings to very large vocabularies and corpora. Implementations process only a handful of negatives per positive and update a small set of vectors per step, enabling orders-of-magnitude faster training than full softmax while producing competitive embeddings.\n\nGap 1 — Unigram-Distribution Smoothing and Negative Sampling Details (part of Critical)\nDefinition\n- Unigram-distribution smoothing modifies the negative-sampling distribution by raising unigram frequencies to an exponent (a common practice in industry) so that frequent words are sampled less aggressively relative to raw frequency.\n\nHow it works — walkthrough\n1. Count word frequencies from the corpus to get the unigram distribution P(w).\n2. Transform to a smoothed distribution P_smooth(w) ∝ P(w)^β, where β is the smoothing exponent (industry descriptions commonly reference a β less than 1).\n3. Use P_smooth to draw negative samples for SGNS.\n\nApplication step-by-step\n1. Build the unigram counts from your corpus.\n2. Compute smoothed probabilities by raising counts to exponent β and renormalize.\n3. Construct a sampling data structure (see next gap) to sample negatives efficiently.\n\nIndustry practice example\n- Implementations typically precompute the smoothed distribution and sampling table so negatives can be drawn in O(1) time during training, improving throughput on large corpora.\n\nGap 2 — Efficient Implementation & Scaling (Important)\nBuilding on the curriculum's mini-batch and SGD foundations, efficient training in industry is about making negative sampling and updates fast and parallel.\n\nDefinition\n- Efficient implementation covers sampling infrastructure (precomputed alias or sampling tables), batching strategies that preserve sampling semantics, and parallel update schemes (e.g., Hogwild-style asynchronous SGD) to utilize multi-core hardware or distributed systems.\n\nHow it works — walkthrough\n1. Sampling tables: precompute a data structure (e.g., alias table) from the smoothed unigram distribution so each negative sample can be drawn in O(1) time.\n2. Batching: group multiple (center, context) pairs into mini-batches so that vectorized operations (matrix multiplies) compute scores for many pairs at once; for negative-sampling, coordinate sampled negatives across the batch when feasible to reuse computations.\n3. Parallel updates: choose synchronous batched updates for determinism or Hogwild-style asynchronous updates for throughput; in Hogwild, workers perform lock-free updates to shared parameter arrays, gaining speed at the cost of some update interleaving.\n\nApplication step-by-step\n1. Build the smoothed sampling distribution and an alias/sampling table once before training.\n2. Implement a mini-batch loop that:\n   1. Collects B positive pairs.\n   2. Draws K negatives per positive using the sampling table (or shared negatives across the batch to reduce work).\n   3. Computes logits for positives and negatives with batched dot-products.\n   4. Computes batched gradients and applies updates.\n3. For multi-threading, consider an asynchronous update scheme (Hogwild) where threads update shared embedding matrices without locks, or a synchronous parameter-server/AllReduce approach if stronger consistency is required.\n4. Add practical measures: checkpointing, streaming/sharding of the corpus, and monitoring validation metrics.\n\nIndustry practice example\n- Production embedding training pipelines precompute sampling tables and use vectorized batched operations and multi-threading to make training feasible on web-scale corpora. The official reference implementations of Word2Vec and later open-source tools include these engineering optimizations.\n\nRemaining gaps (brief)\n- Frequent-word subsampling: a preprocessing step to discard some occurrences of very frequent words to reduce their dominance; important for speed and quality — learn more in the original Word2Vec reference.  \n- Optimizer schedules and evaluation: employing learning-rate decay schedules, early stopping using intrinsic/extrinsic tasks, and checkpointing are important for robust training; resources in Further Reading cover practical guidance.\n\n### Common Misconceptions\n- Misconception: Negative sampling is an approximation that always produces worse vectors than full softmax.\n  - Why it's wrong: In practice, SGNS often yields embeddings of comparable quality to full softmax while being far cheaper to compute; the tradeoff is between exact likelihood and scalable training.\n  - Correct understanding: Negative sampling replaces the normalization over the whole vocabulary with a tractable contrastive objective; with proper sampling and hyperparameters it is the standard practical choice.\n\n- Misconception: You must sample negatives uniformly at random.\n  - Why it's wrong: Uniform sampling ignores corpus frequency structure; industry practice uses unigram smoothing to bias sampling and improve learning dynamics.\n  - Correct understanding: Using a smoothed unigram distribution for negatives leads to better signal and training behavior than naive uniform sampling.\n\n- Misconception: Parallel lock-free updates (Hogwild) always break training due to conflicting writes.\n  - Why it's wrong: While asynchronous updates introduce non-determinism, many embedding training workloads tolerate and benefit from lock-free updates; they often converge in practice with large speedups.\n  - Correct understanding: Hogwild-style updates can be an effective high-throughput option, but you should monitor convergence and consider synchronous alternatives when determinism or reproducibility is essential.\n\n## Industry Context\nRoles where this skill is valued:\n- Machine Learning Engineer (focus: production training pipelines and scaling)\n- NLP Research Engineer / Applied Researcher (focus: embedding quality and modeling choices)\n- Data Scientist working on search and retrieval (focus: embedding-based similarity and downstream metrics)\n\nReal-world use case (detailed)\n- Company/domain: An e-commerce search team needs to build product-query matching that generalizes across synonyms and misspellings. Problem: the vocabulary is huge (product titles, descriptions, brand names) and must be embedded so that nearest-neighbor search yields relevant products for user queries. Application: train skip-gram embeddings on a large corpus of product text using SGNS with unigram smoothing, precomputed sampling tables, and multi-threaded training (Hogwild or batched AllReduce) to process billions of tokens efficiently. Outcome: compact embeddings that improve retrieval relevance and reduce cold-start issues for novel queries, with training time reduced from weeks to days through sampling and engineering optimizations.\n\nEmployer expectations\n- Employers look for the ability to implement SGNS or sampled-softmax, build efficient negative-sampling pipelines (sampling tables), choose batching/parallelization strategies (including tradeoffs of Hogwild), and validate embeddings with intrinsic and downstream metrics. Familiarity with checkpointing, streaming data processing, and simple optimizer schedules is also expected.\n\n## Practice & Review\n\n### Quick Check\n1. What does \"performing an SGD update after each window\" imply in Word2Vec training?  \n> Answer: It means computing gradients from one context window (one or more target–context pairs) and applying a parameter update immediately rather than accumulating over many windows before updating.\n\n2. In the curriculum's canonical objective, what is the role of the softmax over the vocabulary?  \n> Answer: The softmax defines a normalized probability distribution over possible context words given a center word; its gradients drive updates to increase probability of observed contexts and decrease others.\n\n3. Conceptual: Why does negative sampling reduce per-step computational cost compared to full softmax?  \n> Answer: Because it computes losses and gradients only for the positive pair and a small set of sampled negative words, avoiding O(|V|) work for the full softmax normalization.\n\n4. Application: You have a mini-batch implementation that currently computes full softmax per example. Name one step-by-step change to move to negative sampling while preserving mini-batch updates.  \n> Answer: 1) Precompute a smoothed unigram sampling table; 2) For each batch, sample K negatives per positive (or share negatives across the batch); 3) Compute batched dot-products for positives and negatives; 4) Compute sigmoid losses and apply batched gradient updates only to involved vectors.\n\n### Apply It\nScenario: You are given a 200-million-token product description corpus and must train word embeddings for a retrieval system under a 48-hour training budget. The baseline curriculum implementation uses SGD with full softmax and single-example updates. Update the pipeline to be production-feasible.\n\nTasks:\n- Replace full softmax with SGNS and implement a smoothed unigram sampling distribution for negatives.\n- Precompute an alias/sampling table for O(1) negative draws and integrate it into a mini-batching loop.\n- Choose and implement either Hogwild-style asynchronous updates or a synchronous batched update scheme; add checkpointing and basic validation metrics.\n\nExpected outcome/deliverable:\n- A training script or notebook that trains embeddings using SGNS with sampling tables and mini-batches, accompanied by training logs (time per epoch, loss curves) and a small intrinsic evaluation (e.g., nearest-neighbor checks or analogy pairs) demonstrating embeddings trained within the 48-hour constraint.\n\n## Key Takeaways\n- Curriculum: Word2Vec-style embedding training frames learning as optimizing a prediction objective over context windows using SGD updates and mini-batch variants.\n- Curriculum: The canonical objective uses a softmax over the vocabulary and a global learning rate α to control step size during gradient-based optimization.\n- Curriculum: Deriving gradients for the Word2Vec objective and implementing per-window or per-batch SGD updates gives the theoretical foundation for embedding training.\n\n- Gap: Negative sampling (SGNS) and related contrastive objectives are the practical replacements for full softmax when scaling to large vocabularies and corpora.\n- Gap: Unigram-distribution smoothing and precomputed sampling tables are standard engineering practices to make negative sampling effective and fast.\n- Gap: Efficient training at scale requires batching, vectorized operations, and careful choices about synchronous vs asynchronous updates (e.g., Hogwild), plus checkpointing and validation.\n\n- Integration: To move from coursework to production, replace per-window full-softmax SGD with batched SGNS plus smoothed negative sampling and efficient sampling tables.\n- Integration: Combining the curriculum’s optimization fundamentals with gap skills (sampling and engineering) enables scalable, high-quality embedding training suitable for industry workloads.\n\n## Reflection\n- What was the most important thing you learned in this module?\n- Which gap area do you feel least confident about? What would help you strengthen it?\n- How does Training Procedure for Embeddings connect to other topics you have studied?\n\n## Further Reading\n- [Efficient Estimation of Word Representations in Vector Space (Mikolov et al., 2013)](https://arxiv.org/abs/1301.3781) (Research Paper) (Intermediate) — The original Word2Vec paper that introduces skip-gram, negative sampling, subsampling heuristics, and practical implementation notes.  \n- [Noise-contrastive estimation: A new estimation principle for unnormalized statistical models (Gutmann & Hyvärinen, 2010)](https://www.jmlr.org/papers/volume13/gutmann12a/gutmann12a.pdf) (Research Paper) (Advanced) — The foundational paper on NCE, an alternative contrastive estimation approach related to negative sampling.  \n- [TensorFlow sampled_softmax_loss documentation](https://www.tensorflow.org/api_docs/python/tf/nn/sampled_softmax_loss) (Documentation) (Intermediate) — Practical API reference and notes for implementing sampled-softmax objectives in a popular ML framework.  \n- [Hogwild!: A Lock-Free Approach to Parallelizing Stochastic Gradient Descent](https://arxiv.org/abs/1106.5730) (Research Paper) (Advanced) — Describes asynchronous, lock-free updates for SGD, useful background for high-throughput embedding training.  \n- [Official word2vec implementation (GitHub)](https://github.com/tmikolov/word2vec) (Tutorial / Code) (Intermediate) — Reference implementation that demonstrates practical engineering techniques such as negative sampling and sampling-table construction.",
+      "ppt_json": {
+        "topic_name": "Training Procedure for Embeddings",
+        "slide_title": "Negative sampling enables scalable word-embedding training",
+        "severity": "moderate",
+        "curriculum_anchor": "Students know Word2Vec uses context-window SGD, softmax objectives, and a global learning rate α.",
+        "gap_concepts": [
+          {
+            "concept_name": "Skip-gram with Negative Sampling (SGNS)",
+            "definition": "A contrastive objective that trains models to score observed (center, context) pairs higher than k sampled negative words using logistic loss.",
+            "why_it_matters": "Replaces O(V) softmax with O(k) per-update cost so embeddings can be trained on large vocabularies.",
+            "how_it_works": "For each center word, treat each context as a positive pair and draw k negatives from a noise distribution; compute s_pos = u_c·v_t and s_neg_i = u_n_i·v_t and optimize L = -log σ(s_pos) - Σ log σ(-s_neg_i); update only involved vectors via SGD or batched gradient steps.",
+            "impact": "high",
+            "diagram_type": "process_flow",
+            "diagram_data": {
+              "nodes": [
+                "Center word",
+                "Context (positive)",
+                "k Negatives",
+                "Compute losses",
+                "Update vectors"
+              ],
+              "labels": [
+                "v_center",
+                "u_pos",
+                "u_neg set",
+                "σ(s_pos), σ(-s_neg)",
+                "SGD / Hogwild update"
+              ]
+            }
+          },
+          {
+            "concept_name": "Unigram Smoothing & Sampling Tables",
+            "definition": "Use P_n(w) ∝ freq(w)^0.75 for negative draws and build an alias or repeated-array table for O(1) sampling.",
+            "why_it_matters": "Proper smoothing and fast sampling materially affect embedding geometry and make negative sampling practical at scale.",
+            "how_it_works": "Compute smoothed unigram probabilities, fill a large sampling table (or alias structure) so negatives are drawn by random index in constant time; optionally subsample very frequent tokens during preprocessing to reduce trivial pairs.",
+            "impact": "high",
+            "diagram_type": "none",
+            "diagram_data": {
+              "nodes": [],
+              "labels": []
+            }
+          },
+          {
+            "concept_name": "Parallel Training & Numerical Stability",
+            "definition": "Engineering patterns for high-throughput training: Hogwild/asynchronous updates, batched GPU strategies, LR schedules, checkpointing, and stability fixes.",
+            "why_it_matters": "Efficient parallelism and simple stability practices prevent wasted compute and produce reliable embeddings on large corpora.",
+            "how_it_works": "On CPUs use lock-free per-thread updates (Hogwild) to saturate cores; on GPUs batch pairs and use sampled-softmax APIs; apply linear LR decay, periodic checkpoints, and gradient clipping/normalization to avoid divergence.",
+            "impact": "high",
+            "diagram_type": "none",
+            "diagram_data": {
+              "nodes": [],
+              "labels": []
+            }
+          }
+        ],
+        "misconception": {
+          "wrong": "Full softmax always yields better embeddings than negative sampling.",
+          "right": "Negative sampling is a different, scalable objective that often matches or outperforms full softmax in practice."
+        },
+        "top_recommendations": [
+          "Use SGNS with 5–20 negatives and unigram^0.75 noise distribution",
+          "Build an O(1) sampling table (alias or large repeat-array)",
+          "Apply frequent-word subsampling during corpus preprocessing",
+          "Use Hogwild on CPU or batched sampled-softmax on GPU",
+          "Decay learning rate over epochs and checkpoint frequently",
+          "Validate with intrinsic and downstream metrics for early stopping"
+        ]
+      },
+      "script": "Imagine you’re on your first day as an ML engineer, and your teammate says, “We need word embeddings trained on a billion tokens by tomorrow.” Your beautiful full-softmax Word2Vec code… suddenly isn’t going to finish in time.\n\nYou’ve already learned about Word2Vec with context windows, SGD, a softmax over the whole vocabulary, and a single global learning rate alpha. That’s a solid foundation, but there are some important training tricks your course didn’t cover that make embeddings actually trainable at industry scale. Let’s walk through the core one: negative sampling, plus how to sample efficiently and train in parallel without things blowing up.\n\nFirst up: Skip-gram with Negative Sampling, or SGNS. Instead of predicting the exact probability of every word in the vocab, SGNS turns training into a bunch of tiny binary classification problems: “is this context word actually observed with this center word, or is it fake?”  \n\nThe key insight is that you only touch a handful of words per update, not the whole vocabulary. For each center word, you treat each real context as a positive pair. Then you draw, say, 5–20 random “negative” words that didn’t appear in that window.  \n\nIf you’re looking at the slide, you can see the process flow: center word on the left with its vector v_center, a real context word with vector u_pos, and a set of k negatives with vectors u_neg. You compute a score for the positive pair, s_pos = u_pos · v_center, and scores for each negative, s_neg_i. Then you push s_pos up with a sigmoid loss, and push all the s_neg_i down.  \n\nHere’s what makes this different from full softmax: the loss only depends on one positive and k negatives, so each update is O(k) instead of O(vocab size). You run SGD (or mini-batches) and update just those few vectors. That’s why SGNS is the default in most real Word2Vec libraries.\n\nNow let’s shift to how we pick those negatives: unigram smoothing and sampling tables. If you just sample negatives uniformly, or purely proportional to raw frequency, you either over-sample rare junk or drown in stopwords. The common trick is to sample from P_n(w) proportional to freq(w)^0.75. That “0.75” softens the dominance of ultra-frequent words without ignoring them.  \n\nTo make this fast, you precompute a big sampling table or an alias structure once. Then each negative sample is just “pick a random index from this table” in O(1) time. In practice, you also often subsample very frequent tokens, like dropping some “the” or “of” before training, to avoid wasting updates on trivial pairs.\n\nBuilding on that, we need parallel training and numerical stability. On CPUs, a classic pattern is Hogwild: you let multiple threads read and update the shared embedding matrices without locks. It sounds dangerous, but for sparse updates like SGNS, it usually converges fine and uses all your cores. On GPUs, you typically batch many (center, context) pairs, share or sample negatives for the batch, and compute all dot products in big matrix multiplies.  \n\nTo keep things stable, you decay the learning rate over time, checkpoint periodically so you don’t lose progress, and use simple tricks like gradient clipping if you see divergence or NaNs. These details are boring in slides, but they’re exactly what make training reliable on huge corpora.\n\nNow, a lot of students think, “Full softmax is the ‘real’ objective, so it must always give better embeddings than negative sampling.” But here’s the thing — SGNS isn’t a sloppy approximation, it’s a different contrastive objective. With good negative sampling and smoothing, it often matches or beats full softmax on downstream tasks, while being dramatically cheaper to train.\n\nBefore I wrap up, I want you to pause for a moment and think about this: if you had to swap your current softmax training loop for SGNS, what concrete changes would you make to sampling, to the loss, and to which vectors get updated?\n\nSo here’s what I want you to take away from this. First, SGNS reframes training as “real vs fake” context classification, cutting the cost from full softmax over the entire vocabulary to a handful of negatives per update. Second, unigram^0.75 smoothing plus an O(1) sampling table is crucial for both embedding quality and speed. Third, parallel patterns like Hogwild or batched GPU training, together with learning-rate decay and checkpointing, are what make large-scale embedding training practical. Master these, and you’re much closer to production-ready embedding pipelines than a typical Word2Vec homework solution."
+    },
+    "Word Vector Geometry": {
+      "module_md": "## Module Overview\nImagine you are building a semantic search system and a user searches for \"Seattle motel\" — you want documents mentioning \"Seattle hotel\" to rank highly. Word Vector Geometry explains how learned dense word vectors position semantically related words close together so such matches become possible. This topic matters now because industry systems rely on embedding geometry for search, retrieval, and many downstream NLP tasks, and practical deployment requires understanding how geometric artifacts (norms, dominant directions, anisotropy) affect similarity and retrieval quality. In this module you will deepen the course-level view of embeddings (dot-product similarity, learned vector positions) by learning why raw geometry can mislead retrieval and how post-processing (normalization, removing dominant components, whitening) and evaluation choices change results in practice. Ready to see how a few linear-algebra moves can make your embeddings far more useful in the real world?\n\n## Learning Objectives\n- Explain how Word2Vec represents words as dense vectors and how dot-product similarity yields probabilities in the skip-gram model (Curriculum)\n- Describe how semantic relationships are reflected by relative vector positions and nearest-neighbor rankings in embedding space (Curriculum)\n- Differentiate raw dot-product similarity from cosine similarity and explain the practical consequences of vector norms for similarity rankings (Gap)\n- Apply mean-centering and \"remove top principal component(s)\" post-processing to a learned embedding matrix and evaluate its effect on nearest-neighbor retrieval (Gap)\n- Analyze embedding anisotropy in a trained model by computing variance along principal components and recommend remediation steps (Gap)\n\n## Curriculum Coverage\nThe course teaches that each word in a fixed vocabulary is represented by a dense d-dimensional vector (an embedding) learned from a large corpus. The Word2Vec skip-gram framework is presented: for each center word c and context word o within a window, the model uses the dot product of two vectors (u_o^T v_c) inside a softmax to form P(o | c), and the training procedure adjusts vectors to maximize context prediction probability across the corpus. The curriculum emphasizes that larger dot products correspond to larger predicted probabilities and shows example vectors for words such as \"banking\" and \"monetary\" to illustrate how meaning is captured numerically.\n\nThe curriculum covers distributional semantics (\"you shall know a word by the company it keeps\"), the practical issue with one-hot vectors, and the benefits of distributed dense representations. It also covers optimization basics for Word2Vec, that each word typically has two vectors (center and outside), and that we compute gradients for all vectors during training. Visualizations are used to show how meanings emerge from vector positions and dot-product similarity.\n\nBefore continuing, make sure you can answer:\n- What role does the dot product play in the Word2Vec skip-gram prediction function?\n- Why are one-hot vectors inadequate for measuring semantic similarity?\n\n## Identified Gaps\nThe curriculum provides a solid conceptual and mathematical grounding in learning embeddings via Word2Vec but omits several practical geometric issues industry practitioners encounter. First, it does not explicitly address how vector norms interact with dot-product similarity or why practitioners often prefer cosine similarity or normalization for meaningful nearest-neighbor retrieval — a frequent industry concern when embeddings are used for search and recommendations. (Priority: Critical) Second, the curriculum does not teach post-processing techniques for embedding spaces (mean-centering, removing dominant principal components, whitening) that improve isotropy and downstream performance — this is a common practical step in production pipelines. (Priority: Critical) Third, topics such as subword-based embeddings for OOV/morphology, alignment across embedding spaces, bias diagnostics, and scalable retrieval (ANN) are absent or underdeveloped; each is important for deployable systems. (Priority: Important to Nice-to-have)\n\nEach of these gaps is an opportunity: learning them raises employability because many teams need engineers who not only train embeddings but also diagnose geometry, apply corrective transforms, and evaluate real-world retrieval behavior.\n\n## Core Content\n\n### What You Need to Learn\nBuilding on the curriculum concept that similarity is measured by the dot product between learned vectors, we now examine two critical practical aspects: (1) the difference between dot product and cosine similarity (and the effect of vector norms), and (2) post-processing to reduce anisotropy (mean-centering and removing top principal components).\n\n1) Dot product vs cosine similarity, and the role of norms\n- Definition: The dot product of two vectors u and v is u·v = sum_i u_i v_i. Cosine similarity is (u·v) / (||u|| ||v||), i.e., the dot product normalized by both vector norms.\n- Why it matters: In many trained embedding sets, vector norms vary systematically (often correlating with word frequency or other training artifacts). If norms differ, raw dot-product rankings can be dominated by high-norm vectors even if their directions are less semantically aligned. Cosine similarity removes the influence of magnitude by comparing directions only.\n- Walkthrough / example:\n  1. Given embedding matrix E (rows are word vectors), pick a query word q with vector v_q.\n  2. Compute raw scores s_w = v_q · v_w for all vocabulary words w.\n  3. Compute cosine scores c_w = (v_q · v_w) / (||v_q|| ||v_w||).\n  4. Compare top-k lists from s and c. In practice you may find frequent but semantically weak words rise in s but not in c.\n- Application steps:\n  1. For a trained Word2Vec model, compute ||v_w|| for all words and plot norm vs log-frequency to inspect correlation.\n  2. If a positive correlation appears, use cosine similarity for nearest neighbors or normalize vectors to unit length (v := v / ||v||).\n  3. Re-evaluate retrieval quality on a small validation set (e.g., known synonyms or analogy probes).\n- Industry example: In search ranking, teams frequently normalize document and query embeddings to cosine space before nearest-neighbor retrieval to avoid popularity or frequency skew in dot-product-based scores.\n\n2) Post-processing to reduce anisotropy: mean-centering and \"all-but-the-top\"\n- Definition: Embedding anisotropy refers to the phenomenon that embeddings occupy a narrow cone in high-dimensional space and have dominant common directions (principal components) that capture variance unrelated to fine-grained semantics. Mean-centering subtracts the mean vector from all embeddings; removing top principal component(s) projects embeddings away from dominant directions. \"All-but-the-top\" is the practice of mean-centering then removing the top k principal components.\n- How it works / walkthrough:\n  1. Compute the mean vector m = (1/|V|) sum_{w in V} v_w and subtract: v'_w = v_w - m.\n  2. Compute the PCA of the mean-centered vectors and identify the top principal component p1 (and possibly p2,...,pk).\n  3. Remove component: v''_w = v'_w - (p1^T v'_w) p1 (repeat for additional PCs).\n  4. Optionally renormalize vectors to unit length.\n- Step-by-step application:\n  1. Export the embedding matrix E from your Word2Vec model.\n  2. Mean-center E by rows (subtract mean across vocabulary).\n  3. Run PCA (e.g., via SVD) on the mean-centered matrix and extract top k components.\n  4. For each row vector, subtract its projection onto the top k components.\n  5. Use the processed embeddings for nearest-neighbor retrieval and downstream tasks; measure change in intrinsic metrics (e.g., similarity recall) and in a downstream validation set.\n- Industry example: Practitioners applying \"all-but-the-top\" often report improved isotropy and better nearest-neighbor quality for low-frequency words; teams shipping embedding-based features in production (search/autocomplete) use such post-processing to make embeddings more robust across queries.\n\nBrief summaries of other gaps (where to learn more):\n- Subword embeddings (e.g., FastText): incorporate character n-grams to improve geometry for rare or morphological variants — important for OOV handling; see Further Reading. (Why it matters: Better geometry for rare tokens.)\n- Alignment (Procrustes): align embedding spaces across corpora/languages for lexicon transfer — useful for multilingual applications. (Where to learn more: Procrustes/alignment literature.)\n- Bias diagnostics and debiasing: identify biased directions and evaluate tradeoffs when removing them. (Why it matters: social and legal implications in deployed systems.)\n- Scalable retrieval (FAISS/ANN): geometry choices interact with ANN search performance and compression strategies.\n\n### Common Misconceptions\n- Misconception: \"Dot product and cosine similarity are always interchangeable.\"\n  - Why it's wrong: Raw dot products incorporate vector norms; if norms vary systematically (e.g., by frequency), dot-product rankings can be dominated by magnitude rather than direction. Cosine isolates direction and often yields more semantically meaningful neighbors.\n  - Correct understanding: Choose similarity metric based on whether magnitude encodes useful signal (some tasks use dot product with learned norms) or whether you want to focus on directional semantics (use cosine or normalized vectors).\n\n- Misconception: \"Removing the mean or top principal component will always harm embedding quality.\"\n  - Why it's wrong: While removing components can discard some signal, many practitioners find that mean-centering and removing dominant components increases isotropy and improves nearest-neighbor quality and downstream performance.\n  - Correct understanding: These transforms trade off some global signal for better local semantic discrimination; validate results on relevant downstream or intrinsic benchmarks.\n\n- Misconception: \"If Word2Vec training produced embeddings that work on analogies, no further post-processing is needed.\"\n  - Why it's wrong: Analogy performance can coexist with anisotropy and frequency-driven norms that hurt retrieval or downstream tasks. Post-processing can improve practical retrieval even when analogies look good.\n  - Correct understanding: Evaluate embeddings on the tasks you care about and apply corrective transforms where they improve real-world performance.\n\n## Industry Context\nRoles that value Word Vector Geometry include:\n- NLP Engineer / ML Engineer (search, recommender systems)\n- Search Relevance Engineer (information retrieval teams)\n- Applied NLP Researcher (productionizing embeddings and diagnostics)\n\nReal-world use case (search relevance): An e-commerce company uses product title and query embeddings for semantic search. Raw Word2Vec-style embeddings produced high dot-product scores for very frequent but semantically broad tokens, resulting in noisy nearest neighbors and poor search precision. The team inspected vector norms, found a frequency–norm correlation, normalized vectors to cosine space, and applied mean-centering plus removal of the top principal component. After these geometric corrections, search relevance metrics (e.g., click-through precision@10) and retrieval of niche product synonyms improved measurably. The outcome: better user satisfaction and higher conversion rates.\n\nEmployers look for skills beyond training embeddings: diagnosing embedding geometry (norm plots, PCA), applying principled post-processing, choosing appropriate similarity metrics, and evaluating impact on downstream tasks. Familiarity with subword methods, alignment techniques, and scalable nearest-neighbor retrieval further strengthens candidacy for production roles.\n\n## Practice & Review\n\n### Quick Check\n1. What function does the softmax play in the Word2Vec skip-gram model?  \n> Answer: It turns dot-product scores (u_o^T v_c) into a probability distribution over outside words P(o | c).  \n2. Why are one-hot vectors inadequate for measuring semantic similarity?  \n> Answer: One-hot vectors are orthogonal and give no graded notion of similarity; they cannot encode that \"motel\" and \"hotel\" are similar.  \n3. Conceptual: If you find that high-frequency words dominate your nearest-neighbor lists under dot-product similarity, what geometric properties should you inspect and what immediate fix can you try?  \n> Answer: Inspect vector norms vs frequency (norm–frequency correlation) and the embedding mean; try normalizing vectors to unit length (cosine similarity) and consider mean-centering and top-PC removal.  \n4. Application: Given embeddings E and a query vector v_q, list the steps to produce cosine-based top-5 neighbors using mean-centered and top-1-removed embeddings.  \n> Answer: 1) Compute mean m and subtract from each row of E and v_q; 2) Compute top PC p1 of mean-centered E and subtract projection from each vector and v_q; 3) Normalize each processed vector to unit length; 4) Compute cosine (dot) between v_q and all rows and return top-5.\n\n### Apply It\nScenario: You are on a search team for a travel-booking site. Your Word2Vec-style embeddings were trained on booking descriptions. Product managers report that queries like \"budget motel Seattle\" return poor matches dominated by highly frequent brand terms. You must diagnose and improve embedding-based retrieval quality within a week while preserving existing downstream features.\n\nTasks:\n- Compute and visualize the distribution of vector norms and their correlation with word frequency; report findings.\n- Implement mean-centering and remove the top 1–3 principal components from the embedding matrix; produce normalized embeddings.\n- Compare top-10 nearest neighbors for a set of test queries using raw dot-product, cosine-normalized, and post-processed embeddings; quantify improvements using a small labeled validation set.\n- Deliver a short report with recommended production changes and a validation chart showing relevance improvement.\n\nExpected deliverable: A notebook with code and plots (norm vs frequency, PCA variance explained), top-k neighbor comparisons, and a 1–2 page report summarizing the remediation and recommended rollout plan.\n\n## Key Takeaways\n- Curriculum: Word2Vec trains dense vectors so words with similar contexts have similar vectors, using the dot product inside a softmax to predict contexts.\n- Curriculum: Dot product between learned center and outside vectors is the core scoring mechanism in the skip-gram objective.\n- Curriculum: Visualizing and inspecting learned vectors helps reveal semantic relationships and nearest-neighbor structure.\n- Gap: Dot product rankings can be dominated by vector norms; cosine similarity (or explicit normalization) removes magnitude and often yields more semantically meaningful neighbors.\n- Gap: Embedding spaces are often anisotropic (dominated by a mean or top PCs); mean-centering and \"all-but-the-top\" (removing top principal components) increase isotropy and can improve retrieval and downstream performance.\n- Gap: Subword embeddings (e.g., character n-grams), alignment (Procrustes), bias diagnostics, and scalable ANN retrieval are practical extensions important for production systems.\n- Integration: Always validate geometric fixes (normalization, PC removal) on the downstream task you care about; improvements in intrinsic metrics do not guarantee downstream gains.\n- Integration: Combining curriculum knowledge (how embeddings are trained and why dot products matter) with gap techniques (normalization, PCA-based post-processing) yields more robust, deployable embedding systems.\n\n## Reflection\n- What was the most important thing you learned in this module?\n- Which gap area do you feel least confident about? What would help you strengthen it?\n- How does Word Vector Geometry connect to other topics you have studied?\n\n## Further Reading\n- [Neural Word Embedding as Implicit Matrix Factorization (Levy & Goldberg, 2014)](https://arxiv.org/abs/1401.2454) (Research Paper) (Advanced) — Explains connections between skip-gram objectives and matrix factorization, useful for understanding geometric sources of embedding structure.  \n- [All-but-the-top: Simple but Effective Postprocessing for Word Representations (Mu & Viswanath, 2018)](https://arxiv.org/abs/1702.01417) (Research Paper) (Intermediate) — Introduces mean-centering and top-PC removal and demonstrates empirical benefits for isotropy and similarity tasks.  \n- [Enriching Word Vectors with Subword Information (FastText, Bojanowski et al., 2017)](https://arxiv.org/abs/1607.04606) (Research Paper) (Intermediate) — Describes subword/character-n-gram approaches that improve geometry for rare and morphological variants.  \n- [FAISS: A library for efficient similarity search (GitHub)](https://github.com/facebookresearch/faiss) (Documentation) (Intermediate) — Practical toolkit for scalable nearest-neighbor retrieval on embedding spaces; relevant when geometry is used for real-time search.",
+      "ppt_json": {
+        "topic_name": "Word Vector Geometry",
+        "slide_title": "Vector norms and dominant directions distort semantic retrieval",
+        "severity": "moderate",
+        "curriculum_anchor": "Students know Word2Vec learns dense word/context vectors and uses dot products in the softmax to reflect similarity.",
+        "gap_concepts": [
+          {
+            "concept_name": "Cosine vs Dot Product",
+            "definition": "Dot product scores include vector length; cosine similarity normalizes by lengths to measure angle (directional similarity).",
+            "why_it_matters": "Norm–frequency correlations can make raw dot-product rankings favor common words over true semantic neighbors.",
+            "how_it_works": "Compute raw score s = u^T v and cosine s_cos = (u^T v)/(||u|| ||v||). For example, a frequent word with large ||u|| may outrank a semantically closer rare word under dot product but not under cosine.",
+            "impact": "high",
+            "diagram_type": "comparison",
+            "diagram_data": {
+              "nodes": [
+                "Query vector",
+                "High-norm candidate",
+                "Low-norm candidate",
+                "Dot-product rank",
+                "Cosine rank"
+              ],
+              "labels": [
+                "v_q",
+                "Large ||u|| (frequent)",
+                "Small ||u|| (rare)",
+                "Favours large norms",
+                "Favours directional match"
+              ]
+            }
+          },
+          {
+            "concept_name": "All-but-the-top Postprocessing",
+            "definition": "Mean-centering and removing top principal component(s) to reduce dominant corpus-wide directions and increase isotropy.",
+            "why_it_matters": "Removing dominant directions often exposes finer semantic contrasts and improves nearest-neighbor quality.",
+            "how_it_works": "Subtract the global mean, run PCA on embeddings, then remove projection(s) on top-k PCs (k≈1–3). Example: after removing top PC, 'motel' neighbors shift from frequent generic words toward 'hotel' and 'inn'.",
+            "impact": "medium",
+            "diagram_type": "process_flow",
+            "diagram_data": {
+              "nodes": [
+                "Embeddings",
+                "Mean center",
+                "PCA",
+                "Remove top PCs",
+                "Postprocessed embeddings"
+              ],
+              "labels": [
+                "Raw vectors",
+                "Subtract mean",
+                "Find principal axes",
+                "Subtract projections",
+                "Isotropized vectors"
+              ]
+            }
+          },
+          {
+            "concept_name": "Subword (n-gram) Embeddings",
+            "definition": "Compose word vectors from character n-gram vectors so rare and OOV words get meaningful embeddings.",
+            "why_it_matters": "Improves geometry and nearest neighbors for low-frequency, morphological, or unseen tokens in production.",
+            "how_it_works": "Represent each word as the sum/average of its character n-gram vectors (FastText-style). For example, 'motels' shares n-grams with 'motel' and 'hotel', pulling their vectors closer.",
+            "impact": "medium",
+            "diagram_type": "concept_map",
+            "diagram_data": {
+              "nodes": [
+                "Word token",
+                "Character n-grams",
+                "n-gram vectors",
+                "Composed embedding",
+                "Improved OOV handling"
+              ],
+              "labels": [
+                "Input",
+                "Subword chunks",
+                "Learned pieces",
+                "Summed/averaged",
+                "Better neighbors"
+              ]
+            }
+          }
+        ],
+        "misconception": {
+          "wrong": "Dot product and cosine always produce the same nearest neighbors.",
+          "right": "They differ when vector norms vary; cosine removes length influence and often yields more semantic neighbors."
+        },
+        "top_recommendations": [
+          "Compute norm vs frequency correlation and inspect top-norm tokens",
+          "Prefer cosine similarity or normalize vectors for retrieval",
+          "Apply mean-centering and remove top 1–3 principal components",
+          "Test FastText-style subword embeddings for rare/OOV words",
+          "Evaluate changes on intrinsic and downstream retrieval metrics"
+        ]
+      },
+      "script": "Most students think once you’ve trained Word2Vec, “similarity” is a solved problem. But your embeddings’ geometry can quietly wreck your nearest neighbors and search results if you’re not paying attention to it.\n\nYou’ve already learned that Word2Vec learns dense word and context vectors, and that it uses their dot product inside a softmax to model similarity and predict context words. That’s a solid foundation, but there are some important geometric details your course didn’t cover that really matter once you start using these vectors for search, recommendation, or any real retrieval system.\n\nLet’s start with cosine versus dot product. The dot product between two word vectors mixes two things: how aligned their directions are, and how long each vector is. Cosine similarity divides by the lengths, so it keeps only the angle, the pure directional match. The key insight here is that in trained embeddings, vector length isn’t random: norms usually grow with word frequency. So if you rank neighbors by raw dot product, you’re often rewarding “popular” high‑frequency words rather than the most semantically similar ones. If you’re looking at the slide, you can see the comparison diagram: the query vector in the middle, one big‑norm frequent candidate, one small‑norm rare candidate. Dot‑product ranking tends to favor the big one, even if its direction’s a bit off. Cosine ranking, by normalizing, tends to favor the one whose direction actually matches the query best. This is where it gets important: for semantic search, we usually care more about “which way the vector points” than how big it is, so teams often explicitly normalize to unit length or compute cosine for retrieval.\n\nNow let’s shift to all‑but‑the‑top postprocessing. Real embedding spaces are often anisotropic: most vectors live in a narrow cone and share a few dominant directions that reflect very generic corpus patterns, not fine‑grained meaning. All‑but‑the‑top tries to fix that. If you’re looking at the process‑flow diagram, we start with the raw embeddings, then mean‑center them by subtracting the average vector. Next, we run PCA to find the directions that explain the most variance across the vocabulary. Finally, we subtract each vector’s projection on the top one to three principal components. The key idea is that you’re peeling off those “background” directions so the remaining space is more isotropic and local semantic differences stand out better. In practice, after this step, neighbors of a word like “motel” shift away from extremely frequent, generic words and toward things like “hotel” and “inn”.\n\nBuilding on that, subword, or n‑gram, embeddings tackle a different geometric problem: rare and out‑of‑vocabulary words. Instead of giving each token its own standalone vector, you build a word vector by composing the vectors of its character n‑grams. On the slide’s concept map, you can see: start from the word token, break it into subword chunks, map those to n‑gram vectors, then sum or average them to get a composed embedding. Here’s what makes this different: now “motels” shares many n‑grams with “motel” and “hotel”, so even if “motels” is rare, its vector lands close to that semantic neighborhood. That improves geometry and nearest neighbors for low‑frequency and unseen forms in production systems.\n\nNow, a lot of students walk away thinking dot product and cosine are basically interchangeable, and that they’ll give you the same nearest neighbors anyway. But here’s the thing: as soon as vector norms vary, especially with frequency, they really don’t. Dot product bakes in length, so high‑norm words can dominate your rankings. Cosine strips length out and focuses on direction, which often gives you neighbors that are actually more semantically related.\n\nBefore I wrap up, I want you to pause for a moment and think about this: if you took a trained Word2Vec model you’ve seen, and switched your neighbor search from raw dot product to cosine on normalized vectors, which words’ neighbors do you expect would change the most, and why?\n\nSo here’s what I want you to take away from this. First, dot product and cosine are not the same: norms matter, and cosine removes that length effect. Second, embedding spaces have dominant directions that can blur fine‑grained meaning, and all‑but‑the‑top postprocessing can sharpen your neighbors. Third, subword embeddings reshape geometry for rare and unseen tokens by sharing information across word forms. Once you understand and control this geometry, your embeddings become much more reliable tools in real systems."
+    },
+    "Self-Attention Fundamentals": {
+      "module_md": "## Module Overview\nImagine you are building a Transformer-based language model that must decide which previous words matter when predicting the next token — for example, resolving pronouns in a long sentence or aligning source/target phrases in translation. Self-attention Fundamentals provide the mechanism that lets each token compute queries, keys, and values, compare them pairwise, and form context-dependent weighted sums that drive those decisions. This topic matters now because attention is the core of Transformer models widely used in industry, and production systems require not only the basic math but also stable, efficient implementations (numerical stability, masking, projection shapes, and scaling). In this module you will learn those practical, production-minded additions beyond the course: how and why to use scaled dot-product attention, projection matrix shapes and reshaping for multi-heads, and implementation best-practices for masking and softmax stability. Ready to turn textbook attention into reliable, production-ready attention? \n\n## Learning Objectives\n- Explain how queries (Q), keys (K), values (V), pairwise scores e_ij = q_i · k_j, softmax over j, and the weighted sum of V produce per-token attentive outputs (Curriculum)\n- Implement scaled dot-product attention including the 1/sqrt(d_k) scaling and a numerically stable masked softmax for causal masking (Gap)\n- Describe the shapes and roles of learned projection matrices W_Q, W_K, W_V, and W_O, and perform the per-head reshaping/concatenation required for multi-head attention (Gap)\n- Apply masking, softmax-stabilization (subtract-max), and attention-dropout in a batched attention implementation and diagnose common shape/mask errors (Gap)\n- Evaluate O(n^2) runtime/memory trade-offs for standard self-attention and compare when to consider sparse or low-rank approximations (Apply) (Gap)\n\n## Curriculum Coverage\nThe curriculum teaches self-attention as the foundational mechanism for Transformer models. It presents the per-token construction of queries, keys, and values and shows how attention computes all pairwise dot products to produce attention scores. The matrix form is emphasized: given input X (n × d), linear projections produce XQ, XK, XV, and attention is computed by matrix-multiplying queries with keys' transpose to get an n × n score matrix, applying softmax across each query's row, and using that to weight values and produce an output of shape n × d.\n\nMulti-head attention is covered: separate Q, K, V projection matrices for each head (Q_l, K_l, V_l) produce independent attention outputs which are concatenated and mixed with an output projection Y. The curriculum also treats necessities around self-attention: positional representations (to encode order because attention is permutation-invariant), masking (to prevent peeking at future tokens during parallelized computation), and the addition of nonlinearities via a post-attention feed-forward network to give depth beyond pure weighted averages. Practical matrix-flow explanations (sequence-stacked form) are included to connect per-token math to batched matrix operations.\n\nBefore continuing, make sure you can answer:\n- What are the three per-token vectors used in self-attention and how are attention scores computed from them?\n- How is multi-head attention constructed from single-head attention computations?\n- Why are positional representations required in self-attention architectures?\n\n## Identified Gaps\nThe curriculum gives a solid theoretical and matrix-level grounding in self-attention, but industry demands additional, practical knowledge to implement and operate attention at scale. Missing or underdeveloped areas include: the scaled dot-product detail (the 1/sqrt(d_k) factor) and numerical-stability practices for softmax, concrete shapes and learned projection matrices with per-head dimensioning and reshaping rules, masked/causal softmax broadcasting and attention-dropout, and awareness of runtime/memory scaling plus common efficient alternatives. These are opportunities: mastering them increases employability for engineering roles that implement or optimize Transformers and reduces time lost troubleshooting training instabilities and mask bugs.\n\nPriorities:\n- Scaled dot-product and numerical-stability practices: (Critical) — fundamental to stable training and ubiquitous in production.\n- Projection matrix shapes, per-head reshaping, and correct mask application: (Critical) — frequent source of implementation bugs and needed for multi-head implementations.\n- O(n^2) complexity awareness and familiarity with efficient/approximate attention variants: (Important) — crucial when working with long contexts or tight memory budgets.\n- Diagnostic and interpretability practices (head pruning, visualization caveats): (Important/Nice-to-have) — valuable for model analysis and optimization, but secondary to getting attention to run reliably.\n\n## Core Content\n\n### What You Need to Learn\nTop gaps to close: (1) Scaled dot-product attention and numerical stability; (2) Learned projection matrices, per-head shapes, masking, and correct batched implementation.\n\nGap 1 — Scaled dot-product attention and numerical-stability\n- Building on what you studied about e_ij = q_i · k_j and softmax, scaled dot-product attention modifies the raw scores before softmax to keep logits in a numerically well-behaved range. Definition: scaled dot-product attention divides query-key dot products by sqrt(d_k) (the per-head key dimensionality) before applying softmax; this prevents the dot products from growing with dimension and producing extremely peaked/flat softmax outputs that harm gradients.\n- How it works (walkthrough):\n  1. Compute Q_head and K_head where each has dimension d_k (after projection and reshaping).\n  2. Compute scores S = Q_head × K_head^T (shape: n_q × n_k).\n  3. Scale: S_scaled = S / sqrt(d_k).\n  4. (Optional) For causal masking, set masked positions to a large negative value (see Gap 2 for broadcasting/masking).\n  5. For numerical stability, subtract the row-wise maximum from S_scaled before exponentiating: S_shifted = S_scaled − max_row(S_scaled).\n  6. Apply softmax across each row to get attention weights A.\n  7. Optionally apply attention-dropout to A.\n  8. Output = A × V_head.\n- Practical example from industry practice: In production Transformer implementations (e.g., the original Transformer design), attention uses 1/sqrt(d_k) scaling; implementers also subtract the row maximum before softmax to avoid overflow/underflow, and they apply attention-dropout on the normalized weights during training to regularize attention patterns.\n\nGap 2 — Projection matrices, head shapes, masking, and batched implementation\n- Building on the curriculum matrix-view of XQ, XK, XV, we now define the learned projection matrices and the per-head reshape/concat steps. Definition: W_Q, W_K, W_V ∈ R^{d_model × d_model} (or separate per-head blocks) are learned linear projections that map input vectors to query/key/value spaces; for h heads, each head uses d_k = d_model / h (commonly) so that after projection you reshape the (n × d_model) projected tensor into (n × h × d_k), transpose to (h × n × d_k) to treat heads as a batch, compute attention per head, then concatenate head outputs and apply an output projection W_O ∈ R^{d_model × d_model}.\n- How it works (step-by-step implementation checklist):\n  1. Given input X of shape (batch, n, d_model), compute Q = X × W_Q, K = X × W_K, V = X × W_V producing (batch, n, d_model) each.\n  2. Reshape each to (batch, n, h, d_k) and transpose to (batch, h, n, d_k) or (batch*h, n, d_k) depending on framework; this lets you compute attention for all heads in parallel.\n  3. For each head, compute S = Q × K^T → shape (batch, h, n, n), scale by 1/sqrt(d_k).\n  4. Apply masks (padding or causal). Masks must broadcast to (batch, h, n, n) or be unsqueezed appropriately; masked entries are set to -inf (or a large negative) before softmax.\n  5. Apply numerical-stable softmax (subtract max per row), attention-dropout, then multiply by V to get per-head outputs (batch, h, n, d_k).\n  6. Concatenate heads back to (batch, n, d_model) and apply W_O to mix head outputs.\n- Concrete industry-practice notes: implementers often treat the head axis as a batch dimension for efficient GEMM operations, ensure masks are broadcast-compatible (e.g., expand dims to match head count), and use attention-dropout on the weight matrix A. Unit tests typically check shapes after each reshape and verify that masked positions receive zero total attention in causal settings.\n\nLesser gaps (brief summaries)\n- O(n^2) complexity and efficient alternatives: standard self-attention is quadratic in sequence length and memory; when handling long contexts, engineers consider sparse/local attention (Longformer/BigBird), low-rank or kernelized approximations (Linformer, Performer), or Nyström approximations — each trades accuracy, memory, and speed differently. Learn more from the referenced papers in Further Reading.\n- Interpretability caveats and diagnostics: attention weights are useful diagnostics but not definitive explanations; head pruning and visualization are practical tools—see Further Reading.\n\n### Common Misconceptions\n- Misconception: \"You can omit the 1/sqrt(d_k) scaling without consequence.\"  \n  Why it's wrong: Without scaling, dot-product magnitudes grow with d_k, making softmax inputs large and potentially causing vanishing gradients or overly sharp distributions.  \n  Correct understanding: Always scale by 1/sqrt(d_k) (or equivalent temperature tuning) to stabilize softmax behavior across different head sizes.\n\n- Misconception: \"Masking is simply an elementwise multiply after softmax.\"  \n  Why it's wrong: Multiplying by zero after softmax does not prevent future information from influencing softmax normalization; masks must be applied to logits (e.g., set logits to -inf or a large negative) before softmax so masked positions do not contribute to normalization.  \n  Correct understanding: Apply masks to the scaled logits with correct broadcasting, then apply a numerically-stable softmax.\n\n- Misconception: \"Attention weights equal interpretability explanations.\"  \n  Why it's wrong: Attention shows how the model distributes weight given its representations, but weights alone do not establish causal attribution for model decisions.  \n  Correct understanding: Use attention as one diagnostic among others (probing, ablation, head pruning) and be cautious interpreting it as explanation.\n\n## Industry Context\nRoles that value these skills include: (1) NLP/ML Engineer implementing Transformer models for production inference and training, (2) Research Engineer or Applied Scientist working on model architecture or efficiency improvements, and (3) ML Infrastructure Engineer optimizing batched attention performance and memory usage. Employers expect familiarity with both the mathematical core of attention and implementation practices that keep models numerically stable and efficient.\n\nReal-world use case (detailed): A machine-translation service uses a Transformer encoder-decoder. The encoder produces contextual representations of a source sentence; the decoder uses cross-attention (queries from the decoder, keys and values from the encoder outputs) to focus on relevant source positions when generating each target token. In production, the team must implement scaled dot-product attention with causal masking and attention-dropout, ensure projection matrix shapes and reshaping steps are correct for multi-head attention, and profile attention O(n^2) memory usage to decide maximum input sizes or whether to adopt sparse attention for long documents. The outcome: stable, high-quality translations with predictable latency and memory behavior.\n\nWhat employers look for: practical implementation experience with Q/K/V projections and multi-head reshaping, demonstrated understanding of scaling and numerical-stability fixes, experience applying masks correctly in batched contexts, and familiarity with trade-offs of efficient/approximate attention methods when deploying models to handle long sequences.\n\n## Practice & Review\n\n### Quick Check\n1. What are the three vectors computed per token in self-attention and how is a single attention score e_ij formed?  \n> Answer: Queries (Q), Keys (K), Values (V); e_ij = q_i · k_j (dot product).\n\n2. In multi-head attention, after projecting inputs to Q, K, V, how are head outputs combined to produce the final output?  \n> Answer: Each head computes attention independently on its d_k-dimensional slices; head outputs are concatenated and then multiplied by an output projection W_O.\n\n3. Why is scaling by 1/sqrt(d_k) applied before softmax, and what numerical trick further stabilizes softmax computation?  \n> Answer: Scaling prevents dot products from growing with d_k and producing extreme softmax logits; further stability is gained by subtracting the row-wise maximum from logits before softmax.\n\n4. You must implement causal masked attention for a batched input with h heads. Describe one potential broadcasting pitfall and how to avoid it.  \n> Answer: Pitfall: applying a (batch, n, n) mask to a (batch, h, n, n) logits tensor without expanding the head dimension leads to shape mismatch or incorrect broadcasting; avoid by unsqueezing/expanding mask to (batch, 1, n, n) or (batch, h, n, n) before applying.\n\n### Apply It\nScenario: You are adding a new self-attention layer to a Transformer training pipeline. Training diverges on large batch sizes and the attention logits appear to saturate; furthermore, a unit test reveals that causal masking sometimes fails and the model peeks at future tokens. Your task is to fix the attention layer so training is stable and masking is correct.\n\nTasks:\n- Inspect and correct the Q/K projection shapes and the per-head reshaping code; add assertions or unit tests for expected shapes at each step.\n- Add the 1/sqrt(d_k) scaling and implement a row-wise subtract-max before softmax; apply attention-dropout during training.\n- Fix mask application by ensuring masks are applied to logits with correct broadcasting (setting masked logits to a large negative value) before softmax.\n- Run a short training experiment to verify stability and that causal positions receive zero attention to future tokens.\n\nExpected outcome/deliverable: A patched attention implementation with tests verifying shape correctness and masking, logs showing reduced softmax saturation and stable training loss over initial steps, and a short report summarizing the fixes and their effects.\n\n## Key Takeaways\n- Curriculum: Self-attention builds per-token Q/K/V, computes pairwise dot products e_ij = q_i · k_j, applies softmax over j to get attention weights, and uses those weights to produce weighted sums of V.\n- Curriculum: In matrix form, attention is computed via XQ × XK^T → softmax → × XV, and multi-head attention runs multiple such projections in parallel then concatenates head outputs.\n- Curriculum: Positional representations, masking (for causality), and a post-attention feed-forward network are necessary parts of Transformer building blocks.\n- Curriculum: Cross-attention in encoder-decoder models uses queries from the decoder and keys/values from the encoder outputs.\n\n- Gap: Scaled dot-product (1/sqrt(d_k)) and numerical-stability practices (subtract-max before softmax) are critical for stable training at scale.\n- Gap: Correctly handling learned projection matrices (W_Q, W_K, W_V, W_O), per-head reshaping, broadcasting masks, and attention-dropout are frequent implementation requirements in industry.\n- Gap: Standard self-attention has O(n^2) time/memory cost; engineers must know efficient or approximate attention alternatives (sparse, low-rank, kernelized) when working with long contexts.\n\n- Integration: To move from theory to production, combine the curriculum's Q/K/V/matrix understanding with gap knowledge (scaling, masking, projection shapes) to produce a numerically stable, batched, multi-head attention implementation.\n- Integration: Diagnostic practices (unit tests for shapes/masks, attention visualizations) help bridge curriculum concepts and industry robustness requirements.\n\n## Reflection\n- What was the most important thing you learned in this module?\n- Which gap area do you feel least confident about? What would help you strengthen it?\n- How does Self-Attention Fundamentals connect to other topics you have studied?\n\n## Further Reading\n- [Attention Is All You Need (Vaswani et al., 2017)](https://arxiv.org/abs/1706.03762) (Research Paper) — (Advanced) — The original Transformer paper introducing scaled dot-product attention and multi-head attention.\n- [The Annotated Transformer](http://nlp.seas.harvard.edu/2018/04/03/attention.html) (Tutorial) — (Intermediate) — An implementation-focused walkthrough of attention and multi-head mechanics with code explanations.\n- [Transformers from Scratch / PyTorch Transformer Tutorial](https://pytorch.org/tutorials/beginner/transformer_tutorial.html) (Tutorial) — (Intermediate) — Practical implementation notes for Transformer components including attention and masking.\n- [Performer: Rethinking Attention with Performers (linear attention)](https://arxiv.org/abs/2009.14794) (Research Paper) — (Advanced) — One representative efficient attention approach that addresses O(n^2) scaling with kernelized/linearized attention.",
+      "ppt_json": {
+        "topic_name": "Self-Attention Fundamentals",
+        "slide_title": "Curriculum covers attention but omits production-ready stability and shape practices",
+        "severity": "moderate",
+        "curriculum_anchor": "Students know Q/K/V, e_ij = q_i · k_j, softmax-over-keys, and multi-head matrix formulations.",
+        "gap_concepts": [
+          {
+            "concept_name": "Scaled dot-product & stability",
+            "definition": "The production variant divides raw QK^T logits by sqrt(d_k) and applies numerical-stability tricks (subtract-max) plus masking and dropout before softmax.",
+            "why_it_matters": "Without scaling and stability fixes, logits saturate softmax, gradients vanish, and training becomes unstable at large d_model.",
+            "how_it_works": "Compute S = Q K^T, scale S /= sqrt(d_k) (e.g., d_k=128 → divide by ~11.3), add mask values (−1e9) for disallowed positions, subtract row-wise max for numeric stability, then softmax row-wise and apply dropout before multiplying by V. Example: for a query row, masked future tokens receive −1e9 so softmax yields zero weight.",
+            "impact": "high",
+            "diagram_type": "process_flow",
+            "diagram_data": {
+              "nodes": [
+                "Project Q/K/V",
+                "Compute S = QK^T",
+                "Scale & Mask",
+                "Subtract Max",
+                "Softmax → A",
+                "A @ V"
+              ],
+              "labels": [
+                "Per-head projections",
+                "Pairwise scores",
+                "S /= √d_k; add -1e9 mask",
+                "Row-wise stabilization",
+                "Attention weights",
+                "Weighted sum output"
+              ]
+            }
+          },
+          {
+            "concept_name": "Projection shapes & reshaping",
+            "definition": "Concrete layouts for W_Q, W_K, W_V, W_O and the per-head reshape/transpose steps needed to compute multi-head attention correctly.",
+            "why_it_matters": "Incorrect shapes/reshapes are the most common implementation bug and break batching, masking, or downstream projection logic.",
+            "how_it_works": "Given X∈(B,N,D), compute X@W_Q → (B,N,D), then reshape to (B,N,h,d_k) and permute to (B,h,N,d_k) or merge (B*h,N,d_k) for per-head attention; after per-head outputs (B,h,N,d_k) re-permute and concat to (B,N,D) then apply W_O. Example: with B=1,N=128,D=1024,h=8 → d_k=128, ensure all reshapes preserve total dimension D.",
+            "impact": "high",
+            "diagram_type": "concept_map",
+            "diagram_data": {
+              "nodes": [
+                "X (B,N,D)",
+                "W_Q/K/V",
+                "Reshape to Heads",
+                "Per-head Attention",
+                "Concat + W_O"
+              ],
+              "labels": [
+                "Input embeddings",
+                "Linear projections",
+                "→ (B,h,N,d_k)",
+                "Compute scaled softmax",
+                "Final output projection"
+              ]
+            }
+          },
+          {
+            "concept_name": "Attention scaling & alternatives",
+            "definition": "Attention has O(n^2) time/memory with sequence length n; industry uses sparse or low-rank approximations for long contexts.",
+            "why_it_matters": "Quadratic cost limits feasible context length on GPUs; choosing alternatives enables long-context deployment within memory budgets.",
+            "how_it_works": "Dense attention computes N×N score matrices; for long N this blows up (e.g., N=65k is infeasible). Alternatives: sparse sliding/local patterns (Longformer), low-rank projections (Linformer), or kernelized linear attention (Performer) trade accuracy for O(n) or reduced constants. Example: replace full attention with local + global tokens to reduce memory on long documents.",
+            "impact": "medium",
+            "diagram_type": "comparison",
+            "diagram_data": {
+              "nodes": [
+                "Dense O(n^2)",
+                "Sparse patterns",
+                "Low-rank / Kernel"
+              ],
+              "labels": [
+                "Accurate, memory heavy",
+                "Local/strided attention",
+                "Linearized or low-rank approximation"
+              ]
+            }
+          }
+        ],
+        "misconception": {
+          "wrong": "Attention weights are direct explanations of model decisions.",
+          "right": "Attention maps are useful diagnostics but not causal explanations; combine with other analyses."
+        },
+        "top_recommendations": [
+          "Always scale logits by 1/sqrt(d_k)",
+          "Subtract row-wise max before softmax",
+          "Add masked positions as large negative values (e.g., -1e9)",
+          "Unit-test masking and reshape edge cases",
+          "Profile attention memory and consider sparse/linear alternatives",
+          "Treat attention maps as diagnostic, not proof"
+        ]
+      },
+      "script": "Imagine you’re on your first day as an ML engineer, and your brand‑new Transformer keeps blowing up in training… even though the attention math looks exactly like what you learned in class. What’s actually going wrong?\n\nYou’ve already learned about queries, keys, values, eᵢⱼ = qᵢ · kⱼ, softmax over keys, and the multi‑head matrix form of attention. That’s a solid foundation, but production models need extra details to stay numerically stable, handle shapes correctly, and scale to long sequences. Let’s close those gaps so your mental picture of attention matches what real code is doing.\n\nFirst, scaled dot‑product and stability. In theory you can just take QKᵀ, softmax, then multiply by V. In practice, that breaks once dₖ gets big. The key insight is that dot products grow with dimension, so the logits going into softmax become huge, the distribution gets extremely peaked, and gradients basically vanish. To fix this, production attention divides the score matrix S = QKᵀ by √dₖ, per head. With dₖ = 128, you’re dividing every logit by about 11.3, which keeps them in a reasonable range.\n\nThis is where it gets important: you also need a numerically stable softmax. You add your mask as a giant negative number, like −1e9, to disallowed positions, then subtract the row‑wise maximum before exponentiating. That “subtract max” doesn’t change the softmax result, but it prevents overflow. If you’re looking at the process‑flow diagram, this is the “Scale & Mask” box, then “Subtract Max,” then softmax to get A, apply dropout on A, and finally A @ V to get the output. For a causal mask, all future tokens in a row get −1e9, so after softmax they get essentially zero attention.\n\nNow let’s shift to projection shapes and reshaping. You already know there are multiple heads; the tricky part is keeping the tensor shapes straight. The key idea: every reshape must preserve total dimension D. Start with X of shape (B, N, D). You project once per type: Q = X W_Q, K = X W_K, V = X W_V, all still (B, N, D). Then you reshape each to (B, N, h, dₖ) where h is heads and dₖ = D / h, and permute to (B, h, N, dₖ). Now each head acts like its own mini‑batch.\n\nPer head you compute S = QKᵀ with shape (B, h, N, N), apply the same scaling, masking, subtract‑max, and softmax, then A @ V gives you (B, h, N, dₖ). Finally, you re‑permute back to (B, N, h, dₖ), reshape to (B, N, D), and apply W_O. If you’re looking at the concept‑map diagram, you can see that flow: X, then W_Q/K/V, reshape to heads, per‑head attention, then concat and W_O. Most real‑world bugs in attention come from messing up one of those reshapes or forgetting to broadcast the mask to (B, h, N, N), so engineers write unit tests specifically for these shape and mask edge cases.\n\nFinally, attention scaling and alternatives. Standard attention builds an N×N score matrix per head, which means O(N²) time and memory. For long sequences, that blows up. So industry models often swap in approximate schemes: sparse local windows, a mix of local plus a few global tokens, or low‑rank and kernelized variants that make attention closer to O(N). The trade‑off is less exact attention but feasible long‑context inference.\n\nNow, a lot of students think the brighter a cell is on an attention heatmap, the more that token is “the reason” for the model’s prediction. But attention weights aren’t guaranteed causal explanations; they’re just one view of how information’s being routed given the current representations. In practice, people treat them as diagnostics and combine them with ablations or probing, not as proof of why the model decided something.\n\nBefore I wrap up, pause for a moment and see if you can mentally walk through the full production attention pipeline: from X, to Q/K/V, to per‑head reshape, to scaled and masked logits, to softmax, to A @ V, and back through W_O.\n\nSo here’s what I want you to take away from this. First, always scale QKᵀ by 1/√dₖ and subtract the row‑wise max before softmax to keep training stable. Second, get very comfortable with the shapes: X, Q/K/V, per‑head reshapes, and mask broadcasting. Third, remember that dense attention is O(N²), so real systems often use sparse or low‑rank tricks for long contexts. And finally, treat attention maps as helpful clues, not definitive explanations. With these pieces in place, you’re much closer to writing attention that actually works in production."
+    }
+  }
+}

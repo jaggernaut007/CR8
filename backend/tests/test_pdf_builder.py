@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from backend.services.pdf_builder import build_pdf, _sanitize
+from backend.services.pdf_builder import build_pdf, _sanitize, _strip_latex, _strip_latex_expr
 
 
 # ---------------------------------------------------------------------------
@@ -39,8 +39,21 @@ class TestBasicGeneration:
             {"name": "Transformers", "description": "Self-attention architecture"},
         ]
         modules = [
-            "## Learning Objectives\n- Understand word vectors\n\n## Core Content\nWord vectors map words to dense vectors.\n",
-            "## Learning Objectives\n- Understand self-attention\n\n## Core Content\nTransformers use attention.\n",
+            "## Module Overview\nWord vectors are key to NLP.\n\n"
+            "## Learning Objectives\n- Understand word vectors (Curriculum)\n\n"
+            "## Curriculum Coverage\nThe course teaches Word2Vec.\n\n"
+            "## Identified Gaps\nSubword embeddings are not covered. (Critical)\n\n"
+            "## Core Content\n### What You Need to Learn\nFastText uses subword info.\n\n"
+            "### Common Misconceptions\n- Word2Vec handles OOV words (it does not).\n\n"
+            "## Industry Context\nNLP Engineers use embeddings daily.\n\n"
+            "## Practice & Review\n### Quick Check\n1. What is Word2Vec?\n> Answer: A word embedding model.\n\n"
+            "## Key Takeaways\n- Curriculum: Word2Vec basics\n- Gap: Subword embeddings\n\n"
+            "## Reflection\n- What was the most important thing you learned?\n\n"
+            "## Further Reading\n- [FastText Docs](https://fasttext.cc) (Tutorial) (Beginner)\n",
+            "## Module Overview\nTransformers power modern NLP.\n\n"
+            "## Learning Objectives\n- Understand self-attention (Curriculum)\n\n"
+            "## Core Content\n### What You Need to Learn\nFlash attention is critical.\n\n"
+            "## Key Takeaways\n- Curriculum: Attention mechanism\n",
         ]
         path = _build(tmp_path, topics, modules)
         _assert_valid_pdf(path, min_size=1000)
@@ -216,7 +229,7 @@ class TestMarkdownEdgeCases:
         _assert_valid_pdf(path)
 
     def test_h3_h4_headings(self, tmp_path):
-        """Deeper heading levels that the renderer doesn't specifically handle."""
+        """### is handled as teal sub-heading; #### and deeper render as paragraphs."""
         topics = [{"name": "Deep Headings", "description": "Desc"}]
         modules = ["### Sub-sub heading\nContent.\n#### Even deeper\nMore content.\n##### Very deep\nStill works."]
         path = _build(tmp_path, topics, modules)
@@ -494,6 +507,94 @@ class TestSanitize:
 
 
 # ---------------------------------------------------------------------------
+# LaTeX handling
+# ---------------------------------------------------------------------------
+
+class TestLatexHandling:
+
+    def test_inline_latex_renders_pdf(self, tmp_path):
+        """Inline \\( ... \\) LaTeX should produce a valid PDF (rendered as images)."""
+        topics = [{"name": "Word Vectors", "description": "Desc"}]
+        modules = [
+            "## Core Content\n"
+            "The probability \\(P(o \\mid c)\\) is defined using the dot product "
+            "\\(u_o^\\top v_c\\) and a softmax over the vocabulary.\n\n"
+            "- How does SGD use training examples of \\((\\text{center}, \\text{context})\\) "
+            "pairs to update the word vectors?\n"
+        ]
+        path = _build(tmp_path, topics, modules)
+        _assert_valid_pdf(path)
+
+    def test_display_latex_renders_pdf(self, tmp_path):
+        """Display math \\[ ... \\] should produce a valid PDF."""
+        topics = [{"name": "Math", "description": "Desc"}]
+        modules = [
+            "## Core Content\n"
+            "The update rule is:\n"
+            "\\[\\theta_{t+1} = \\theta_t - \\eta \\nabla L(\\theta_t)\\]\n"
+            "Where theta represents model parameters.\n"
+        ]
+        path = _build(tmp_path, topics, modules)
+        _assert_valid_pdf(path)
+
+    def test_h4_headings_render(self, tmp_path):
+        """#### headings should render as styled headings, not literal #'s."""
+        topics = [{"name": "Headings", "description": "Desc"}]
+        modules = [
+            "## Core Content\n"
+            "#### 1. Scalable Training: Negative Sampling for Skip-gram\n"
+            "Content under h4.\n"
+            "##### Deep heading\n"
+            "Content under h5.\n"
+        ]
+        path = _build(tmp_path, topics, modules)
+        _assert_valid_pdf(path)
+
+    def test_mixed_latex_and_bold(self, tmp_path):
+        """Lines with LaTeX should still produce valid PDFs."""
+        topics = [{"name": "Mixed", "description": "Desc"}]
+        modules = [
+            "## Core Content\n"
+            "The **attention** formula uses \\(Q K^\\top / \\sqrt{d_k}\\) scaling.\n"
+            "- **Key insight**: \\(\\frac{1}{\\sqrt{d_k}}\\) prevents saturation.\n"
+        ]
+        path = _build(tmp_path, topics, modules)
+        _assert_valid_pdf(path)
+
+
+class TestStripLatex:
+
+    def test_inline_math_delimiters(self):
+        assert _strip_latex("the probability \\(P(o)\\) is") == "the probability P(o) is"
+
+    def test_mid_command(self):
+        assert _strip_latex("\\(P(o \\mid c)\\)") == "P(o | c)"
+
+    def test_text_command(self):
+        assert _strip_latex("\\(\\text{center}\\)") == "center"
+
+    def test_top_command(self):
+        assert _strip_latex("\\(u_o^\\top v_c\\)") == "u_o^T v_c"
+
+    def test_frac_command(self):
+        assert _strip_latex_expr("\\frac{a}{b}") == "a/b"
+
+    def test_sqrt_command(self):
+        assert _strip_latex_expr("\\sqrt{d_k}") == "sqrt(d_k)"
+
+    def test_no_latex_passthrough(self):
+        text = "Plain text with no LaTeX."
+        assert _strip_latex(text) == text
+
+    def test_multiple_expressions(self):
+        text = "Use \\(\\alpha\\) and \\(\\beta\\) values"
+        result = _strip_latex(text)
+        assert "\\" not in result
+        assert "alpha" in result
+        assert "beta" in result
+
+
+# ---------------------------------------------------------------------------
 # Realistic GPT output simulation
 # ---------------------------------------------------------------------------
 
@@ -595,34 +696,75 @@ class TestRealisticGPTOutput:
         path = _build(tmp_path, topics, modules)
         _assert_valid_pdf(path)
 
-    def test_curriculum_and_gap_sections(self, tmp_path):
-        """New 7-section format: Curriculum Coverage and Identified Gaps render correctly."""
+    def test_full_redesigned_module(self, tmp_path):
+        """Full 10-section redesigned format with ### sub-headings, numbered lists, and blockquotes."""
         topics = [{"name": "Word Vectors", "description": "Dense word representations"}]
         modules = [
+            "## Module Overview\n"
+            "Imagine you are building a search engine for legal documents. Users complain that "
+            "searching for 'intellectual property' returns nothing about 'patents.' Word vectors "
+            "solve this by capturing semantic similarity. This module teaches you what your "
+            "curriculum missed about modern embedding techniques.\n\n"
+            "## Learning Objectives\n"
+            "- Explain the Skip-gram and CBOW architectures (Curriculum)\n"
+            "- Implement subword embedding training using FastText (Gap)\n"
+            "- Evaluate when to use pre-trained vs. domain-specific embeddings (Gap)\n\n"
             "## Curriculum Coverage\n"
             "The curriculum teaches Word2Vec, GloVe, and basic embedding concepts. "
             "Students learn both CBOW and Skip-gram architectures.\n\n"
+            "Before continuing, make sure you can answer:\n"
+            "- What is the difference between CBOW and Skip-gram?\n"
+            "- How does GloVe differ from Word2Vec in its training approach?\n\n"
             "## Identified Gaps\n"
             "The curriculum does not cover subword embeddings (FastText) or "
-            "contextual embeddings within the word vector paradigm.\n\n"
-            "## Learning Objectives\n"
-            "- Explain the Skip-gram and CBOW architectures (Curriculum)\n"
-            "- Implement word vector training using negative sampling (Curriculum)\n"
-            "- Compare static embeddings with subword approaches like FastText (Gap)\n"
-            "- Evaluate when to use pre-trained vs. domain-specific embeddings (Gap)\n\n"
+            "contextual embeddings. (Critical)\n"
+            "Domain-specific fine-tuning is not addressed. (Important)\n\n"
             "## Core Content\n"
-            "Word vectors map words to dense vectors in a continuous space.\n\n"
+            "### What You Need to Learn\n"
+            "Building on the Word2Vec foundations you studied, FastText extends the idea by "
+            "representing each word as a bag of character n-grams.\n\n"
+            "Here is how FastText processes the word 'where':\n"
+            "1. Break the word into character n-grams: <wh, whe, her, ere, re>\n"
+            "2. Look up the vector for each n-gram from the embedding table\n"
+            "3. Sum all n-gram vectors to produce the final word vector\n"
+            "4. This means even unseen words get meaningful representations\n\n"
+            "Other gaps to explore: Contextual embeddings (ELMo, BERT) produce different "
+            "vectors for the same word depending on context. See Further Reading.\n\n"
+            "### Common Misconceptions\n"
+            "- Word2Vec can handle out-of-vocabulary words. It cannot -- it assigns no vector to unseen words.\n"
+            "- Larger embedding dimensions are always better. Diminishing returns set in after ~300 dims.\n\n"
             "## Industry Context\n"
-            "Companies use pre-trained embeddings as features in NLP pipelines.\n\n"
+            "NLP Engineers and Machine Learning Engineers use embeddings daily. At companies like "
+            "Google, pre-trained embeddings serve as the backbone for search ranking.\n\n"
+            "## Practice & Review\n"
+            "### Quick Check\n"
+            "1. What two architectures does Word2Vec offer?\n"
+            "> Answer: CBOW (Continuous Bag of Words) and Skip-gram.\n"
+            "2. How does FastText handle out-of-vocabulary words?\n"
+            "> Answer: By summing character n-gram vectors.\n"
+            "3. Why would you fine-tune embeddings on domain-specific data?\n"
+            "> Answer: General embeddings may not capture domain-specific semantics.\n\n"
+            "### Apply It\n"
+            "You are building a medical document search system. Doctors search for 'myocardial infarction' "
+            "but also need results for 'heart attack.' Your task:\n"
+            "- Choose an appropriate embedding approach and justify your choice\n"
+            "- Explain why vanilla Word2Vec would fail for rare medical terms\n"
+            "- Describe how you would evaluate embedding quality\n\n"
             "## Key Takeaways\n"
             "- Curriculum: Word2Vec provides foundational understanding of distributional semantics\n"
             "- Curriculum: Both CBOW and Skip-gram have distinct training characteristics\n"
-            "- Curriculum: GloVe offers a matrix-factorization perspective on word vectors\n"
             "- Gap: FastText handles out-of-vocabulary words via subword information\n"
             "- Gap: Domain-specific fine-tuning is expected in industry applications\n"
-            "- Integration: Understanding static embeddings is prerequisite to grasping contextual approaches\n\n"
+            "- Integration: Understanding static embeddings is prerequisite to contextual approaches\n\n"
+            "## Reflection\n"
+            "- What was the most important thing you learned in this module?\n"
+            "- Which gap area do you feel least confident about?\n"
+            "- How does this connect to other topics you have studied?\n\n"
             "## Further Reading\n"
-            "- [Word2Vec Paper](https://arxiv.org/abs/1301.3781)\n"
+            "- [FastText Tutorial](https://fasttext.cc/docs/en/tutorial.html) (Tutorial) (Beginner) - "
+            "Hands-on guide to training subword embeddings.\n"
+            "- [Word2Vec Paper](https://arxiv.org/abs/1301.3781) (Research Paper) (Intermediate) - "
+            "The original Word2Vec paper.\n"
         ]
         path = _build(tmp_path, topics, modules)
-        _assert_valid_pdf(path, min_size=1000)
+        _assert_valid_pdf(path, min_size=2000)

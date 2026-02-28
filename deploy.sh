@@ -100,8 +100,8 @@ gcloud run deploy "${SERVICE_NAME}" \
     --min-instances=0 \
     --max-instances=1 \
     --no-cpu-throttling \
-    --set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest,TAVILY_API_KEY=TAVILY_API_KEY:latest" \
-    --set-env-vars="OPENAI_MODEL=gpt-4o,OPENAI_MODEL_MINI=gpt-4o-mini,CHROMA_PERSIST_DIR=./chroma_db,LANGCHAIN_TRACING_V2=true,LANGCHAIN_PROJECT=cr8-prototype"
+    --set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest,TAVILY_API_KEY=TAVILY_API_KEY:latest,HEYGEN_API_KEY=HEYGEN_API_KEY:latest" \
+    --set-env-vars="OPENAI_MODEL=gpt-5.1,OPENAI_MODEL_PREMIUM=gpt-5.1,OPENAI_MODEL_MINI=gpt-5-mini,OPENAI_MODEL_NANO=gpt-5-nano,CHROMA_PERSIST_DIR=./chroma_db,LANGCHAIN_TRACING_V2=true,LANGCHAIN_PROJECT=cr8-prototype"
 
 echo ""
 echo "==> Deployment complete!"

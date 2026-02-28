@@ -1,4 +1,4 @@
-.PHONY: install test run clean serve dev docker-build docker-run
+.PHONY: install test run clean serve dev docker-build docker-run docs-serve docs-build docs-deploy
 
 install:
 	pip install -e ".[dev]"
@@ -23,3 +23,12 @@ docker-run:
 
 clean:
 	rm -rf chroma_db/ outputs/ __pycache__ backend/__pycache__ .pytest_cache
+
+docs-serve:
+	mkdocs serve --dev-addr 0.0.0.0:8000
+
+docs-build:
+	mkdocs build --strict
+
+docs-deploy:
+	mkdocs gh-deploy --force

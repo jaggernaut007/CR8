@@ -43,21 +43,28 @@ def main():
         sys.exit(1)
 
     # Override settings with CLI flags
-    settings.output_formats = formats
+    settings.output_formats = ",".join(formats)
 
-    # Validate HeyGen config when video rendering is requested
-    if "video" in settings.output_formats:
+    # Validate video provider config when video rendering is requested
+    if "video" in settings.output_formats_list:
         missing = []
-        if not settings.heygen_api_key:
-            missing.append("HEYGEN_API_KEY")
-        if not settings.heygen_avatar_id:
-            missing.append("HEYGEN_AVATAR_ID")
-        if not settings.heygen_voice_id:
-            missing.append("HEYGEN_VOICE_ID")
+        if settings.video_provider == "synthesia":
+            if not settings.synthesia_api_key:
+                missing.append("SYNTHESIA_API_KEY")
+            if not settings.synthesia_avatar_id:
+                missing.append("SYNTHESIA_AVATAR_ID")
+        else:
+            if not settings.heygen_api_key:
+                missing.append("HEYGEN_API_KEY")
+            if not settings.heygen_avatar_id:
+                missing.append("HEYGEN_AVATAR_ID")
+            if not settings.heygen_voice_id:
+                missing.append("HEYGEN_VOICE_ID")
         if missing:
-            print(f"Error: --format video requires these env vars: {', '.join(missing)}")
+            provider = settings.video_provider
+            print(f"Error: --format video ({provider}) requires these env vars: {', '.join(missing)}")
             print("Set them in your .env file. See .env.example for reference.")
-            print("Tip: Use --format pdf,script to generate scripts without HeyGen.")
+            print("Tip: Use --format pdf,script to generate scripts without video rendering.")
             sys.exit(1)
 
     file_paths = args.files
@@ -67,8 +74,8 @@ def main():
     print(f"Input files: {len(file_paths)}")
     for f in file_paths:
         print(f"  - {f}")
-    print(f"Output formats: {', '.join(settings.output_formats)}")
-    if "script" in settings.output_formats or "video" in settings.output_formats:
+    print(f"Output formats: {', '.join(settings.output_formats_list)}")
+    if "script" in settings.output_formats_list or "video" in settings.output_formats_list:
         print(f"Video topic limit: {settings.video_topic_limit}")
     print(f"{'='*60}\n")
 
@@ -113,18 +120,24 @@ def run_job(file_paths: list[str], formats: list[str]) -> dict:
     if invalid:
         raise ValueError(f"Invalid format(s): {', '.join(invalid)}")
 
-    settings.output_formats = formats
+    settings.output_formats = ",".join(formats)
 
     if "video" in formats:
         missing = []
-        if not settings.heygen_api_key:
-            missing.append("HEYGEN_API_KEY")
-        if not settings.heygen_avatar_id:
-            missing.append("HEYGEN_AVATAR_ID")
-        if not settings.heygen_voice_id:
-            missing.append("HEYGEN_VOICE_ID")
+        if settings.video_provider == "synthesia":
+            if not settings.synthesia_api_key:
+                missing.append("SYNTHESIA_API_KEY")
+            if not settings.synthesia_avatar_id:
+                missing.append("SYNTHESIA_AVATAR_ID")
+        else:
+            if not settings.heygen_api_key:
+                missing.append("HEYGEN_API_KEY")
+            if not settings.heygen_avatar_id:
+                missing.append("HEYGEN_AVATAR_ID")
+            if not settings.heygen_voice_id:
+                missing.append("HEYGEN_VOICE_ID")
         if missing:
-            raise ValueError(f"Video requires env vars: {', '.join(missing)}")
+            raise ValueError(f"Video ({settings.video_provider}) requires env vars: {', '.join(missing)}")
 
     pipeline = build_pipeline()
     initial_state = {

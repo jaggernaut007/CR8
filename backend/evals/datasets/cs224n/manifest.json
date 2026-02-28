@@ -1,0 +1,13 @@
+{
+  "dataset_id": "cs224n",
+  "description": "Captured from 3 curriculum files",
+  "version": "1.0",
+  "input_pdfs": [
+    "NLP_Course/CS224N_Downloads/Slides/01_Word_Vectors_I.pdf",
+    "NLP_Course/CS224N_Downloads/Slides/08_Transformers.pdf",
+    "NLP_Course/CS224N_Downloads/Slides/09_Pretraining.pdf"
+  ],
+  "cached_state_path": "backend/evals/datasets/cs224n/cached_state",
+  "topics_count": 25,
+  "gaps_count": 188
+}

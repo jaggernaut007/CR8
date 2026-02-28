@@ -1,5 +1,71 @@
 # Changelog
 
+> **See also**: [Services Reference](services/index.md) and [Prompt Templates](agents/prompts.md) — Complete technical reference for all builders, prompts, and eval checks.
+
+## Unreleased — Pipeline Optimization: Multi-Model Routing, Token Efficiency, Quality Improvements
+
+**Summary**: Implemented a 3-tier model system (nano/mini/premium) with task-specific temperature, severity-based routing for module generation, filtered per-topic context for scripts (86% token reduction), parallel PDF+PPT build, split PPT structuring, ChromaDB result caching, map-reduce summarization for long files, module quality validation with retry, hook variety enforcement across scripts, and richer PDF rendering with bold/italic/code block support.
+
+---
+
+### Multi-Model Architecture
+
+The pipeline now uses three model tiers with task-specific temperature presets instead of a single model for all tasks:
+
+| Tier | Model | Temperature | Tasks |
+|------|-------|-------------|-------|
+| Nano | gpt-5-nano | 0.2 | File summarization, topic extraction, PPT executive summary |
+| Mini | gpt-5-mini | 0.3 | Gap analysis, moderate/minor module generation, PPT per-topic slides |
+| Premium | gpt-5.1 | 0.3-0.55 | Critical module generation (0.3), video scripts (0.55) |
+
+Severity-based routing: Modules for topics with "critical" gap severity use gpt-5.1; "moderate" and "minor" topics use gpt-5-mini. This concentrates premium budget where quality matters most.
+
+---
+
+### Token Optimization
+
+- **Filtered context for scripts**: Each video script now receives only its own topic's module content (~1.5K tokens) instead of all modules (~44K tokens). Saves ~190K premium input tokens per run (86% reduction).
+- **Split PPT structuring**: Per-topic slide calls replace one monolithic call, reducing per-call input and improving output quality.
+- **ChromaDB result caching**: Vector queries are performed once for all topics and reused across module generation and script generation, eliminating redundant searches.
+- **Map-reduce summarization**: Files >15K characters are split into 12K chunks, each summarized independently, then combined. No more truncation.
+
+---
+
+### Speed Improvements
+
+- **Parallel PDF + PPT**: PDF build and PPT LLM structuring now run concurrently when both formats are requested.
+- **Video concurrency**: `max_workers` increased from hardcoded 2 to configurable 4 (via `VIDEO_MAX_WORKERS`).
+- **Map-reduce summarization**: Long files are processed in parallel chunks instead of being truncated.
+
+---
+
+### Quality Improvements
+
+- **Module validation**: Generated modules are checked for required sections (`## Module Overview`, `## Learning Objectives`, `## Core Content`, `## Key Takeaways`) and minimum character count (2000). Failed modules are retried up to 2 times.
+- **Hook variety enforcement**: Thread-safe tracking of used hook types across scripts. Each script receives guidance emphasizing unused hook types to prevent all scripts from using the same opening style.
+- **Severity-based routing**: Critical topics get premium model quality; the research agent now outputs a `severity` field (`critical`/`moderate`/`minor`) in gap analysis.
+- **Richer PDF rendering**: Bold (`**text**`) and italic (`*text*`) now render with actual font style changes instead of being stripped. Triple-backtick code blocks render with Courier font on a light gray background.
+
+---
+
+### New/Modified Files
+
+| File | Change |
+|------|--------|
+| `backend/config.py` | Added `openai_model_premium`, `openai_model_nano`, temperature presets, `video_max_workers` |
+| `backend/services/llm.py` | 4-tier model support (`nano`/`mini`/`full`/`premium`) with optional temperature override |
+| `backend/pipeline/agent_ingest.py` | Map-reduce summarization for long files, switched to nano model |
+| `backend/prompts/ingest.py` | Added `SUMMARIZE_CHUNK` and `REDUCE_SUMMARIES` prompts |
+| `backend/pipeline/agent_research.py` | Temperature override for gap analysis |
+| `backend/prompts/research.py` | Added `severity` field to gap analysis JSON output |
+| `backend/pipeline/agent_generate.py` | ChromaDB caching, severity routing, filtered context, module validation/retry, parallel PDF+PPT, split PPT structuring, hook variety enforcement |
+| `backend/prompts/ppt.py` | Added `STRUCTURE_SINGLE_TOPIC_SLIDE` and `STRUCTURE_EXECUTIVE_SUMMARY` prompts |
+| `backend/services/pdf_builder.py` | Rich text rendering (bold/italic), code block rendering |
+| `backend/services/video_builder.py` | Configurable `max_workers` parameter |
+| `Docs/OpenAI_Model_Research.md` | New — model pricing, pipeline task-to-model matrix, token budget analysis |
+
+---
+
 ## Unreleased — Gap Analysis PowerPoint, Chained Generation Flow, Slide-Synced Scripts
 
 **Summary**: Added PowerPoint generation for gap analysis, implemented a chained generation flow (PDF → PPT → Script → Video) where each output builds on the previous, and added a slide-synced video script that maps one narration section per PPT slide. UI updated with dependency-enforcing checkboxes.

@@ -36,15 +36,17 @@ class TestRunJobValidation:
     def test_video_format_requires_heygen_keys(self):
         """Requesting video without HeyGen env vars should raise ValueError."""
         with patch("backend.run_pipeline.settings") as mock_settings:
+            mock_settings.video_provider = "heygen"
             mock_settings.heygen_api_key = ""
             mock_settings.heygen_avatar_id = ""
             mock_settings.heygen_voice_id = ""
-            with pytest.raises(ValueError, match="Video requires"):
+            with pytest.raises(ValueError, match="requires env vars"):
                 run_job(["/tmp/fake.pdf"], ["video"])
 
     def test_video_format_missing_partial_keys(self):
         """Even if some HeyGen keys are set, all three are required."""
         with patch("backend.run_pipeline.settings") as mock_settings:
+            mock_settings.video_provider = "heygen"
             mock_settings.heygen_api_key = "key123"
             mock_settings.heygen_avatar_id = ""
             mock_settings.heygen_voice_id = ""
@@ -55,6 +57,7 @@ class TestRunJobValidation:
         """With all HeyGen keys set, video format should proceed to pipeline."""
         with patch("backend.run_pipeline.settings") as mock_settings, \
              patch("backend.run_pipeline.build_pipeline") as mock_build:
+            mock_settings.video_provider = "heygen"
             mock_settings.heygen_api_key = "key"
             mock_settings.heygen_avatar_id = "avatar"
             mock_settings.heygen_voice_id = "voice"
@@ -64,6 +67,15 @@ class TestRunJobValidation:
             mock_build.return_value = mock_pipeline
             run_job(["/tmp/fake.pdf"], ["video"])
             assert mock_pipeline.invoke.called
+
+    def test_synthesia_requires_keys(self):
+        """Requesting video with synthesia provider should validate synthesia keys."""
+        with patch("backend.run_pipeline.settings") as mock_settings:
+            mock_settings.video_provider = "synthesia"
+            mock_settings.synthesia_api_key = ""
+            mock_settings.synthesia_avatar_id = ""
+            with pytest.raises(ValueError, match="SYNTHESIA_API_KEY"):
+                run_job(["/tmp/fake.pdf"], ["video"])
 
 
 # ---------------------------------------------------------------------------
