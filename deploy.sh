@@ -66,6 +66,9 @@ if [[ "${RUN_SETUP}" == "true" ]]; then
     echo "  # Optional (for video generation):"
     echo "  echo -n 'YOUR-KEY' | gcloud secrets create HEYGEN_API_KEY --data-file=- --replication-policy=automatic"
     echo ""
+    echo "  # Local development only — add to .env to allow HTTP cookies:"
+    echo "  # COOKIE_SECURE=false"
+    echo ""
     echo "==> Then grant the Cloud Run service account access to secrets:"
     echo ""
     echo "  PROJECT_NUMBER=\$(gcloud projects describe ${PROJECT_ID} --format='value(projectNumber)')"
@@ -101,7 +104,7 @@ gcloud run deploy "${SERVICE_NAME}" \
     --max-instances=1 \
     --no-cpu-throttling \
     --set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest,TAVILY_API_KEY=TAVILY_API_KEY:latest,HEYGEN_API_KEY=HEYGEN_API_KEY:latest" \
-    --set-env-vars="OPENAI_MODEL=gpt-5.1,OPENAI_MODEL_PREMIUM=gpt-5.1,OPENAI_MODEL_MINI=gpt-5-mini,OPENAI_MODEL_NANO=gpt-5-nano,CHROMA_PERSIST_DIR=./chroma_db,LANGCHAIN_TRACING_V2=true,LANGCHAIN_PROJECT=cr8-prototype,MAX_WORKERS=12,VIDEO_MAX_WORKERS=6"
+    --set-env-vars="OPENAI_MODEL=gpt-5.1,OPENAI_MODEL_PREMIUM=gpt-5.1,OPENAI_MODEL_MINI=gpt-5-mini,OPENAI_MODEL_NANO=gpt-5-nano,CHROMA_PERSIST_DIR=./chroma_db,LANGCHAIN_TRACING_V2=true,LANGCHAIN_PROJECT=cr8-prototype,MAX_WORKERS=12,VIDEO_MAX_WORKERS=6,COOKIE_SECURE=true"
 
 echo ""
 echo "==> Deployment complete!"

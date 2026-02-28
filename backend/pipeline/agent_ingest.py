@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -18,11 +19,27 @@ from backend.prompts.ingest import (
 
 _MAP_REDUCE_THRESHOLD = 15000   # chars — files longer than this use map-reduce
 _CHUNK_SIZE = 12000             # chars per map chunk
+_MAX_FILE_CHARS = 500_000       # hard cap: ~125k tokens — prevents runaway cost on huge PDFs
+
+# Control-character regex: strips null bytes and non-printable characters that
+# can confuse tokenizers or be used to hide injection payloads in PDFs.
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def _sanitize(text: str) -> str:
+    """Strip control characters and enforce a character cap on raw document text.
+
+    This is the trust boundary between untrusted PDF content and the prompt
+    construction layer. It does not prevent all prompt injection, but it
+    removes common obfuscation vectors (null bytes, hidden characters).
+    """
+    text = _CONTROL_CHAR_RE.sub("", text)
+    return text[:_MAX_FILE_CHARS]
 
 
 def _summarize_file(source, texts, llm):
     """Summarize a single file's text, using map-reduce for long files."""
-    file_text = "\n".join(texts)
+    file_text = _sanitize("\n".join(texts))
 
     if len(file_text) <= _MAP_REDUCE_THRESHOLD:
         # Short file — direct summarization

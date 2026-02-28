@@ -8,6 +8,7 @@ progress, and downloading generated artifacts (PDF, PPT, scripts, videos).
 import asyncio
 import os
 import re
+import secrets
 import sys
 import threading
 import time
@@ -15,9 +16,11 @@ import uuid
 import zipfile
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, UploadFile, File
+import bcrypt
+from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
 # Add project root to path so backend imports work
 PROJECT_ROOT = os.path.join(os.path.dirname(__file__), "..")
@@ -26,7 +29,124 @@ sys.path.insert(0, PROJECT_ROOT)
 from backend.run_pipeline import run_job  # noqa: E402
 
 UPLOAD_DIR = os.path.join(PROJECT_ROOT, "uploads")
+TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
 
+# ---------------------------------------------------------------------------
+# Auth — password hashing
+# ---------------------------------------------------------------------------
+
+# bcrypt hash computed once at startup. Plaintext is used only here at import
+# time and not retained after this line executes.
+_PASSWORD_HASH: bytes = bcrypt.hashpw(b"CR8-AI", bcrypt.gensalt())
+
+# ---------------------------------------------------------------------------
+# Auth — session store (token -> expiry Unix timestamp)
+# ---------------------------------------------------------------------------
+
+_sessions: dict[str, float] = {}
+_sessions_lock = threading.Lock()
+SESSION_TTL = 8 * 3600  # 8 hours
+
+# ---------------------------------------------------------------------------
+# Auth — rate limiter (IP -> list of failed-attempt timestamps)
+# ---------------------------------------------------------------------------
+
+_failed_attempts: dict[str, list[float]] = {}
+_failed_attempts_lock = threading.Lock()
+MAX_ATTEMPTS = 5
+LOCKOUT_WINDOW = 900.0  # 15 minutes
+
+# ---------------------------------------------------------------------------
+# Auth — constants
+# ---------------------------------------------------------------------------
+
+_PUBLIC_PATHS = frozenset({"/login", "/api/auth/login", "/health"})
+JOB_ID_RE = re.compile(r"^[a-f0-9]{8}$")
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
+# Set COOKIE_SECURE=false in .env for local HTTP development; defaults to True for production HTTPS.
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "true").lower() != "false"
+
+
+# ---------------------------------------------------------------------------
+# Auth — session helpers
+# ---------------------------------------------------------------------------
+
+def _create_session() -> str:
+    """Create a 256-bit cryptographically random session token and store it."""
+    token = secrets.token_hex(32)
+    expiry = time.time() + SESSION_TTL
+    with _sessions_lock:
+        _sessions[token] = expiry
+        # Evict expired sessions to prevent unbounded memory growth
+        now = time.time()
+        for t in [k for k, exp in _sessions.items() if exp < now]:
+            del _sessions[t]
+    return token
+
+
+def _is_valid_session(token: str | None) -> bool:
+    """Return True only if the token exists server-side and has not expired."""
+    if not token:
+        return False
+    with _sessions_lock:
+        expiry = _sessions.get(token)
+        if expiry is None:
+            return False
+        if time.time() > expiry:
+            del _sessions[token]
+            return False
+        return True
+
+
+def _invalidate_session(token: str) -> None:
+    with _sessions_lock:
+        _sessions.pop(token, None)
+
+
+# ---------------------------------------------------------------------------
+# Auth — rate limiter helpers
+# ---------------------------------------------------------------------------
+
+def _check_rate_limit(ip: str) -> bool:
+    """Return True if this IP is still allowed to attempt login."""
+    now = time.time()
+    with _failed_attempts_lock:
+        attempts = [t for t in _failed_attempts.get(ip, []) if now - t < LOCKOUT_WINDOW]
+        _failed_attempts[ip] = attempts
+        return len(attempts) < MAX_ATTEMPTS
+
+
+def _record_failed_attempt(ip: str) -> None:
+    now = time.time()
+    with _failed_attempts_lock:
+        attempts = [t for t in _failed_attempts.get(ip, []) if now - t < LOCKOUT_WINDOW]
+        attempts.append(now)
+        _failed_attempts[ip] = attempts
+
+
+# ---------------------------------------------------------------------------
+# Auth — middleware (registered LAST = outermost = runs before all routing)
+# ---------------------------------------------------------------------------
+
+class _AuthMiddleware(BaseHTTPMiddleware):
+    """Block every request that lacks a valid session, except public paths."""
+
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path in _PUBLIC_PATHS:
+            return await call_next(request)
+
+        if _is_valid_session(request.cookies.get("cr8_session")):
+            return await call_next(request)
+
+        # Not authenticated
+        if request.url.path.startswith("/api/"):
+            return JSONResponse({"error": "Authentication required"}, status_code=401)
+        return RedirectResponse(url="/login", status_code=302)
+
+
+# ---------------------------------------------------------------------------
+# App setup
+# ---------------------------------------------------------------------------
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,14 +156,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CR8 Learning Pipeline", lifespan=lifespan)
 
+# Middleware order: last added = outermost (runs first on every request).
+# _AuthMiddleware must be outermost so it intercepts before any routing occurs.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
+app.add_middleware(_AuthMiddleware)
 
 # In-memory job registry: job_id -> ProgressCapture
 jobs: dict[str, "ProgressCapture"] = {}
@@ -184,7 +305,6 @@ def _collect_output_files(result: dict) -> list[dict]:
         scripts_dir = os.path.join(video_dir, "scripts")
         if os.path.isdir(scripts_dir) and os.listdir(scripts_dir):
             files.append({"name": "video_scripts.zip", "type": "scripts", "size": 0})
-        # Check for mp4 files directly in video_dir
         mp4s = [f for f in os.listdir(video_dir) if f.endswith(".mp4")] if os.path.isdir(video_dir) else []
         if mp4s:
             files.append({"name": "videos.zip", "type": "videos", "size": 0})
@@ -203,31 +323,75 @@ def _zip_directory(dir_path: str, zip_path: str, extension: str | None = None):
 
 
 # ---------------------------------------------------------------------------
-# Health check
+# Health check (public — no auth required)
 # ---------------------------------------------------------------------------
 
 @app.get("/health")
 async def health():
-    """Health check endpoint.
-
-    Returns:
-        JSON with ``status`` (always ``"ok"``) and ``active_jobs`` count.
-    """
+    """Health check endpoint for Cloud Run readiness probes."""
     active_jobs = sum(1 for j in jobs.values() if j.status == "running")
     return {"status": "ok", "active_jobs": active_jobs}
 
 
 # ---------------------------------------------------------------------------
-# Routes
+# Auth routes (public)
+# ---------------------------------------------------------------------------
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page():
+    """Serve the login page."""
+    html_path = os.path.join(TEMPLATE_DIR, "login.html")
+    with open(html_path) as f:
+        return HTMLResponse(content=f.read())
+
+
+@app.post("/api/auth/login")
+async def login(request: Request, body: dict):
+    """Validate password and issue a session cookie."""
+    ip = request.client.host if request.client else "unknown"
+
+    if not _check_rate_limit(ip):
+        return JSONResponse(
+            {"error": "Too many failed attempts. Try again in 15 minutes."},
+            status_code=429,
+        )
+
+    password = body.get("password", "")
+    if not password or not bcrypt.checkpw(password.encode(), _PASSWORD_HASH):
+        _record_failed_attempt(ip)
+        return JSONResponse({"error": "Incorrect password. Please try again."}, status_code=401)
+
+    token = _create_session()
+    response = JSONResponse({"status": "ok"})
+    response.set_cookie(
+        key="cr8_session",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=COOKIE_SECURE,
+        max_age=SESSION_TTL,
+    )
+    return response
+
+
+@app.post("/api/auth/logout")
+async def logout(request: Request):
+    """Invalidate the current session and clear the cookie."""
+    token = request.cookies.get("cr8_session")
+    if token:
+        _invalidate_session(token)
+    response = RedirectResponse(url="/login", status_code=302)
+    response.delete_cookie("cr8_session")
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Protected routes
 # ---------------------------------------------------------------------------
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    """Serve the single-page HTML frontend.
-
-    Returns:
-        The contents of ``templates/index.html`` as an HTML response.
-    """
+    """Serve the single-page HTML frontend."""
     html_path = os.path.join(TEMPLATE_DIR, "index.html")
     with open(html_path) as f:
         return HTMLResponse(content=f.read())
@@ -237,49 +401,45 @@ async def index():
 async def upload(file: UploadFile = File(...)):
     """Upload a curriculum PDF and receive a job ID.
 
-    Saves the uploaded file to a per-job directory under ``uploads/``.
-
-    Args:
-        file: PDF file upload (multipart form data).
-
-    Returns:
-        JSON with ``job_id`` and ``filename`` on success, or a 400 error
-        if the file is not a PDF.
+    Validates file extension, magic bytes, and size before saving.
     """
+    # Extension check
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         return JSONResponse({"error": "Please upload a PDF file"}, status_code=400)
+
+    content = await file.read()
+
+    # File size limit
+    if len(content) > MAX_UPLOAD_BYTES:
+        return JSONResponse({"error": "File too large (max 20 MB)"}, status_code=413)
+
+    # Magic bytes — verify it is actually a PDF, not just named .pdf
+    if not content.startswith(b"%PDF-"):
+        return JSONResponse({"error": "File is not a valid PDF"}, status_code=400)
+
+    # Sanitize filename to prevent path traversal
+    safe_filename = os.path.basename(file.filename)
+    safe_filename = re.sub(r"[^\w\-.]", "_", safe_filename) or "upload.pdf"
 
     job_id = uuid.uuid4().hex[:8]
     job_dir = os.path.join(UPLOAD_DIR, job_id)
     os.makedirs(job_dir, exist_ok=True)
 
-    filepath = os.path.join(job_dir, file.filename)
-    content = await file.read()
+    filepath = os.path.join(job_dir, safe_filename)
     with open(filepath, "wb") as f:
         f.write(content)
 
-    return {"job_id": job_id, "filename": file.filename}
+    return {"job_id": job_id, "filename": safe_filename}
 
 
 @app.post("/api/start")
 async def start(body: dict):
-    """Start the pipeline for a previously uploaded job.
-
-    Launches the 3-agent pipeline in a background thread.  Only one
-    job may run at a time; concurrent requests return HTTP 409.
-
-    Args:
-        body: JSON body with ``job_id`` (required) and optional
-            ``formats`` list (defaults to ``["pdf"]``).
-
-    Returns:
-        JSON with ``status: "running"`` on success.
-    """
+    """Start the pipeline for a previously uploaded job."""
     job_id = body.get("job_id")
     formats = body.get("formats", ["pdf"])
 
-    if not job_id:
-        return JSONResponse({"error": "Missing job_id"}, status_code=400)
+    if not job_id or not JOB_ID_RE.match(str(job_id)):
+        return JSONResponse({"error": "Invalid job_id"}, status_code=400)
 
     # Reject if a job is already running
     for jid, cap in jobs.items():
@@ -300,7 +460,6 @@ async def start(body: dict):
     capture = ProgressCapture()
     jobs[job_id] = capture
 
-    # Run pipeline in a background thread via asyncio
     asyncio.get_running_loop().run_in_executor(
         None, _run_pipeline_sync, pdf_files, formats, capture
     )
@@ -310,15 +469,10 @@ async def start(body: dict):
 
 @app.get("/api/progress/{job_id}")
 async def progress(job_id: str):
-    """Poll the current progress of a running pipeline job.
+    """Poll the current progress of a running pipeline job."""
+    if not JOB_ID_RE.match(job_id):
+        return JSONResponse({"error": "Invalid job_id"}, status_code=400)
 
-    Args:
-        job_id: The job identifier returned by ``/api/upload``.
-
-    Returns:
-        JSON with ``status``, ``stage``, ``percent``, recent ``logs``,
-        ``elapsed`` seconds, and (when complete) a ``files`` list.
-    """
     capture = jobs.get(job_id)
     if not capture:
         return JSONResponse({"error": "Job not found"}, status_code=404)
@@ -327,16 +481,10 @@ async def progress(job_id: str):
 
 @app.get("/api/download/{job_id}/{file_type}")
 async def download(job_id: str, file_type: str):
-    """Download a generated artifact from a completed job.
+    """Download a generated artifact from a completed job."""
+    if not JOB_ID_RE.match(job_id):
+        return JSONResponse({"error": "Invalid job_id"}, status_code=400)
 
-    Args:
-        job_id: The job identifier returned by ``/api/upload``.
-        file_type: One of ``"pdf"``, ``"ppt"``, ``"scripts"``, or
-            ``"videos"``.  Scripts and videos are returned as ZIP archives.
-
-    Returns:
-        A ``FileResponse`` with the requested file, or a 404 JSON error.
-    """
     capture = jobs.get(job_id)
     if not capture or not capture.result:
         return JSONResponse({"error": "Job not found or not complete"}, status_code=404)

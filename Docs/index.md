@@ -55,6 +55,10 @@ Built with LangGraph, OpenAI, ChromaDB, Tavily, fpdf2, and FastAPI.
 
     Auto-generated API documentation
 
+-   **[Security](security.md)**
+
+    Authentication, upload hardening, and AI pipeline security
+
 -   **[Contributing](contributing/index.md)**
 
     Development setup, testing, and documentation guide

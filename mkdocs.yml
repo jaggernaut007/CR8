@@ -109,6 +109,7 @@ nav:
       - deployment/index.md
       - Docker: deployment/docker.md
       - GCP Cloud Run: deployment/gcp-cloud-run.md
+  - Security: security.md
   - Design Decisions:
       - design/index.md
       - Learning Module Redesign: design/learning-module-redesign.md
