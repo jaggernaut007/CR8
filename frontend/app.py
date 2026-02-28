@@ -204,8 +204,8 @@ def _zip_directory(dir_path: str, zip_path: str, extension: str | None = None):
 # Health check
 # ---------------------------------------------------------------------------
 
-@app.get("/healthz")
-async def healthz():
+@app.get("/health")
+async def health():
     """Health check endpoint.
 
     Returns:

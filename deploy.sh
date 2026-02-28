@@ -107,4 +107,4 @@ echo ""
 echo "==> Deployment complete!"
 SERVICE_URL=$(gcloud run services describe "${SERVICE_NAME}" --region="${REGION}" --format='value(status.url)')
 echo "URL: ${SERVICE_URL}"
-echo "Health: ${SERVICE_URL}/healthz"
+echo "Health: ${SERVICE_URL}/health"
