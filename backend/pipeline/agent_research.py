@@ -131,7 +131,12 @@ def research_node(state: PipelineState) -> dict:
         }
         for future in as_completed(future_to_idx):
             idx = future_to_idx[future]
-            gap_summary[idx] = future.result()
+            try:
+                gap_summary[idx] = future.result()
+            except Exception as exc:
+                topic_name = topics[idx]["name"]
+                print(f"[Research] ERROR: topic '{topic_name}' failed — {exc}")
+                gap_summary[idx] = {"topic": topic_name, "gaps": [], "enrichments": [], "severity": "minor"}
 
     print(f"[Research] Completed — {len(gap_summary)} topics analyzed")
     return {

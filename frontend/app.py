@@ -145,13 +145,15 @@ def _run_pipeline_sync(file_paths: list[str], formats: list[str], capture: Progr
     sys.stdout = capture  # type: ignore[assignment]
     try:
         result = run_job(file_paths, formats)
-        capture.result = result
-        capture.status = "complete"
-        capture.percent = 100
+        with capture._lock:
+            capture.result = result
+            capture.percent = 100
+            capture.status = "complete"
     except Exception as e:
         import traceback
-        capture.status = "error"
-        capture.error = str(e)
+        with capture._lock:
+            capture.status = "error"
+            capture.error = str(e)
         traceback.print_exc(file=old_stdout)
     finally:
         sys.stdout = old_stdout
@@ -299,7 +301,7 @@ async def start(body: dict):
     jobs[job_id] = capture
 
     # Run pipeline in a background thread via asyncio
-    asyncio.get_event_loop().run_in_executor(
+    asyncio.get_running_loop().run_in_executor(
         None, _run_pipeline_sync, pdf_files, formats, capture
     )
 

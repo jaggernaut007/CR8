@@ -46,6 +46,8 @@ class ChromaStore:
             ids: Optional unique IDs; must match length of *documents*.
         """
         collection = self.get_or_create_collection(collection_name)
+        if not documents:
+            return
         # ChromaDB rejects empty metadata dicts — pass None instead
         if metadatas:
             metadatas = [m if m else None for m in metadatas]
