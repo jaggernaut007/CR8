@@ -57,8 +57,8 @@ class Settings(BaseSettings):
     video_topic_limit: int = 5  # max topics to generate scripts/videos for
 
     # Concurrency
-    max_workers: int = 8
-    video_max_workers: int = 4                 # parallel video generation jobs
+    max_workers: int = 12
+    video_max_workers: int = 6                 # parallel video generation jobs
 
     # LangSmith
     langchain_tracing_v2: bool = True
