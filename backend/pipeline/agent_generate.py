@@ -585,7 +585,12 @@ def generate_node(state: PipelineState) -> dict:
         }
         for future in as_completed(future_to_idx):
             idx = future_to_idx[future]
-            modules_md[idx] = future.result()
+            try:
+                modules_md[idx] = future.result()
+            except Exception as exc:
+                topic_name = topics[idx]["name"]
+                print(f"[Generate] ERROR: module '{topic_name}' failed — {exc}")
+                modules_md[idx] = f"## {topic_name}\n\n*Module generation failed: {exc}*"
 
     # Build per-topic module map (for filtered context in scripts)
     topic_modules_map = {topics[i]["name"]: modules_md[i] for i in range(total)}

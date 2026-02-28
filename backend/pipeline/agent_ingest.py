@@ -88,6 +88,9 @@ def ingest_node(state: PipelineState) -> dict:
     all_pages = []
     for path in state["file_paths"]:
         pages = extract_text(path)
+        if not pages:
+            print(f"[Ingest] WARNING: No text extracted from {path}, skipping")
+            continue
         all_pages.extend(pages)
         print(f"[Ingest] Parsed {pages[0]['source']} — {len(pages)} pages")
 
@@ -107,7 +110,12 @@ def ingest_node(state: PipelineState) -> dict:
         }
         for future in as_completed(future_to_idx):
             idx = future_to_idx[future]
-            summaries[idx] = future.result()
+            try:
+                summaries[idx] = future.result()
+            except Exception as exc:
+                source = file_items[idx][0]
+                print(f"[Ingest] ERROR: summarization of '{source}' failed — {exc}")
+                summaries[idx] = f"## {source}\n\n*Summarization failed: {exc}*"
 
     # 3. Extract topics from combined summaries
     combined = "\n\n".join(summaries)
