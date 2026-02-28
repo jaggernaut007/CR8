@@ -14,5 +14,11 @@ uploads/
 outputs/
 
 Docs/
+Docs_legacy/
 Courses/
 NLP_Course/
+docs/
+mkdocs.yml
+backend/evals/
+backend/tests/
+=3.8

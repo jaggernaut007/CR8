@@ -93,7 +93,7 @@ class TestRunJobPipelineInvocation:
             mock_pipeline.invoke.return_value = {"pdf_path": "/out.pdf"}
             mock_build.return_value = mock_pipeline
             run_job(["/tmp/test.pdf"], ["pdf", "script"])
-            assert mock_settings.output_formats == ["pdf", "script"]
+            assert mock_settings.output_formats == "pdf,script"
 
     def test_invokes_pipeline_with_correct_state_shape(self):
         """The initial_state passed to pipeline.invoke should have all required keys."""
