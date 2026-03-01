@@ -33,49 +33,19 @@ class TestRunJobValidation:
                 result = run_job(["/tmp/fake.pdf"], [fmt])
                 assert mock_pipeline.invoke.called
 
-    def test_video_format_requires_heygen_keys(self):
-        """Requesting video without HeyGen env vars should raise ValueError."""
-        with patch("backend.run_pipeline.settings") as mock_settings:
-            mock_settings.video_provider = "heygen"
-            mock_settings.heygen_api_key = ""
-            mock_settings.heygen_avatar_id = ""
-            mock_settings.heygen_voice_id = ""
-            with pytest.raises(ValueError, match="requires env vars"):
-                run_job(["/tmp/fake.pdf"], ["video"])
-
-    def test_video_format_missing_partial_keys(self):
-        """Even if some HeyGen keys are set, all three are required."""
-        with patch("backend.run_pipeline.settings") as mock_settings:
-            mock_settings.video_provider = "heygen"
-            mock_settings.heygen_api_key = "key123"
-            mock_settings.heygen_avatar_id = ""
-            mock_settings.heygen_voice_id = ""
-            with pytest.raises(ValueError, match="HEYGEN_AVATAR_ID"):
-                run_job(["/tmp/fake.pdf"], ["video"])
-
-    def test_video_format_with_all_keys_proceeds(self):
-        """With all HeyGen keys set, video format should proceed to pipeline."""
-        with patch("backend.run_pipeline.settings") as mock_settings, \
-             patch("backend.run_pipeline.build_pipeline") as mock_build:
-            mock_settings.video_provider = "heygen"
-            mock_settings.heygen_api_key = "key"
-            mock_settings.heygen_avatar_id = "avatar"
-            mock_settings.heygen_voice_id = "voice"
-            mock_settings.output_formats = []
-            mock_pipeline = MagicMock()
-            mock_pipeline.invoke.return_value = {"pdf_path": "", "video_dir": ""}
-            mock_build.return_value = mock_pipeline
+    def test_video_format_rejected(self):
+        """Video format is not yet implemented — run_job must reject it immediately."""
+        with pytest.raises(ValueError, match="not yet available"):
             run_job(["/tmp/fake.pdf"], ["video"])
-            assert mock_pipeline.invoke.called
 
-    def test_synthesia_requires_keys(self):
-        """Requesting video with synthesia provider should validate synthesia keys."""
-        with patch("backend.run_pipeline.settings") as mock_settings:
-            mock_settings.video_provider = "synthesia"
-            mock_settings.synthesia_api_key = ""
-            mock_settings.synthesia_avatar_id = ""
-            with pytest.raises(ValueError, match="SYNTHESIA_API_KEY"):
-                run_job(["/tmp/fake.pdf"], ["video"])
+    def test_video_format_rejected_regardless_of_keys(self):
+        """Video rejection happens before any API key check — no settings mutation."""
+        with patch("backend.run_pipeline.build_pipeline") as mock_build:
+            mock_pipeline = MagicMock()
+            mock_build.return_value = mock_pipeline
+            with pytest.raises(ValueError, match="not yet available"):
+                run_job(["/tmp/fake.pdf"], ["pdf", "video"])
+            mock_pipeline.invoke.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -84,16 +54,15 @@ class TestRunJobValidation:
 
 class TestRunJobPipelineInvocation:
 
-    def test_sets_output_formats_on_settings(self):
-        """run_job should set settings.output_formats before invoking pipeline."""
-        with patch("backend.run_pipeline.build_pipeline") as mock_build, \
-             patch("backend.run_pipeline.settings") as mock_settings:
-            mock_settings.heygen_api_key = ""
+    def test_output_formats_passed_in_state(self):
+        """run_job must pass output_formats in initial_state, not via settings mutation."""
+        with patch("backend.run_pipeline.build_pipeline") as mock_build:
             mock_pipeline = MagicMock()
             mock_pipeline.invoke.return_value = {"pdf_path": "/out.pdf"}
             mock_build.return_value = mock_pipeline
             run_job(["/tmp/test.pdf"], ["pdf", "script"])
-            assert mock_settings.output_formats == "pdf,script"
+            call_state = mock_pipeline.invoke.call_args[0][0]
+            assert call_state["output_formats"] == "pdf,script"
 
     def test_invokes_pipeline_with_correct_state_shape(self):
         """The initial_state passed to pipeline.invoke should have all required keys."""
@@ -112,6 +81,7 @@ class TestRunJobPipelineInvocation:
             assert call_args["gap_summary"] == []
             assert call_args["pdf_path"] == ""
             assert call_args["video_dir"] == ""
+            assert call_args["output_formats"] == "pdf"
             assert call_args["current_stage"] == "starting"
 
     def test_returns_pipeline_result(self):

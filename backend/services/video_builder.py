@@ -267,6 +267,8 @@ def _process_single_video(
 
     # Download
     video_url = status_data.get("video_url") or status_data.get("download", "")
+    if not video_url:
+        raise RuntimeError(f"No download URL in status response for '{topic_name}': {status_data}")
     _download_video(video_url, video_path)
     print(f"[Video]   {topic_name}: saved to {video_path}")
 
@@ -307,6 +309,11 @@ def build_videos(
         List of filesystem paths to the downloaded ``.mp4`` files, in the
         same order as *topics*.
     """
+    raise NotImplementedError(
+        "Video generation is not yet available. "
+        "Use output formats: pdf, ppt, script."
+    )
+
     os.makedirs(output_dir, exist_ok=True)
     scripts_dir = os.path.join(output_dir, "scripts")
     os.makedirs(scripts_dir, exist_ok=True)
@@ -335,6 +342,11 @@ def build_videos(
         }
         for future in as_completed(future_to_idx):
             idx = future_to_idx[future]
-            video_paths[idx] = future.result()
+            try:
+                video_paths[idx] = future.result()
+            except Exception as exc:
+                topic_name = topics[idx]["name"]
+                print(f"[Video] ERROR: '{topic_name}' failed — {exc}")
+                video_paths[idx] = None
 
     return video_paths

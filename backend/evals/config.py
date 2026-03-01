@@ -22,5 +22,12 @@ class EvalSettings(BaseSettings):
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
+    def require_judge_key(self) -> None:
+        """Raise early if the DeepSeek API key is missing, before any LLM call."""
+        if not self.deepseek_api_key:
+            raise ValueError(
+                "DEEPSEEK_API_KEY is not set. Add it to your .env file to run L2 evals."
+            )
+
 
 eval_settings = EvalSettings()

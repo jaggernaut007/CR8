@@ -2,6 +2,97 @@
 
 > **See also**: [Services Reference](services/index.md) and [Prompt Templates](agents/prompts.md) — Complete technical reference for all builders, prompts, and eval checks.
 
+## Unreleased — March 2026 Hardening: Bug Fixes & Comprehensive Test Suite
+
+**Summary**: Fixed 10 production-ready bugs across the eval harness, pipeline agents, and video builder. Grew the test suite from 144 → 362 tests (+218) using modern testing practices: property-based testing with `hypothesis`, snapshot regression testing with `syrupy`, LangGraph graph integration tests, and full mock isolation for all agent tests. Zero real API calls in the full suite.
+
+---
+
+### Bug Fixes
+
+| File | Bug | Fix |
+|------|-----|-----|
+| `backend/evals/harness/comparator.py` | Per-criterion mean used sum of all scores instead of mean per variant | Fixed to compute per-criterion mean correctly across cases |
+| `backend/evals/judges/base_judge.py` | Unparseable judge response returned fake `score=1` | Returns `[]` on parse failure — lets callers handle gracefully |
+| `backend/evals/harness/scorer.py` | `compute_weighted_total([])` raised `ZeroDivisionError` | Returns `0.0` for empty list |
+| `backend/evals/config.py` | No validation that `DEEPSEEK_API_KEY` was set before judge calls | Added `require_judge_key()` called in `BaseJudge.__init__` |
+| `backend/pipeline/agent_ingest.py` | `json.JSONDecodeError` during topic extraction crashed ingest | Fallback to single-topic `"Curriculum Overview"` with warning |
+| `backend/pipeline/agent_research.py` | Tavily search futures had no timeout — could hang indefinitely | `future.result(timeout=30)` with per-search exception catch |
+| `backend/pipeline/state.py` | `output_formats` field missing from `PipelineState` | Added `output_formats: str` field |
+| `backend/run_pipeline.py` | `output_formats` not passed in initial state | Initial state now includes `output_formats` |
+| `backend/services/video_builder.py` | `_process_single_video` silently produced corrupt output if status response had no URL | Raises `RuntimeError("No download URL")` on missing URL key |
+| `backend/pipeline/agent_generate.py` | `output_formats` read from `settings` instead of `state` | Now reads `state.get("output_formats", settings.output_formats)` |
+
+---
+
+### Test Suite Refactor — 144 → 362 Tests
+
+#### New Test Dependencies
+
+Added to `pyproject.toml` dev extras:
+
+```toml
+"syrupy>=4.0",        # snapshot/golden file testing
+"hypothesis>=6.100",  # property-based testing
+```
+
+#### New Test Files
+
+| File | Tests | What it covers |
+|------|-------|----------------|
+| `backend/tests/test_bug_fixes.py` | 21 | Regression suite for every bug fixed above |
+| `backend/tests/test_structural_checks.py` | 63 | All 3 L1 structural check modules + `_sanitize` property-based |
+| `backend/tests/test_eval_harness.py` | 28 | Comparator winner/regression math, scorer L1-only, syrupy snapshots |
+| `backend/tests/test_graph_integration.py` | 8 | LangGraph `build_pipeline()`, node wiring, state propagation |
+| `backend/tests/test_pipeline_agents.py` | 45 | All 3 agent nodes + `_validate_module`, `_detect_hook_type` helpers |
+| `backend/tests/test_services.py` | 13 | `get_llm()` tier routing, mocked Tavily search |
+
+#### Enhanced Existing Tests
+
+| File | Added |
+|------|-------|
+| `backend/tests/conftest.py` | 7 shared fixtures: `mock_llm`, `base_pipeline_state`, `valid_module_md`, `valid_script`, `valid_ppt_single`, `valid_ppt_full` |
+| `backend/tests/test_file_parser.py` | Nonexistent file, empty PDF, unsupported extension edge cases |
+| `backend/tests/test_chromadb_store.py` | Custom IDs, metadata, empty collection query, `n_results` limit |
+
+#### Testing Techniques
+
+- **Property-based** (`hypothesis`): `@given(st.text())` generates thousands of inputs for `_sanitize` control-char stripping, `@given(st.text(max_size=1999))` for length invariants
+- **Snapshot tests** (`syrupy`): `EvalResult` and `ComparisonResult` field names snapshotted — fails immediately on schema renames or removals
+- **LangGraph graph tests**: All agent nodes patched via `unittest.mock.patch` before `build_pipeline()` — verifies wiring and state flow without running real agent logic
+- **Full mock isolation**: `ChromaStore`, `get_llm`, `extract_text`, `search`, `build_pdf`, `build_gap_ppt`, `build_videos` replaced with `MagicMock` in all agent tests
+
+See the full [Testing Guide](testing/index.md).
+
+---
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `pyproject.toml` | Added `syrupy>=4.0`, `hypothesis>=6.100` to dev extras |
+| `backend/tests/conftest.py` | Added 7 shared fixtures |
+| `backend/tests/test_bug_fixes.py` | New — 21 regression tests |
+| `backend/tests/test_structural_checks.py` | New — 63 structural + property-based tests |
+| `backend/tests/test_eval_harness.py` | New — 28 harness tests with snapshots |
+| `backend/tests/test_graph_integration.py` | New — 8 LangGraph tests |
+| `backend/tests/test_pipeline_agents.py` | New — 45 agent tests |
+| `backend/tests/test_services.py` | New — 13 service tests |
+| `backend/tests/test_file_parser.py` | Enhanced with error cases |
+| `backend/tests/test_chromadb_store.py` | Enhanced with edge cases |
+| `backend/tests/__snapshots__/` | New — syrupy golden files |
+| `backend/evals/config.py` | Added `require_judge_key()` |
+| `backend/evals/harness/comparator.py` | Per-criterion mean fix |
+| `backend/evals/judges/base_judge.py` | Parse failure returns `[]` |
+| `backend/pipeline/state.py` | Added `output_formats` field |
+| `backend/pipeline/agent_ingest.py` | `JSONDecodeError` fallback |
+| `backend/pipeline/agent_research.py` | Search timeout handling |
+| `backend/pipeline/agent_generate.py` | Read `output_formats` from state |
+| `backend/run_pipeline.py` | Pass `output_formats` in initial state |
+| `backend/services/video_builder.py` | URL guard in `_process_single_video` |
+
+---
+
 ## Unreleased — Pipeline Optimization: Multi-Model Routing, Token Efficiency, Quality Improvements
 
 **Summary**: Implemented a 3-tier model system (nano/mini/premium) with task-specific temperature, severity-based routing for module generation, filtered per-topic context for scripts (86% token reduction), parallel PDF+PPT build, split PPT structuring, ChromaDB result caching, map-reduce summarization for long files, module quality validation with retry, hook variety enforcement across scripts, and richer PDF rendering with bold/italic/code block support.

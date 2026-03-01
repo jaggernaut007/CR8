@@ -27,8 +27,16 @@ def _research_topic(i, topic, total, store, llm, curriculum_scope):
         trend_future = search_pool.submit(
             search, f"{name} latest developments alternatives in {domain_ctx} 2025 2026", 5
         )
-        job_results = job_future.result()
-        trend_results = trend_future.result()
+        try:
+            job_results = job_future.result(timeout=30)
+        except Exception as exc:
+            print(f"[Research] WARNING: job search failed for '{name}': {exc}")
+            job_results = []
+        try:
+            trend_results = trend_future.result(timeout=30)
+        except Exception as exc:
+            print(f"[Research] WARNING: trend search failed for '{name}': {exc}")
+            trend_results = []
 
     job_text = "\n".join(
         f"- {r.get('title', '')}: {r.get('content', '')[:300]}" for r in job_results

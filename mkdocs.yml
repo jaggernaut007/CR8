@@ -124,6 +124,8 @@ nav:
       - Services: api/services.md
       - Configuration: api/configuration.md
       - Frontend Endpoints: api/frontend.md
+  - Testing:
+      - testing/index.md
   - Contributing:
       - contributing/index.md
       - Updating Documentation: contributing/updating-docs.md

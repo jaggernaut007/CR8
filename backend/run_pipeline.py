@@ -91,6 +91,7 @@ def main():
         "pdf_path": "",
         "ppt_path": "",
         "video_dir": "",
+        "output_formats": ",".join(formats),
         "current_stage": "starting",
     }
 
@@ -120,24 +121,11 @@ def run_job(file_paths: list[str], formats: list[str]) -> dict:
     if invalid:
         raise ValueError(f"Invalid format(s): {', '.join(invalid)}")
 
-    settings.output_formats = ",".join(formats)
-
     if "video" in formats:
-        missing = []
-        if settings.video_provider == "synthesia":
-            if not settings.synthesia_api_key:
-                missing.append("SYNTHESIA_API_KEY")
-            if not settings.synthesia_avatar_id:
-                missing.append("SYNTHESIA_AVATAR_ID")
-        else:
-            if not settings.heygen_api_key:
-                missing.append("HEYGEN_API_KEY")
-            if not settings.heygen_avatar_id:
-                missing.append("HEYGEN_AVATAR_ID")
-            if not settings.heygen_voice_id:
-                missing.append("HEYGEN_VOICE_ID")
-        if missing:
-            raise ValueError(f"Video ({settings.video_provider}) requires env vars: {', '.join(missing)}")
+        raise ValueError(
+            "Video generation is not yet available. "
+            "Use formats: pdf, ppt, script."
+        )
 
     pipeline = build_pipeline()
     initial_state = {
@@ -150,6 +138,7 @@ def run_job(file_paths: list[str], formats: list[str]) -> dict:
         "pdf_path": "",
         "ppt_path": "",
         "video_dir": "",
+        "output_formats": ",".join(formats),
         "current_stage": "starting",
     }
     return pipeline.invoke(initial_state)

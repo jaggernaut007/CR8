@@ -63,8 +63,10 @@ def compare(results_a: list[EvalResult], results_b: list[EvalResult]) -> Compari
     per_criterion_deltas = {}
     regressions = []
     for crit in set(per_criterion_a.keys()) | set(per_criterion_b.keys()):
-        mean_a = sum(per_criterion_a.get(crit, [0])) / max(len(per_criterion_a.get(crit, [1])), 1)
-        mean_b = sum(per_criterion_b.get(crit, [0])) / max(len(per_criterion_b.get(crit, [1])), 1)
+        scores_a = per_criterion_a.get(crit, [])
+        scores_b = per_criterion_b.get(crit, [])
+        mean_a = sum(scores_a) / len(scores_a) if scores_a else 0.0
+        mean_b = sum(scores_b) / len(scores_b) if scores_b else 0.0
         delta = mean_b - mean_a
         per_criterion_deltas[crit] = round(delta, 3)
         if delta < -eval_settings.regression_threshold:

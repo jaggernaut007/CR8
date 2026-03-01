@@ -18,6 +18,7 @@ class BaseJudge:
         model: str | None = None,
         temperature: float | None = None,
     ):
+        eval_settings.require_judge_key()
         self.model = model or eval_settings.judge_model
         self.temperature = temperature if temperature is not None else eval_settings.judge_temperature
         self.client = OpenAI(
@@ -42,12 +43,8 @@ class BaseJudge:
         try:
             data = json.loads(raw_json)
         except json.JSONDecodeError:
-            return [CriterionScore(
-                criterion_name="PARSE_ERROR",
-                score=1,
-                weight=1.0,
-                rationale=f"Failed to parse judge response: {raw_json[:200]}",
-            )]
+            print(f"[Judge] WARNING: failed to parse judge response. Raw: {raw_json[:200]}")
+            return []
 
         scores = []
         for entry in data.get("scores", []):

@@ -558,13 +558,18 @@ def generate_node(state: PipelineState) -> dict:
         output formats were requested.
     """
     print("[Generate] Starting...")
+    os.makedirs("outputs", exist_ok=True)
 
     store = ChromaStore(settings.chroma_persist_dir)
     topics = state["topics"]
     curriculum_scope = state.get("curriculum_scope", "")
     gap_summary = state.get("gap_summary", [])
     total = len(topics)
-    formats = settings.output_formats_list
+    formats = [
+        f.strip()
+        for f in state.get("output_formats", settings.output_formats).split(",")
+        if f.strip()
+    ]
 
     # Build lookup and caches upfront
     gap_lookup = {g.get("topic", ""): g for g in gap_summary}

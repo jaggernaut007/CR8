@@ -49,7 +49,17 @@ Dockerized on GCP Cloud Run (europe-west2). Single container with Gunicorn + Uvi
 
 ### Test Coverage
 
-144 tests passing (74 backend + 70 frontend). Covers file parsing, ChromaDB operations, PDF generation edge cases (Unicode, malformed markdown, special characters), run_job validation, all FastAPI endpoints, ProgressCapture thread safety, auth flows, upload edge cases, and job ID validation.
+**362 tests passing — 0 real API calls.** Full-stack coverage across the pipeline agents, eval harness, structural checks, services, LangGraph graph integration, and all FastAPI endpoints. All LLMs, web search, and ChromaDB are mocked.
+
+Key test categories added in March 2026 hardening pass:
+- **Structural checks** (63 tests): all L1 module/script/PPT check modules with property-based tests via `hypothesis`
+- **Eval harness** (28 tests): comparator winner/regression logic, scorer L1-only mode, schema regression via `syrupy` snapshots
+- **Pipeline agents** (45 tests): ingest, research, and generate nodes with full mock isolation; helper functions `_sanitize`, `_validate_module`, `_detect_hook_type`
+- **LangGraph graph** (8 tests): `build_pipeline()` compilation, node wiring, state propagation
+- **Services** (13 tests): `get_llm()` tier routing, mocked Tavily, ChromaDB edge cases
+- **Regression suite** (21 tests): dedicated tests for all March 2026 bug fixes
+
+See `docs/testing/index.md` for the full test inventory and architecture documentation.
 
 ---
 

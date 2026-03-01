@@ -26,16 +26,32 @@ pytest backend/tests/test_chromadb_store.py::test_two_collections -v
 
 ## Test Suite
 
+**362 tests — 0 real API calls.** All LLMs, web search, and ChromaDB are mocked.
+
+### Backend Tests
+
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
-| `backend/tests/test_file_parser.py` | 3 | PDF extraction, non-empty pages, multiple files |
-| `backend/tests/test_chromadb_store.py` | 3 | Add/query, reset, collection isolation |
-| `backend/tests/test_pdf_builder.py` | 20+ | PDF generation, Unicode, edge cases |
-| `backend/tests/test_run_pipeline.py` | 10 | Input validation, format checking, pipeline invocation |
-| `frontend/tests/test_api.py` | 28 | All FastAPI endpoints |
-| `frontend/tests/test_progress_capture.py` | 32 | Progress parsing, stage transitions, thread safety |
+| `backend/tests/test_structural_checks.py` | 63 | All L1 structural check modules + `_sanitize` property-based tests |
+| `backend/tests/test_eval_harness.py` | 28 | Comparator winner/regression math, scorer L1-only, syrupy snapshots, hypothesis property tests |
+| `backend/tests/test_graph_integration.py` | 8 | LangGraph `build_pipeline()` compilation, node wiring, state propagation |
+| `backend/tests/test_pipeline_agents.py` | 45 | `ingest_node`, `research_node`, `generate_node`, `_validate_module`, `_detect_hook_type`, `_sanitize` |
+| `backend/tests/test_services.py` | 13 | `get_llm()` tier routing, `search()` with mocked Tavily, ChromaDB edge cases |
+| `backend/tests/test_bug_fixes.py` | 21 | Regression suite for all March 2026 hardening fixes |
+| `backend/tests/test_pdf_builder.py` | 20+ | PDF generation: Unicode, malformed markdown, code blocks, special chars |
+| `backend/tests/test_chromadb_store.py` | 7 | Add/query, reset, isolation, custom IDs, metadata, empty collection, `n_results` limit |
+| `backend/tests/test_file_parser.py` | 6 | PDF extraction, non-empty pages, multiple files, missing file, empty PDF, unsupported type |
+| `backend/tests/test_run_pipeline.py` | 8 | `run_job()` validation and invocation |
+| `backend/tests/test_video_builder.py` | 7 | URL guard, download helpers |
 
-**Total: 144 tests** (74 backend + 70 frontend)
+### Frontend Tests
+
+| Test File | Tests | Coverage |
+|-----------|-------|----------|
+| `frontend/tests/test_api.py` | 30+ | All FastAPI endpoints: auth, upload, start, progress, download |
+| `frontend/tests/test_progress_capture.py` | 32 | Stage parsing, progress %age, thread safety |
+
+See the [Testing Guide](../testing/index.md) for full architecture details, shared fixtures, and how to add new tests.
 
 ## Code Style
 

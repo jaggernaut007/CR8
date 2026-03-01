@@ -142,9 +142,14 @@ def ingest_node(state: PipelineState) -> dict:
         config={"run_name": "extract_topics"},
         response_format={"type": "json_object"},
     )
-    data = json.loads(response.content)
-    topics = data.get("topics", [])
-    curriculum_scope = data.get("curriculum_scope", "")
+    try:
+        data = json.loads(response.content)
+        topics = data.get("topics", [])
+        curriculum_scope = data.get("curriculum_scope", "")
+    except json.JSONDecodeError:
+        print("[Ingest] WARNING: malformed JSON from LLM during topic extraction, using single-topic fallback")
+        topics = [{"name": "Curriculum Overview", "description": "Full curriculum content", "key_techniques": []}]
+        curriculum_scope = "General curriculum content"
     print(f"[Ingest] Scope: {curriculum_scope}")
     print(f"[Ingest] Extracted {len(topics)} topics")
 

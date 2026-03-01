@@ -175,64 +175,28 @@ class TestDownloadVideo:
 # ---------------------------------------------------------------------------
 
 class TestBuildVideos:
-    @patch("backend.services.video_builder._download_video")
-    @patch("backend.services.video_builder._poll_status")
-    @patch("backend.services.video_builder._create_video")
-    def test_end_to_end(self, mock_create, mock_poll, mock_download, tmp_path):
-        mock_create.side_effect = ["vid_001", "vid_002"]
-        mock_poll.side_effect = [
-            {"status": "completed", "video_url": "https://h.ai/1.mp4", "duration": 150.0},
-            {"status": "completed", "video_url": "https://h.ai/2.mp4", "duration": 180.0},
-        ]
-        mock_download.side_effect = lambda url, path: open(path, "wb").write(b"mp4data")
+    def test_raises_not_implemented(self, tmp_path):
+        """build_videos is not yet implemented — must raise NotImplementedError immediately."""
+        with pytest.raises(NotImplementedError, match="not yet available"):
+            build_videos(
+                topics=[{"name": "Word2Vec"}],
+                scripts=["Some script"],
+                output_dir=str(tmp_path / "videos"),
+                api_key="fake-key",
+                avatar_id="avatar1",
+                voice_id="voice1",
+            )
 
-        output_dir = str(tmp_path / "videos")
-        topics = [{"name": "Word2Vec"}, {"name": "GloVe"}]
-        scripts = ["Script about Word2Vec...", "Script about GloVe..."]
-
-        paths = build_videos(
-            topics=topics,
-            scripts=scripts,
-            output_dir=output_dir,
-            api_key="fake-key",
-            avatar_id="avatar1",
-            voice_id="voice1",
-        )
-
-        assert len(paths) == 2
-        assert mock_create.call_count == 2
-        assert mock_poll.call_count == 2
-        assert mock_download.call_count == 2
-
-        # Scripts saved to disk
-        scripts_dir = os.path.join(output_dir, "scripts")
-        assert os.path.isdir(scripts_dir)
-        script_files = os.listdir(scripts_dir)
-        assert len(script_files) == 2
-
-    @patch("backend.services.video_builder._download_video")
-    @patch("backend.services.video_builder._poll_status")
-    @patch("backend.services.video_builder._create_video")
-    def test_preserves_order(self, mock_create, mock_poll, mock_download, tmp_path):
-        mock_create.side_effect = ["vid_a", "vid_b"]
-        mock_poll.side_effect = [
-            {"status": "completed", "video_url": "https://h.ai/a.mp4", "duration": 120.0},
-            {"status": "completed", "video_url": "https://h.ai/b.mp4", "duration": 130.0},
-        ]
-        mock_download.side_effect = lambda url, path: open(path, "wb").write(b"data")
-
-        output_dir = str(tmp_path / "videos")
-        topics = [{"name": "TopicA"}, {"name": "TopicB"}]
-        scripts = ["Script A", "Script B"]
-
-        paths = build_videos(
-            topics=topics,
-            scripts=scripts,
-            output_dir=output_dir,
-            api_key="key",
-            avatar_id="av",
-            voice_id="vo",
-        )
-
-        assert "01_TopicA" in paths[0]
-        assert "02_TopicB" in paths[1]
+    def test_raises_before_any_api_call(self, tmp_path):
+        """NotImplementedError must fire before any HeyGen API call is attempted."""
+        with patch("backend.services.video_builder._create_video") as mock_create:
+            with pytest.raises(NotImplementedError):
+                build_videos(
+                    topics=[{"name": "T1"}],
+                    scripts=["s"],
+                    output_dir=str(tmp_path / "v"),
+                    api_key="k",
+                    avatar_id="a",
+                    voice_id="v",
+                )
+            mock_create.assert_not_called()

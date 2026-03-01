@@ -47,5 +47,8 @@ class PipelineState(TypedDict):
     ppt_path: str  # path to generated Gap Analysis PowerPoint
     video_dir: str  # directory containing per-topic video files (when --format video/both)
 
+    # Runtime config (passed via state to avoid mutating global settings)
+    output_formats: str  # comma-separated, e.g. "pdf,ppt,script"
+
     # Tracking
     current_stage: str

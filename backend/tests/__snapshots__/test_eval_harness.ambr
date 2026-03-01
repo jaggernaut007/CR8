@@ -1,0 +1,27 @@
+# serializer version: 1
+# name: TestEvalResultSnapshot.test_comparison_result_fields_stable
+  list([
+    'aggregate_a',
+    'aggregate_b',
+    'cases',
+    'p_value',
+    'per_criterion_deltas',
+    'regressions',
+    'variant_a',
+    'variant_b',
+    'winner',
+  ])
+# ---
+# name: TestEvalResultSnapshot.test_eval_result_fields_stable
+  list([
+    'case_id',
+    'criterion_scores',
+    'langsmith_run_id',
+    'output_type',
+    'prompt_variant',
+    'raw_output',
+    'structural_checks',
+    'timestamp',
+    'weighted_total',
+  ])
+# ---
