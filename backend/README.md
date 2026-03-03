@@ -12,7 +12,7 @@ backend/
 ├── services/           ← External API wrappers (one file per integration)
 ├── prompts/            ← All prompt strings as Python constants
 ├── evals/              ← Evaluation framework (L1 structural + L2 LLM judges)
-└── tests/              ← 282 backend tests (pytest, zero real API calls)
+└── tests/              ← pytest tests (zero real API calls); 362 total across backend + frontend
 ```
 
 ## Entry Points

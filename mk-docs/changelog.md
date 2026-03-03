@@ -398,7 +398,7 @@ New `frontend/` package provides a single-page web interface served by FastAPI +
 - `TestProgressEndpoint`: unknown job 404, running/complete/error states
 - `TestDownloadEndpoint`: unknown job 404, incomplete job 404, PDF download, scripts zip, videos zip, nonexistent type 404, missing file 404
 
-**Total**: 144 tests (74 backend + 70 frontend), all passing.
+**Total at this release**: 144 tests (74 backend + 70 frontend). See March 2026 hardening entry for the current count of 362 tests.
 
 ---
 

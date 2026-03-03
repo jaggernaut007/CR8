@@ -2,7 +2,7 @@
 
 Doc file to summarise technical implementation such that the strategic roadmap can be built by the business agent (not present in the codebase) without needing to read through all the code.
 
-**Last Updated**: 2026-03-01
+**Last Updated**: 2026-03-03
 
 ---
 
@@ -64,7 +64,7 @@ Dockerized on GCP Cloud Run (europe-west2). Single container with Gunicorn + Uvi
 
 ### Test Coverage
 
-144 tests passing (74 backend + 70 frontend). Covers file parsing, ChromaDB operations, PDF generation edge cases (Unicode, malformed markdown, special characters), run_job validation, all FastAPI endpoints, ProgressCapture thread safety, auth flows, upload edge cases, and job ID validation.
+362 tests passing. Covers file parsing, ChromaDB operations, PDF generation edge cases (Unicode, malformed markdown, special characters), run_job validation, all FastAPI endpoints, ProgressCapture thread safety, auth flows, upload edge cases, job ID validation, eval harness, structural checks, and graph integration.
 
 ---
 

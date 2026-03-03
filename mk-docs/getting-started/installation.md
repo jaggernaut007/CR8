@@ -10,7 +10,7 @@
 
 ```bash
 # Clone the repository and navigate to the project root
-cd Software
+cd CR8-edtech
 
 # Create a virtual environment
 python -m venv .venv

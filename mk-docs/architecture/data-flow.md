@@ -8,6 +8,7 @@ State is a `TypedDict` defined in `backend/pipeline/state.py` that accumulates d
 |-------|--------|------|-------------|
 | `job_id` | CLI runner | `str` | Random 12-char hex ID |
 | `file_paths` | CLI runner | `list[str]` | Input file paths |
+| `output_formats` | CLI runner | `str` | Comma-separated formats to generate (e.g. `"pdf,ppt,script"`) |
 | `topics` | Agent 1 | `list[dict]` | Topics with name, description, key_techniques, domain_context |
 | `raw_text` | Agent 1 | `str` | Concatenated extracted text |
 | `curriculum_scope` | Agent 1 | `str` | One-sentence domain boundary description |
@@ -27,6 +28,7 @@ The pipeline starts with an initial state containing only `job_id` and `file_pat
 initial_state = {
     "job_id": uuid.uuid4().hex[:12],
     "file_paths": file_paths,
+    "output_formats": "pdf",
     "topics": [],
     "raw_text": "",
     "curriculum_scope": "",
