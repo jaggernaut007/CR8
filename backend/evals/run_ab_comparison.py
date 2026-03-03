@@ -17,7 +17,6 @@ from backend.evals.harness.runner import EvalRunner
 from backend.evals.harness.comparator import compare
 from backend.evals.harness.reporter import (
     results_to_json,
-    results_to_markdown,
     comparison_to_markdown,
 )
 
@@ -89,7 +88,7 @@ def run_ab(dataset_id: str, max_topics: int = 5, skip_regen: bool = False):
     with open(md_report, "w") as f:
         f.write(report)
 
-    print(f"\n[A/B] Reports saved:")
+    print("\n[A/B] Reports saved:")
     print(f"  v1 results: {v1_json}")
     print(f"  v2 results: {v2_json}")
     print(f"  Comparison: {comp_json}")
@@ -97,7 +96,7 @@ def run_ab(dataset_id: str, max_topics: int = 5, skip_regen: bool = False):
 
     # --- Summary ---
     print(f"\n{'='*60}")
-    print(f"A/B COMPARISON SUMMARY")
+    print("A/B COMPARISON SUMMARY")
     print(f"{'='*60}")
     print(f"  v1 aggregate: {comparison.aggregate_a:.2f}/5.00")
     print(f"  v2 aggregate: {comparison.aggregate_b:.2f}/5.00")

@@ -21,10 +21,7 @@ from backend.services.chromadb_store import ChromaStore
 from backend.pipeline.agent_generate import (
     _generate_module,
     _generate_script_for_topic,
-    _structure_single_topic_slide,
     _build_chroma_cache,
-    _get_hook_guidance,
-    _detect_hook_type,
 )
 from backend.evals.prompt_registry.registry import PromptRegistry
 from backend.evals.datasets.loader import load_cached_state
@@ -99,7 +96,7 @@ def regenerate(dataset_dir: str, max_topics: int = 5):
 
     # --- Step 2: Regenerate PPT slides (reuse v1 since no ppt_v2 prompt yet) ---
     # We keep the same PPT data from v1 for fair comparison
-    print(f"\n[Regen] === Step 2: Reusing v1 PPT slides (no ppt_v2 variant) ===")
+    print("\n[Regen] === Step 2: Reusing v1 PPT slides (no ppt_v2 variant) ===")
 
     # --- Step 3: Regenerate scripts with video_v2, using v2 modules as context ---
     print(f"\n[Regen] === Step 3: Generating {total} scripts with video_v2 ===")
@@ -153,7 +150,7 @@ def regenerate(dataset_dir: str, max_topics: int = 5):
 
     # Summary
     print(f"\n{'='*60}")
-    print(f"Regeneration complete")
+    print("Regeneration complete")
     print(f"  Topics regenerated: {total}")
     for name, data in v2_outputs.items():
         m_len = len(data.get("module_md", ""))

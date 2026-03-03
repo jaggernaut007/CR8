@@ -1,4 +1,5 @@
 site_name: CR8 Documentation
+docs_dir: mk-docs
 site_description: >-
   CR8 is a 3-agent AI pipeline that transforms university curriculum materials
   into market-enriched learning guides, gap analysis presentations, video scripts,
@@ -77,6 +78,7 @@ nav:
       - Quick Start: getting-started/quickstart.md
       - Configuration: getting-started/configuration.md
       - Web UI: getting-started/web-ui.md
+      - Developer Workflow: getting-started/developer-workflow.md
   - Architecture:
       - architecture/index.md
       - Pipeline Overview: architecture/pipeline-overview.md

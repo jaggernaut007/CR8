@@ -1,7 +1,7 @@
-.PHONY: install test run clean serve dev docker-build docker-run docs-serve docs-build docs-deploy
+.PHONY: install test run clean serve dev docker-build docker-run docs-serve docs-build docs-deploy lint lint-fix
 
 install:
-	pip install -e ".[dev]"
+	python3 -m pip install -e ".[dev]"
 
 test:
 	pytest -v
@@ -32,3 +32,9 @@ docs-build:
 
 docs-deploy:
 	mkdocs gh-deploy --force
+
+lint:
+	ruff check .
+
+lint-fix:
+	ruff check . --fix

@@ -49,7 +49,7 @@ def main():
     # --- Regenerate PPT ---
     if slide_data:
         ppt_path = os.path.join("outputs", f"{timestamp}_gap_analysis.pptx")
-        print(f"[Regenerate] Building PPT...")
+        print("[Regenerate] Building PPT...")
         build_gap_ppt(slide_data=slide_data, output_path=ppt_path)
         print(f"[Regenerate] PPT written to {ppt_path}")
     else:

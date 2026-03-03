@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
 from hypothesis import given, settings as hyp_settings
 from hypothesis import strategies as st
 

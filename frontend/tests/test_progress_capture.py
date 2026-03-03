@@ -1,7 +1,6 @@
 """Tests for ProgressCapture — stdout interception and progress parsing."""
 
 import io
-import sys
 import threading
 import time
 

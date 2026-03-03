@@ -30,7 +30,7 @@ class TestRunJobValidation:
                 mock_pipeline = MagicMock()
                 mock_pipeline.invoke.return_value = {"pdf_path": "", "video_dir": ""}
                 mock_build.return_value = mock_pipeline
-                result = run_job(["/tmp/fake.pdf"], [fmt])
+                run_job(["/tmp/fake.pdf"], [fmt])
                 assert mock_pipeline.invoke.called
 
     def test_video_format_rejected(self):

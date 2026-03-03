@@ -78,7 +78,7 @@ class TestComparatorWinnerLogic:
     def test_tie_when_delta_under_threshold(self):
         """Delta of 0.1 is below the 0.3 threshold → tie."""
         from backend.evals.harness.comparator import compare
-        from backend.evals.datasets.schema import CriterionScore, EvalResult, OutputType
+        from backend.evals.datasets.schema import EvalResult, OutputType
 
         # Craft results where weighted_total differs by ~0.1
         ra = EvalResult(
@@ -384,7 +384,7 @@ class TestEvalResultSnapshot:
     """Snapshot tests using syrupy to detect structural regressions on schema fields."""
 
     def test_eval_result_fields_stable(self, snapshot):
-        from backend.evals.datasets.schema import EvalResult, OutputType
+        from backend.evals.datasets.schema import EvalResult
 
         # Access model_fields from the class (not instance) to avoid Pydantic deprecation
         field_names = sorted(EvalResult.model_fields.keys())

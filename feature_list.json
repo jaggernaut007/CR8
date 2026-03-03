@@ -1,0 +1,76 @@
+{
+  "pipeline_core": {
+    "description": "3-agent LangGraph pipeline (Ingest → Research → Generate)",
+    "status": "complete",
+    "tests": "passing",
+    "files": ["backend/pipeline/graph.py", "backend/pipeline/agent_*.py", "backend/pipeline/state.py"]
+  },
+  "output_pdf": {
+    "description": "PDF learning guide builder (fpdf2)",
+    "status": "complete",
+    "tests": "passing",
+    "files": ["backend/services/pdf_builder.py"]
+  },
+  "output_ppt": {
+    "description": "PowerPoint presentation builder (python-pptx)",
+    "status": "complete",
+    "tests": "passing",
+    "files": ["backend/services/ppt_builder.py"]
+  },
+  "output_video_script": {
+    "description": "Video script generation",
+    "status": "complete",
+    "tests": "passing",
+    "files": ["backend/prompts/video.py"]
+  },
+  "output_video_heygen": {
+    "description": "AI avatar video via HeyGen API",
+    "status": "complete",
+    "tests": "passing",
+    "files": ["backend/services/video_builder.py"]
+  },
+  "web_ui": {
+    "description": "FastAPI web interface with drag-drop upload and real-time progress",
+    "status": "complete",
+    "tests": "passing",
+    "files": ["frontend/app.py", "frontend/templates/"]
+  },
+  "authentication": {
+    "description": "bcrypt session auth on all protected routes",
+    "status": "complete",
+    "tests": "passing",
+    "files": ["frontend/app.py"]
+  },
+  "evaluation_framework": {
+    "description": "L1 structural + L2 LLM judge evaluation suite with A/B comparison CLI",
+    "status": "complete",
+    "tests": "passing",
+    "files": ["backend/evals/"]
+  },
+  "chromadb_rag": {
+    "description": "ChromaDB vector store with local embeddings for curriculum context",
+    "status": "complete",
+    "tests": "passing",
+    "files": ["backend/services/chromadb_store.py"]
+  },
+  "docker_deployment": {
+    "description": "Docker containerisation",
+    "status": "complete",
+    "files": ["Dockerfile"]
+  },
+  "gcp_cloud_run": {
+    "description": "GCP Cloud Run deployment",
+    "status": "complete",
+    "files": ["mk-docs/deployment/gcp-cloud-run.md"]
+  },
+  "agent_readiness_setup": {
+    "description": "Claude Code agentic scaffolding (AGENTS.md, skills, hooks, rules)",
+    "status": "in_progress",
+    "files": ["AGENTS.md", "PROGRESS.md", ".claude/", "scripts/init.sh"]
+  },
+  "adaptive_assessment": {
+    "description": "Adaptive assessment feature (see PM-Docs/ for spec)",
+    "status": "planned",
+    "files": []
+  }
+}

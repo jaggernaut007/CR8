@@ -2,7 +2,6 @@
 
 import os
 
-import pytest
 
 from backend.services.pdf_builder import build_pdf, _sanitize, _strip_latex, _strip_latex_expr
 

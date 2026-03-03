@@ -2,6 +2,18 @@
 
 > **See also**: [Services Reference](services/index.md) and [Prompt Templates](agents/prompts.md) — Complete technical reference for all builders, prompts, and eval checks.
 
+## [0.3.0] — 2026-03-03
+
+### Added
+
+- 6 new Claude Code subagents: `adr-writer` (opus), `eval-judge` (opus), `test-writer` (sonnet), `debug-detective` (sonnet), `prompt-optimizer` (opus), `docs-writer` (sonnet)
+- Subagent routing table in `AGENTS.md` for automatic agent dispatch without user prompting
+- Commitizen semantic versioning with conventional-commit format enforcement via pre-commit hook
+- `CHANGELOG.md` at project root managed by `cz bump --changelog`
+- Pre-commit lint gate and docs-staleness warning hook in `.claude/hooks.json`
+
+---
+
 ## Unreleased — March 2026 Hardening: Bug Fixes & Comprehensive Test Suite
 
 **Summary**: Fixed 10 production-ready bugs across the eval harness, pipeline agents, and video builder. Grew the test suite from 144 → 362 tests (+218) using modern testing practices: property-based testing with `hypothesis`, snapshot regression testing with `syrupy`, LangGraph graph integration tests, and full mock isolation for all agent tests. Zero real API calls in the full suite.

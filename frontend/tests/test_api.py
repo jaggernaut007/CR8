@@ -179,7 +179,7 @@ class TestIndexRoute:
 
     def test_video_checkbox_disabled(self, authed_client):
         resp = authed_client.get("/")
-        video_line = [l for l in resp.text.split("\n") if "chk-video" in l][0]
+        video_line = [line for line in resp.text.split("\n") if "chk-video" in line][0]
         assert "disabled" in video_line
 
     def test_contains_sign_out_button(self, authed_client):

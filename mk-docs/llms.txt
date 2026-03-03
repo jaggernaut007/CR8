@@ -1,0 +1,54 @@
+# CR8 — Adaptive Learning Pipeline
+
+> A 3-agent AI system (Ingest → Research → Generate) that transforms university curriculum
+> PDFs into market-enriched learning guides, gap analysis presentations, video scripts,
+> and AI avatar videos.
+
+## Stack
+Python 3.11+, FastAPI, LangGraph, OpenAI (gpt-5.1/mini/nano), ChromaDB, Tavily, pytest (362 tests)
+
+## Key Documentation
+
+### Getting Started
+- Installation and setup: /getting-started/installation/
+- Quick start guide: /getting-started/quickstart/
+- Configuration reference: /getting-started/configuration/
+- Developer workflow (Claude Code): /getting-started/developer-workflow/
+
+### Architecture
+- Pipeline overview (3-agent flow): /architecture/pipeline-overview/
+- Data flow and state: /architecture/data-flow/
+- Technology stack: /architecture/tech-stack/
+- Multi-model routing: /architecture/model-routing/
+- Output chain: /architecture/output-chain/
+
+### Pipeline Agents
+- Ingest agent (PDF parsing, topic extraction): /agents/ingest/
+- Research agent (Tavily + ChromaDB enrichment): /agents/research/
+- Generate agent (content generation): /agents/generate/
+- Prompt templates: /agents/prompts/
+
+### Services
+- LLM wrapper (OpenAI, model routing): /services/llm/
+- ChromaDB vector store: /services/chromadb/
+- File parser (PDF/PPTX): /services/file-parser/
+- Web search (Tavily): /services/web-search/
+- PDF builder (fpdf2): /services/pdf-builder/
+- PPT builder (python-pptx): /services/ppt-builder/
+- Video builder (HeyGen): /services/video-builder/
+
+### Evaluation Framework
+- Evaluation architecture: /evals/architecture/
+- CLI reference: /evals/cli/
+- Prompt registry: /evals/prompt-registry/
+
+### Deployment
+- Docker: /deployment/docker/
+- GCP Cloud Run: /deployment/gcp-cloud-run/
+
+### Reference
+- Security: /security/
+- API reference: /api/
+- Testing guide: /testing/
+- Contributing: /contributing/
+- Changelog: /changelog/

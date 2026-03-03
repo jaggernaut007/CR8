@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import json
-import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from backend.config import settings
 from backend.evals.datasets.loader import load_cached_state, build_eval_inputs
 from backend.evals.datasets.schema import EvalResult, OutputType
 from backend.evals.harness.scorer import (

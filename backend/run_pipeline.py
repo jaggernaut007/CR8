@@ -69,7 +69,7 @@ def main():
 
     file_paths = args.files
     print(f"\n{'='*60}")
-    print(f"CR8 Learning Pipeline")
+    print("CR8 Learning Pipeline")
     print(f"{'='*60}")
     print(f"Input files: {len(file_paths)}")
     for f in file_paths:

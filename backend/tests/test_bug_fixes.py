@@ -6,7 +6,6 @@ Each test class targets exactly one bug fix and is named after the file it cover
 from __future__ import annotations
 
 import json
-from collections import defaultdict
 from unittest.mock import MagicMock, patch
 
 import pytest

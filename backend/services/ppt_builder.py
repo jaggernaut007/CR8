@@ -22,9 +22,7 @@ Design reference: Docs/CR8_Course_PPT_Template_Recommendation.md
 """
 
 import io
-import math
 import os
-import tempfile
 from datetime import datetime
 
 import matplotlib
@@ -33,7 +31,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from pptx import Presentation
-from pptx.util import Inches, Pt, Emu
+from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
@@ -513,7 +511,7 @@ def _generate_radar_chart(topic_scores):
     industry = [s.get("industry_requirement", 80) for s in topic_scores]
 
     # Truncate long labels
-    labels = [l[:18] + "..." if len(l) > 18 else l for l in labels]
+    labels = [lbl[:18] + "..." if len(lbl) > 18 else lbl for lbl in labels]
 
     n = len(labels)
     angles = np.linspace(0, 2 * np.pi, n, endpoint=False).tolist()
@@ -896,8 +894,6 @@ def _render_gap_concept(slide, x, y, width, height, concept):
     # Diagram (if specified) — use a height proportional to available space
     nodes = diagram_data.get("nodes", [])
     labels = diagram_data.get("labels", [])
-    has_diagram = False
-
     # Reserve space: diagram gets at most 1.0" or half the remaining space
     remaining_for_diagram = bottom_y - cur_y - Inches(0.5)  # leave 0.5" for how_it_works
     diagram_height = min(Inches(1.0), max(remaining_for_diagram * 0.6, Inches(0.6)))
@@ -905,7 +901,6 @@ def _render_gap_concept(slide, x, y, width, height, concept):
     if diagram_type == "process_flow" and nodes:
         _add_process_flow_diagram(slide, x, cur_y, width, diagram_height, nodes)
         cur_y += diagram_height + Inches(0.1)
-        has_diagram = True
 
     elif diagram_type == "comparison" and (nodes or labels):
         left_items = nodes if nodes else []
@@ -913,7 +908,6 @@ def _render_gap_concept(slide, x, y, width, height, concept):
         _add_comparison_diagram(slide, x, cur_y, width, diagram_height,
                                 left_items, right_items)
         cur_y += diagram_height + Inches(0.1)
-        has_diagram = True
 
     elif diagram_type == "concept_map" and nodes:
         center = nodes[0] if nodes else concept_name
@@ -921,7 +915,6 @@ def _render_gap_concept(slide, x, y, width, height, concept):
         _add_concept_map_diagram(slide, x, cur_y, width, diagram_height,
                                  center, satellites)
         cur_y += diagram_height + Inches(0.1)
-        has_diagram = True
 
     # "How it works" explanation — only if space remains and stays within bounds
     remaining = bottom_y - cur_y

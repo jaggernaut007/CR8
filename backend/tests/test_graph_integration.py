@@ -6,9 +6,8 @@ No real LLMs, no ChromaDB, no external API calls.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
 
 
 class TestBuildPipeline:
@@ -78,7 +77,7 @@ class TestGraphNodeRouting:
             }
 
             pipeline = build_pipeline()
-            result = pipeline.invoke(base_pipeline_state)
+            pipeline.invoke(base_pipeline_state)
 
         mock_ingest.assert_called_once()
         mock_research.assert_called_once()
