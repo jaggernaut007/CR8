@@ -10,6 +10,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [0.3.0] — 2026-03-03
 
 ### Added
+- 3 new Claude Code skills in `.claude/skills/`:
+  - `/commit-ready` — full CONTRIBUTING.md pre-commit checklist gate (lint, tests, docs, PROGRESS, code review)
+  - `/coverage-report` — pytest-cov analysis, ranks modules below 80%, routes weakest to test-writer
+  - `/new-feature` — scaffolds services/agents/endpoints with ordered checklist and agent routing
+- `pytest-cov>=5.0` added to dev dependencies
 - 6 new Claude Code subagents in `.claude/agents/`:
   - `adr-writer` (opus) — writes Architecture Decision Records before structural changes
   - `eval-judge` (opus) — produces SHIP/HOLD/ITERATE verdicts from eval comparison reports

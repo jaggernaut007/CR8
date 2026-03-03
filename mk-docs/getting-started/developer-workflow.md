@@ -270,6 +270,22 @@ Open the report and compare the new variant against the production baseline.
 
 ---
 
+## Skills Reference
+
+Claude Code skills are compound workflows invoked with `/skill-name`. They orchestrate multiple agents and checks in sequence.
+
+| Skill | Invoke | What it does |
+|-------|--------|--------------|
+| `/commit-ready` | "am I ready to commit" | Runs the full CONTRIBUTING.md checklist: lint, tests, docs staleness, PROGRESS.md, code review gate. Stops at first blocking failure. |
+| `/coverage-report` | "what's my coverage" | Runs pytest-cov, ranks modules below 80% coverage, routes the weakest file to the test-writer agent with specific uncovered lines. |
+| `/new-feature` | "scaffold a feature" | Classifies your feature (service/agent/endpoint), checks for ADR and research prerequisites, produces an ordered creation checklist across all required locations. |
+| `/session-handoff` | "wrap up" | Writes or reads structured session state to/from PROGRESS.md. |
+
+!!! tip "Skills chain together"
+    `/new-feature` ends by suggesting `/commit-ready`. `/coverage-report` routes directly to the test-writer agent. Use them as a natural workflow: scaffold → implement → check coverage → commit-ready → commit.
+
+---
+
 ## Session End Ritual
 
 ### Step 1 — Run the session handoff
@@ -322,14 +338,26 @@ Use the research-assistant agent to research [library] v[X] before I implement a
 Check docs/research/INDEX.md first to see if a note already exists.
 ```
 
-### Pre-commit code review
+### Pre-commit validation
+
+```
+/commit-ready
+```
+
+Runs the full CONTRIBUTING.md checklist automatically. For manual review instead:
 
 ```
 Review my recent changes before I commit. Check the code-reviewer agent checklist.
 Run make lint and make test and show me the output.
 ```
 
-### Add a new output format
+### Scaffold a new feature
+
+```
+/new-feature
+```
+
+Walks through classification, ADR/research prerequisites, and produces a file creation checklist. For output formats specifically:
 
 ```
 I need to add a new output format to the pipeline. Use Plan mode and check
@@ -357,6 +385,14 @@ The test [test_name] in [test_file] is failing. Read the test file and the
 source it tests, identify the root cause, and propose a fix. Do not
 change test assertions to make the test pass — fix the underlying code.
 ```
+
+### Check test coverage
+
+```
+/coverage-report
+```
+
+Runs pytest-cov and identifies under-tested modules. Routes the weakest file to the test-writer agent.
 
 ### Update docs before committing
 

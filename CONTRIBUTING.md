@@ -38,11 +38,22 @@
 
 ## Workflow Before Committing
 
+Run `/commit-ready` to validate the full checklist automatically, or follow manually:
+
 1. **External library/API?** Check `docs/research/INDEX.md` — create research note if missing
 2. **Architectural change?** Check `docs/adr/` — create new ADR if making structural decisions
 3. **Prompt change?** Run `python -m backend.evals run_ab` and document results
 4. **All checks**: `make lint && make test`
 5. **Update**: `PROGRESS.md` with what was done
+
+## Available Skills
+
+| Skill | Invoke | Purpose |
+|-------|--------|---------|
+| `/commit-ready` | "am I ready to commit" | Full pre-commit checklist gate |
+| `/coverage-report` | "what's my coverage" | Find untested modules, route to test-writer |
+| `/new-feature` | "scaffold a feature" | Ordered file creation checklist with agent routing |
+| `/session-handoff` | "wrap up" | Read/write session state to PROGRESS.md |
 
 ## Commit Style
 
