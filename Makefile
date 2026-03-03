@@ -25,13 +25,13 @@ clean:
 	rm -rf chroma_db/ outputs/ __pycache__ backend/__pycache__ .pytest_cache
 
 docs-serve:
-	mkdocs serve --dev-addr 0.0.0.0:8000
+	python3 -m mkdocs serve --dev-addr 0.0.0.0:8000
 
 docs-build:
-	mkdocs build --strict
+	python3 -m mkdocs build --strict
 
 docs-deploy:
-	mkdocs gh-deploy --force
+	python3 -m mkdocs gh-deploy --force
 
 lint:
 	ruff check .

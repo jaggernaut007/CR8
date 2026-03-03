@@ -63,7 +63,7 @@ echo "  ✓ All tests passing"
 # ── 5. Docs build check ──────────────────────────────────────────────────────
 echo ""
 echo "▶ Checking MkDocs build..."
-if mkdocs build --strict --quiet 2>/dev/null; then
+if python3 -m mkdocs build --strict --quiet 2>/dev/null; then
   echo "  ✓ Docs build clean"
 else
   echo "  ⚠ Docs build has warnings (non-blocking — fix when convenient)"

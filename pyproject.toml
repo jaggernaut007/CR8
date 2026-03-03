@@ -42,8 +42,8 @@ eval = [
     "tabulate>=0.9",
 ]
 docs = [
-    "mkdocs>=1.6",
-    "mkdocs-material>=9.5",
+    "mkdocs>=1.6,<2.0",
+    "mkdocs-material>=9.5,<10.0",
     "mkdocstrings[python]>=0.24",
     "mkdocs-minify-plugin>=0.8",
     "mkdocs-git-revision-date-localized-plugin>=1.2",
