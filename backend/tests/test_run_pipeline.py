@@ -33,19 +33,42 @@ class TestRunJobValidation:
                 run_job(["/tmp/fake.pdf"], [fmt])
                 assert mock_pipeline.invoke.called
 
-    def test_video_format_rejected(self):
-        """Video format is not yet implemented — run_job must reject it immediately."""
-        with pytest.raises(ValueError, match="not yet available"):
-            run_job(["/tmp/fake.pdf"], ["video"])
+    def test_video_heygen_format_rejected_missing_keys(self):
+        """Video format with heygen provider requires API keys."""
+        with patch("backend.run_pipeline.settings") as mock_settings:
+            mock_settings.video_provider = "heygen"
+            mock_settings.heygen_api_key = ""
+            mock_settings.heygen_avatar_id = ""
+            mock_settings.heygen_voice_id = ""
+            with pytest.raises(ValueError, match="requires"):
+                run_job(["/tmp/fake.pdf"], ["video"])
 
-    def test_video_format_rejected_regardless_of_keys(self):
-        """Video rejection happens before any API key check — no settings mutation."""
-        with patch("backend.run_pipeline.build_pipeline") as mock_build:
-            mock_pipeline = MagicMock()
-            mock_build.return_value = mock_pipeline
+    def test_video_kokoro_format_accepted(self):
+        """Video format with kokoro provider should be accepted."""
+        with patch("backend.run_pipeline.settings") as mock_settings:
+            mock_settings.video_provider = "kokoro"
+            with patch("backend.run_pipeline.build_pipeline") as mock_build:
+                mock_pipeline = MagicMock()
+                mock_pipeline.invoke.return_value = {"video_dir": "/out"}
+                mock_build.return_value = mock_pipeline
+                run_job(["/tmp/fake.pdf"], ["video"])
+                assert mock_pipeline.invoke.called
+
+    def test_video_synthesia_format_rejected_missing_keys(self):
+        """Video format with synthesia provider requires API keys."""
+        with patch("backend.run_pipeline.settings") as mock_settings:
+            mock_settings.video_provider = "synthesia"
+            mock_settings.synthesia_api_key = ""
+            mock_settings.synthesia_avatar_id = ""
+            with pytest.raises(ValueError, match="requires"):
+                run_job(["/tmp/fake.pdf"], ["video"])
+
+    def test_video_unknown_provider_rejected(self):
+        """Video format with unknown provider is rejected."""
+        with patch("backend.run_pipeline.settings") as mock_settings:
+            mock_settings.video_provider = "fakeprovider"
             with pytest.raises(ValueError, match="not yet available"):
-                run_job(["/tmp/fake.pdf"], ["pdf", "video"])
-            mock_pipeline.invoke.assert_not_called()
+                run_job(["/tmp/fake.pdf"], ["video"])
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +104,7 @@ class TestRunJobPipelineInvocation:
             assert call_args["gap_summary"] == []
             assert call_args["pdf_path"] == ""
             assert call_args["video_dir"] == ""
+            assert call_args["slide_images"] == []
             assert call_args["output_formats"] == "pdf"
             assert call_args["current_stage"] == "starting"
 
@@ -103,7 +127,7 @@ class TestRunJobPipelineInvocation:
         job_ids = []
         with patch("backend.run_pipeline.build_pipeline") as mock_build:
             mock_pipeline = MagicMock()
-            mock_pipeline.invoke.side_effect = lambda state: state
+            mock_pipeline.invoke.side_effect = lambda state, **kw: state
             mock_build.return_value = mock_pipeline
             for _ in range(5):
                 result = run_job(["/tmp/test.pdf"], ["pdf"])

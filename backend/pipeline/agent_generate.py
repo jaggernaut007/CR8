@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import json
+import logging
 import os
 import re
 import threading
@@ -6,11 +9,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 from backend.config import settings
-from backend.pipeline.state import PipelineState
+from backend.pipeline.state import PipelineCancelledError, PipelineState, _check_cancelled
 from backend.services.llm import get_llm
 from backend.services.chromadb_store import ChromaStore
 from backend.services.pdf_builder import build_pdf
 from backend.services.ppt_builder import build_gap_ppt
+from backend.services.file_parser import export_slides_as_images
 from backend.services.video_builder import build_videos
 from backend.prompts.generate import GENERATE_MODULE
 from backend.prompts.ppt import (
@@ -20,9 +24,176 @@ from backend.prompts.ppt import (
 )
 from backend.prompts.video import MODULE_TO_SCRIPT, SCRIPT_FROM_SLIDES, HOOK_EXAMPLES
 
+logger = logging.getLogger(__name__)
+
 # Module validation thresholds
 _MIN_MODULE_CHARS = 2000
 _REQUIRED_SECTIONS = ["## Module Overview", "## Learning Objectives", "## Core Content", "## Key Takeaways"]
+
+
+def _build_videos_dispatch(
+    state: PipelineState,
+    video_topics: list[dict],
+    scripts: list[str],
+    video_dir: str,
+    slide_images: list[str],
+    topic_slide_map: dict[str, list[int]] | None = None,
+) -> None:
+    """Route video generation: primary GPU → fallback GPU → local CPU.
+
+    User cancellation (``PipelineCancelledError``) is never caught — it
+    propagates immediately so the frontend can mark the job cancelled.
+    Only GPU infrastructure errors trigger the CPU fallback.
+    """
+    if settings.should_use_gpu_service:
+        try:
+            _build_videos_gpu(
+                state, video_topics, scripts, video_dir,
+                slide_images, topic_slide_map,
+            )
+            return
+        except PipelineCancelledError:
+            raise  # never swallow user cancellation
+        except Exception as exc:
+            print(f"[Video] GPU services failed: {exc}")
+            print("[Video] Falling back to local CPU video generation...")
+
+    _check_cancelled()
+    build_videos(
+        topics=video_topics,
+        scripts=scripts,
+        output_dir=video_dir,
+        cancel_check=_check_cancelled,
+        **_video_kwargs(slide_images, topic_slide_map),
+    )
+
+
+def _build_videos_gpu(
+    state: PipelineState,
+    video_topics: list[dict],
+    scripts: list[str],
+    video_dir: str,
+    slide_images: list[str],
+    topic_slide_map: dict[str, list[int]] | None,
+) -> None:
+    """Try GPU services (primary then fallback). Raises on total failure."""
+    from backend.services.gcs_client import GCSVideoClient
+    from backend.services.gpu_client import GPUVideoClient
+
+    gcs = GCSVideoClient()
+    gpu = GPUVideoClient()
+    job_id = state["job_id"]
+    completed = False
+
+    try:
+        manifest = {
+            "job_id": job_id,
+            "topics": video_topics,
+            "scripts": scripts,
+            "topic_slide_map": topic_slide_map,
+            "slide_images": [os.path.basename(p) for p in slide_images],
+            "config": {
+                "voice": settings.kokoro_voice,
+                "lang": settings.kokoro_lang,
+                "fps": settings.video_fps,
+                "max_workers": settings.video_max_workers,
+            },
+        }
+
+        print("[Video] Uploading slides to GCS...")
+        gcs_prefix = gcs.upload_job_inputs(job_id, slide_images, manifest)
+
+        _check_cancelled()
+
+        print("[Video] Submitting video job to GPU service...")
+        video_job_id = gpu.submit_job(job_id, gcs_prefix)
+        print(f"[Video] GPU_JOB_ID: {video_job_id} (region: {gpu.base_url})")
+
+        gpu.poll_until_complete(video_job_id, cancel_check=_check_cancelled)
+
+        print("[Video] Downloading completed videos from GCS...")
+        gcs.download_videos(job_id, video_dir)
+        completed = True
+    finally:
+        if not completed:
+            try:
+                gcs.cleanup_job(job_id)
+            except Exception:
+                logger.warning("GCS cleanup failed for job %s", job_id)
+
+
+def _video_kwargs(
+    slide_images: list[str],
+    topic_slide_map: dict[str, list[int]] | None = None,
+) -> dict:
+    """Build keyword arguments for ``build_videos()`` based on current provider."""
+    if settings.video_provider == "kokoro":
+        return {
+            "provider": "kokoro",
+            "api_key": "",
+            "avatar_id": "",
+            "voice_id": "",
+            "slide_images": slide_images,
+            "topic_slide_map": topic_slide_map,
+            "kokoro_voice": settings.kokoro_voice,
+            "kokoro_lang": settings.kokoro_lang,
+            "video_fps": settings.video_fps,
+            "max_workers": settings.video_max_workers,
+        }
+    return {
+        "provider": settings.video_provider,
+        "api_key": settings.heygen_api_key,
+        "avatar_id": settings.heygen_avatar_id,
+        "voice_id": settings.heygen_voice_id,
+        "emotion": settings.video_avatar_emotion,
+        "speed": settings.video_avatar_speed,
+        "max_workers": settings.video_max_workers,
+    }
+
+
+def _get_slide_images(
+    state: PipelineState,
+    video_dir: str,
+    ppt_path: str | None = None,
+) -> list[str]:
+    """Export slide images for Kokoro video composition.
+
+    Args:
+        state: Pipeline state (used as fallback for file_paths).
+        video_dir: Directory for video output (slide_images/ created inside).
+        ppt_path: Explicit path to generated PPT — preferred source.
+
+    Returns the slide image paths if provider is kokoro, otherwise [].
+    """
+    if settings.video_provider != "kokoro":
+        return []
+
+    slide_img_dir = os.path.join(video_dir, "slide_images")
+
+    dpi = settings.slide_export_dpi
+
+    # Prefer explicit ppt_path (generated PPT with gap analysis visuals)
+    if ppt_path and os.path.exists(ppt_path):
+        print(f"[Video] Exporting slide images from PPT: {ppt_path}")
+        return export_slides_as_images(ppt_path, slide_img_dir, dpi=dpi)
+
+    # Fallback: check state for ppt_path (legacy)
+    state_ppt = state.get("ppt_path", "")
+    if state_ppt and os.path.exists(state_ppt):
+        print(f"[Video] Exporting slide images from PPT: {state_ppt}")
+        return export_slides_as_images(state_ppt, slide_img_dir, dpi=dpi)
+
+    # Last resort: original input file
+    file_paths = state.get("file_paths", [])
+    if file_paths:
+        src = file_paths[0]
+        ext = os.path.splitext(src)[1].lower()
+        if ext in (".pdf", ".pptx"):
+            print(f"[Video] Exporting slide images from input: {src}")
+            return export_slides_as_images(src, slide_img_dir, dpi=dpi)
+
+    print("[Video] No slide source available — video will have no slide images")
+    return []
 _MAX_MODULE_RETRIES = 2
 
 # Hook keywords for variety tracking
@@ -592,6 +763,8 @@ def generate_node(state: PipelineState) -> dict:
             idx = future_to_idx[future]
             try:
                 modules_md[idx] = future.result()
+            except PipelineCancelledError:
+                raise
             except Exception as exc:
                 topic_name = topics[idx]["name"]
                 print(f"[Generate] ERROR: module '{topic_name}' failed — {exc}")
@@ -603,6 +776,8 @@ def generate_node(state: PipelineState) -> dict:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     result = {"current_stage": "complete"}
     slide_data = None
+    topic_slide_map: dict[str, list[int]] | None = None
+    ppt_path: str | None = None
 
     # --- Step 2 & 3: PDF + PPT in parallel (#1) ---
     needs_pdf = "pdf" in formats
@@ -654,7 +829,7 @@ def generate_node(state: PipelineState) -> dict:
                 slide_data = _build_fallback_slide_data(gap_summary, curriculum_scope)
 
         ppt_path = os.path.join("outputs", f"{timestamp}_gap_analysis.pptx")
-        build_gap_ppt(slide_data=slide_data, output_path=ppt_path)
+        _, topic_slide_map = build_gap_ppt(slide_data=slide_data, output_path=ppt_path)
         print(f"[Generate] PPT written to {ppt_path}")
         result["ppt_path"] = ppt_path
 
@@ -700,7 +875,7 @@ def generate_node(state: PipelineState) -> dict:
                     slide_data = _build_fallback_slide_data(gap_summary, curriculum_scope)
 
             ppt_path = os.path.join("outputs", f"{timestamp}_gap_analysis.pptx")
-            build_gap_ppt(slide_data=slide_data, output_path=ppt_path)
+            _, topic_slide_map = build_gap_ppt(slide_data=slide_data, output_path=ppt_path)
             print(f"[Generate] PPT written to {ppt_path}")
             result["ppt_path"] = ppt_path
 
@@ -724,18 +899,12 @@ def generate_node(state: PipelineState) -> dict:
             result["video_dir"] = video_dir
 
             if "video" in formats:
-                print(f"[Video] Submitting {len(scripts)} PPT-aligned videos...")
-                build_videos(
-                    topics=video_topics,
-                    scripts=scripts,
-                    output_dir=video_dir,
-                    api_key=settings.heygen_api_key,
-                    avatar_id=settings.heygen_avatar_id,
-                    voice_id=settings.heygen_voice_id,
-                    provider=settings.video_provider,
-                    emotion=settings.video_avatar_emotion,
-                    speed=settings.video_avatar_speed,
-                    max_workers=settings.video_max_workers,
+                print(f"[Video] Generating {len(scripts)} PPT-aligned videos...")
+                slide_images = _get_slide_images(state, video_dir, ppt_path=ppt_path)
+                result["slide_images"] = slide_images
+                _build_videos_dispatch(
+                    state, video_topics, scripts, video_dir,
+                    slide_images, topic_slide_map,
                 )
                 print(f"[Video] Videos saved to {video_dir}")
         else:
@@ -746,18 +915,12 @@ def generate_node(state: PipelineState) -> dict:
             result["video_dir"] = video_dir
 
             if "video" in formats:
-                print(f"[Video] Submitting {video_limit} videos...")
-                build_videos(
-                    topics=video_topics,
-                    scripts=scripts,
-                    output_dir=video_dir,
-                    api_key=settings.heygen_api_key,
-                    avatar_id=settings.heygen_avatar_id,
-                    voice_id=settings.heygen_voice_id,
-                    provider=settings.video_provider,
-                    emotion=settings.video_avatar_emotion,
-                    speed=settings.video_avatar_speed,
-                    max_workers=settings.video_max_workers,
+                print(f"[Video] Generating {video_limit} videos...")
+                slide_images = _get_slide_images(state, video_dir, ppt_path=ppt_path)
+                result["slide_images"] = slide_images
+                _build_videos_dispatch(
+                    state, video_topics, scripts, video_dir,
+                    slide_images, topic_slide_map,
                 )
                 print(f"[Video] Videos saved to {video_dir}")
 

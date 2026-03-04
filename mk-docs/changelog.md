@@ -2,6 +2,53 @@
 
 > **See also**: [Services Reference](services/index.md) and [Prompt Templates](agents/prompts.md) — Complete technical reference for all builders, prompts, and eval checks.
 
+## [0.4.0] — 2026-03-04 — Kokoro Video Pipeline, GPU Service, Dual-Service Deployment
+
+**Summary**: Open-source Kokoro TTS video pipeline replaces the HeyGen placeholder. Videos can run locally (CPU/MPS/CUDA) or be offloaded to an NVIDIA L4 GPU microservice on Cloud Run via GCS. Dual-service deployment script, hardware-accelerated encoding, stage-aware ETA, security hardening, and 507-test suite.
+
+### Added — Kokoro Video Pipeline
+- `backend/services/script_parser.py` — NEW: parses `[SLIDE N]` markers from video scripts into per-segment lists
+- `backend/services/tts_engine.py` — NEW: Kokoro TTS wrapper with lazy `KPipeline`, 24kHz audio, GPU-aware device selection (MPS/CUDA/CPU)
+- `backend/services/video_builder.py` — Two-phase pipeline: sequential TTS (shared engine, ~3.4 GB peak) → parallel ffmpeg composition (`VIDEO_MAX_WORKERS=12`). Hardware H.264 encoding (VideoToolbox/NVENC/QSV/AMF/libx264). Per-worker thread control.
+- `backend/services/gpu_utils.py` — NEW: `get_torch_device()` (CUDA > MPS > CPU), `get_ffmpeg_encoder()` (probes ffmpeg for hardware encoder support)
+- `backend/services/file_parser.py` — `export_slides_as_images()`: PDF via PyMuPDF, PPTX via LibreOffice CLI → pdftoppm
+- `VIDEO_PROVIDER=kokoro` — fully open-source, zero-cost video pipeline
+
+### Added — Cloud Run GPU Service
+
+```
+CPU service (europe-west2, London)          GPU service (europe-west4, Netherlands)
+─────────────────────────────────          ────────────────────────────────────────
+Pipeline: Ingest → Research → Generate      Receives job via HTTP POST /api/v1/video-jobs
+Slide export → GCS upload ──────────────>  Downloads slides from GCS
+Poll for completion  <──────────────────── Kokoro TTS + ffmpeg on NVIDIA L4
+Download MP4s from GCS <─────────────────  Uploads MP4s to GCS
+```
+
+- `backend/services/gcs_client.py` — NEW: `GCSVideoClient` for CPU↔GPU data transfer via GCS
+- `backend/services/gpu_client.py` — NEW: `GPUVideoClient` HTTP client with identity token auth, progress polling, fallback to secondary GPU region
+- `gpu_service/` — NEW: FastAPI GPU microservice (`app.py`, `worker.py`, `config.py`, `gcs_client.py`)
+- `Dockerfile.gpu` — NEW: 3-stage CUDA build (ffmpeg with NVENC → Python deps + pre-cached Kokoro model → runtime)
+- `deploy.sh` — Multi-service deployment: CPU (europe-west2) + GPU (europe-west4 primary, europe-west1 fallback)
+
+### Added — Frontend & UX
+- PPTX upload support — magic byte validation for both PDF and PPTX
+- Video checkbox enabled, labelled "Kokoro TTS" (was disabled/HeyGen)
+- Stage-aware ETA with per-stage time budgets (measured from e2e benchmark)
+- `AUTH_PASSWORD` env var for configurable login password
+
+### Changed
+- `_validate_video_provider()` extracted as shared function (CLI + web use identical logic)
+- `STAGE_TIME_BUDGETS` calibrated from measured benchmark (Ingest 51s, Research 150s, Generate 140s, Script 14s, Video 1690s)
+
+### Fixed
+- `_get_slide_images()` — videos now use generated PPT slides (was falling back to original PDF)
+
+### Test Suite
+Total: **507 tests passing** (was 362). Covers GCS/GPU clients, video dispatch, GPU service worker/endpoints, script parser, TTS engine, file parser slide export, PPTX upload, video UI, stage-aware ETA, and video provider validation.
+
+---
+
 ## [0.3.0] — 2026-03-03
 
 ### Added

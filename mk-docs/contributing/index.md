@@ -26,7 +26,7 @@ pytest backend/tests/test_chromadb_store.py::test_two_collections -v
 
 ## Test Suite
 
-**362 tests — 0 real API calls.** All LLMs, web search, and ChromaDB are mocked.
+**426 tests — 0 real API calls.** All LLMs, web search, and ChromaDB are mocked.
 
 ### Backend Tests
 
@@ -42,14 +42,14 @@ pytest backend/tests/test_chromadb_store.py::test_two_collections -v
 | `backend/tests/test_chromadb_store.py` | 7 | Add/query, reset, isolation, custom IDs, metadata, empty collection, `n_results` limit |
 | `backend/tests/test_file_parser.py` | 6 | PDF extraction, non-empty pages, multiple files, missing file, empty PDF, unsupported type |
 | `backend/tests/test_run_pipeline.py` | 8 | `run_job()` validation and invocation |
-| `backend/tests/test_video_builder.py` | 7 | URL guard, download helpers |
+| `backend/tests/test_video_builder.py` | 11 | URL guard, download helpers, Kokoro two-phase pipeline, shared engine, empty slide guard |
 
 ### Frontend Tests
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
-| `frontend/tests/test_api.py` | 30+ | All FastAPI endpoints: auth, upload, start, progress, download |
-| `frontend/tests/test_progress_capture.py` | 32 | Stage parsing, progress %age, thread safety |
+| `frontend/tests/test_api.py` | 90 | All FastAPI endpoints: auth, upload (PDF + PPTX), start, progress, download; video UI |
+| `frontend/tests/test_progress_capture.py` | 39 | Stage parsing, progress %age, thread safety, stage time budgets |
 
 See the [Testing Guide](../testing/index.md) for full architecture details, shared fixtures, and how to add new tests.
 

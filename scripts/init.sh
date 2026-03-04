@@ -56,7 +56,7 @@ fi
 
 # ── 4. Test suite ────────────────────────────────────────────────────────────
 echo ""
-echo "▶ Running test suite (362 tests)..."
+echo "▶ Running test suite (507 tests)..."
 pytest -q --tb=short
 echo "  ✓ All tests passing"
 

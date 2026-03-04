@@ -4,7 +4,24 @@ Defines the :class:`PipelineState` TypedDict that flows through the
 Ingest -> Research -> Generate pipeline graph.
 """
 
-from typing import TypedDict
+import sys
+from typing import NotRequired, TypedDict
+
+
+class PipelineCancelledError(Exception):
+    """Raised when a user cancels a running pipeline job."""
+
+
+def _check_cancelled() -> None:
+    """Raise ``PipelineCancelledError`` if the user has requested cancellation.
+
+    Works by checking ``sys.stdout.is_cancelled()`` — during pipeline execution
+    stdout is replaced with a ``ProgressCapture`` instance that tracks cancel state.
+    Safe to call when stdout is the real stdout (returns silently).
+    """
+    capture = sys.stdout
+    if hasattr(capture, "is_cancelled") and capture.is_cancelled():
+        raise PipelineCancelledError("Pipeline cancelled by user")
 
 
 class PipelineState(TypedDict):
@@ -46,6 +63,7 @@ class PipelineState(TypedDict):
     pdf_path: str
     ppt_path: str  # path to generated Gap Analysis PowerPoint
     video_dir: str  # directory containing per-topic video files (when --format video/both)
+    slide_images: NotRequired[list[str]]  # slide PNGs for Kokoro video composition
 
     # Runtime config (passed via state to avoid mutating global settings)
     output_formats: str  # comma-separated, e.g. "pdf,ppt,script"

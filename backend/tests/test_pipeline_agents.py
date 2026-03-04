@@ -458,7 +458,7 @@ class TestGenerateNode:
             patch("backend.pipeline.agent_generate.ChromaStore", return_value=fake_store),
             patch("backend.pipeline.agent_generate.get_llm", return_value=mock_llm),
             patch("backend.pipeline.agent_generate.build_pdf", return_value=pdf_path),
-            patch("backend.pipeline.agent_generate.build_gap_ppt"),
+            patch("backend.pipeline.agent_generate.build_gap_ppt", return_value=("out.pptx", {})),
             patch("backend.pipeline.agent_generate.build_videos"),
         ):
             return generate_node(state)
@@ -501,7 +501,7 @@ class TestGenerateNode:
             patch("backend.pipeline.agent_generate.ChromaStore", return_value=fake_store),
             patch("backend.pipeline.agent_generate.get_llm", return_value=mock_llm),
             patch("backend.pipeline.agent_generate.build_pdf", return_value="/tmp/out.pdf"),
-            patch("backend.pipeline.agent_generate.build_gap_ppt"),
+            patch("backend.pipeline.agent_generate.build_gap_ppt", return_value=("out.pptx", {})),
             patch("backend.pipeline.agent_generate.build_videos"),
         ):
             generate_node(state)

@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "ruff check \"${CLAUDE_TOOL_INPUT_FILE_PATH}\" --quiet 2>/dev/null || true"
+            "command": "ruff check \"${CLAUDE_TOOL_INPUT_FILE_PATH}\" --quiet 2>/dev/null"
           }
         ]
       }

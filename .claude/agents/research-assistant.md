@@ -12,6 +12,11 @@ notes before implementation begins — this prevents hallucinated API calls.
 
 ## Workflow
 
+### Step 0 — Check Context7 (fast path)
+If the topic is a library covered by Context7, use `resolve-library-id` + `get-library-docs` first.
+Context7 covers: LangGraph, LangChain, FastAPI, Pydantic, ChromaDB, python-pptx, fpdf2, MoviePy, PyMuPDF, and 1000+ other libraries.
+If Context7 provides sufficient information, summarise the findings and stop — no web search needed.
+
 ### Step 1 — Check existing research
 Read `docs/research/INDEX.md`. If a current note exists for this topic, summarise it and stop.
 

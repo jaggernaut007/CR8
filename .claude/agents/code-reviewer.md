@@ -50,5 +50,5 @@ Review all recent changes against these CR8-specific standards.
 ## Verification Commands
 ```bash
 make lint    # ruff check .
-make test    # pytest -v (362 tests)
+make test    # pytest -v (426 tests)
 ```

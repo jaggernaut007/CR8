@@ -544,7 +544,7 @@ def _generate_radar_chart(topic_scores):
               framealpha=0.9, edgecolor=_MPL_CHARCOAL)
 
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight",
+    fig.savefig(buf, format="png", dpi=144, bbox_inches="tight",
                 transparent=True, pad_inches=0.3)
     plt.close(fig)
     buf.seek(0)
@@ -1222,7 +1222,7 @@ def _add_closing_slide(prs, slide_data):
 # Public API
 # ---------------------------------------------------------------------------
 
-def build_gap_ppt(slide_data: dict, output_path: str) -> str:
+def build_gap_ppt(slide_data: dict, output_path: str) -> tuple[str, dict[str, list[int]]]:
     """Build a Teaching PowerPoint from structured slide data.
 
     Uses the CR8 "Midnight Teal" design system with these slide types:
@@ -1249,7 +1249,9 @@ def build_gap_ppt(slide_data: dict, output_path: str) -> str:
             directories are created automatically.
 
     Returns:
-        The *output_path* string (pass-through for chaining convenience).
+        Tuple of (*output_path*, *topic_slide_map*) where
+        *topic_slide_map* maps each topic name to a list of 0-based
+        slide indices it occupies in the presentation.
     """
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
@@ -1275,10 +1277,14 @@ def build_gap_ppt(slide_data: dict, output_path: str) -> str:
         _add_section_divider(prs, 1, "Topics & Concepts")
 
     # 6–N. Per-topic slides: Teaching → Market Intelligence → Quiz
+    topic_slide_map: dict[str, list[int]] = {}
     for topic in topic_slides:
+        start_idx = len(prs.slides)
         _add_topic_teaching_slide(prs, topic)
         _add_market_intelligence_slide(prs, topic)
         _add_quiz_reflection_slide(prs, topic)
+        topic_name = topic.get("topic_name", "Unknown")
+        topic_slide_map[topic_name] = list(range(start_idx, len(prs.slides)))
 
     # N+1. Section divider before recommendations
     recs = slide_data.get("recommendations_summary", [])
@@ -1292,4 +1298,4 @@ def build_gap_ppt(slide_data: dict, output_path: str) -> str:
     _add_closing_slide(prs, slide_data)
 
     prs.save(output_path)
-    return output_path
+    return output_path, topic_slide_map

@@ -17,6 +17,51 @@ from backend.pipeline.graph import build_pipeline
 VALID_FORMATS = {"pdf", "ppt", "script", "video"}
 
 
+def _validate_video_provider(formats: list[str]) -> None:
+    """Check that the configured video provider is supported.
+
+    Raises ValueError with a user-friendly message when the provider
+    is not yet implemented.  Called by both ``main()`` (CLI) and
+    ``run_job()`` (web).
+    """
+    if "video" not in formats:
+        return
+    provider = settings.video_provider
+    if provider == "kokoro":
+        return  # local — no API key needed
+    if provider == "synthesia":
+        missing = []
+        if not settings.synthesia_api_key:
+            missing.append("SYNTHESIA_API_KEY")
+        if not settings.synthesia_avatar_id:
+            missing.append("SYNTHESIA_AVATAR_ID")
+        if missing:
+            raise ValueError(
+                f"Video generation via 'synthesia' requires: {', '.join(missing)}. "
+                "Set them in your .env file. See .env.example for reference."
+            )
+        return
+    if provider == "heygen":
+        missing = []
+        if not settings.heygen_api_key:
+            missing.append("HEYGEN_API_KEY")
+        if not settings.heygen_avatar_id:
+            missing.append("HEYGEN_AVATAR_ID")
+        if not settings.heygen_voice_id:
+            missing.append("HEYGEN_VOICE_ID")
+        if missing:
+            raise ValueError(
+                f"Video generation via 'heygen' requires: {', '.join(missing)}. "
+                "Set them in your .env file. See .env.example for reference. "
+                "Tip: Use VIDEO_PROVIDER=kokoro for local video generation."
+            )
+        return
+    raise ValueError(
+        f"Video generation via '{provider}' is not yet available. "
+        "Set VIDEO_PROVIDER=kokoro for local video, or use formats: pdf, ppt, script."
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="CR8 Learning Pipeline — curriculum in, learning guide out.",
@@ -46,26 +91,11 @@ def main():
     settings.output_formats = ",".join(formats)
 
     # Validate video provider config when video rendering is requested
-    if "video" in settings.output_formats_list:
-        missing = []
-        if settings.video_provider == "synthesia":
-            if not settings.synthesia_api_key:
-                missing.append("SYNTHESIA_API_KEY")
-            if not settings.synthesia_avatar_id:
-                missing.append("SYNTHESIA_AVATAR_ID")
-        else:
-            if not settings.heygen_api_key:
-                missing.append("HEYGEN_API_KEY")
-            if not settings.heygen_avatar_id:
-                missing.append("HEYGEN_AVATAR_ID")
-            if not settings.heygen_voice_id:
-                missing.append("HEYGEN_VOICE_ID")
-        if missing:
-            provider = settings.video_provider
-            print(f"Error: --format video ({provider}) requires these env vars: {', '.join(missing)}")
-            print("Set them in your .env file. See .env.example for reference.")
-            print("Tip: Use --format pdf,script to generate scripts without video rendering.")
-            sys.exit(1)
+    try:
+        _validate_video_provider(formats)
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        sys.exit(1)
 
     file_paths = args.files
     print(f"\n{'='*60}")
@@ -81,8 +111,9 @@ def main():
 
     pipeline = build_pipeline()
 
+    job_id = uuid.uuid4().hex[:12]
     initial_state = {
-        "job_id": uuid.uuid4().hex[:12],
+        "job_id": job_id,
         "file_paths": file_paths,
         "topics": [],
         "raw_text": "",
@@ -91,12 +122,23 @@ def main():
         "pdf_path": "",
         "ppt_path": "",
         "video_dir": "",
+        "slide_images": [],
         "output_formats": ",".join(formats),
         "current_stage": "starting",
     }
 
     start = time.time()
-    result = pipeline.invoke(initial_state)
+    result = pipeline.invoke(
+        initial_state,
+        config={
+            "metadata": {
+                "job_id": job_id,
+                "output_formats": ",".join(formats),
+                "file_count": len(file_paths),
+                "video_provider": settings.video_provider,
+            },
+        },
+    )
     elapsed = time.time() - start
 
     print(f"\n{'='*60}")
@@ -121,15 +163,12 @@ def run_job(file_paths: list[str], formats: list[str]) -> dict:
     if invalid:
         raise ValueError(f"Invalid format(s): {', '.join(invalid)}")
 
-    if "video" in formats:
-        raise ValueError(
-            "Video generation is not yet available. "
-            "Use formats: pdf, ppt, script."
-        )
+    _validate_video_provider(formats)
 
     pipeline = build_pipeline()
+    job_id = uuid.uuid4().hex[:12]
     initial_state = {
-        "job_id": uuid.uuid4().hex[:12],
+        "job_id": job_id,
         "file_paths": file_paths,
         "topics": [],
         "raw_text": "",
@@ -138,10 +177,21 @@ def run_job(file_paths: list[str], formats: list[str]) -> dict:
         "pdf_path": "",
         "ppt_path": "",
         "video_dir": "",
+        "slide_images": [],
         "output_formats": ",".join(formats),
         "current_stage": "starting",
     }
-    return pipeline.invoke(initial_state)
+    return pipeline.invoke(
+        initial_state,
+        config={
+            "metadata": {
+                "job_id": job_id,
+                "output_formats": ",".join(formats),
+                "file_count": len(file_paths),
+                "video_provider": settings.video_provider,
+            },
+        },
+    )
 
 
 if __name__ == "__main__":

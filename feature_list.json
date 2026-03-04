@@ -24,16 +24,22 @@
     "files": ["backend/prompts/video.py"]
   },
   "output_video_heygen": {
-    "description": "AI avatar video via HeyGen API",
-    "status": "complete",
+    "description": "AI avatar video via HeyGen API (scaffold — build_videos raises NotImplementedError for non-kokoro providers)",
+    "status": "scaffold",
     "tests": "passing",
     "files": ["backend/services/video_builder.py"]
   },
   "web_ui": {
-    "description": "FastAPI web interface with drag-drop upload and real-time progress",
+    "description": "FastAPI web interface with drag-drop upload (PDF and PPTX), format selection, real-time progress, and video generation via Kokoro TTS",
     "status": "complete",
     "tests": "passing",
     "files": ["frontend/app.py", "frontend/templates/"]
+  },
+  "pptx_upload": {
+    "description": "PPTX file upload support alongside PDF — magic byte validation (PK\\x03\\x04 ZIP header), drop zone and file input updated, /api/start discovers both .pdf and .pptx files",
+    "status": "complete",
+    "tests": "passing",
+    "files": ["frontend/app.py", "frontend/templates/index.html"]
   },
   "authentication": {
     "description": "bcrypt session auth on all protected routes",
@@ -65,11 +71,34 @@
   },
   "agent_readiness_setup": {
     "description": "Claude Code agentic scaffolding (AGENTS.md, skills, hooks, rules)",
-    "status": "in_progress",
+    "status": "complete",
+    "tests": "passing",
     "files": ["AGENTS.md", "PROGRESS.md", ".claude/", "scripts/init.sh"]
   },
+  "video_pipeline_kokoro": {
+    "description": "Open-source video pipeline via Kokoro TTS + MoviePy (parallel to HeyGen) — E2E tested. Video checkbox enabled in UI with Kokoro TTS label.",
+    "status": "complete",
+    "tests": "passing",
+    "files": ["backend/services/tts_engine.py", "backend/services/script_parser.py", "backend/services/video_builder.py", "backend/services/file_parser.py"]
+  },
+  "quiz_platform": {
+    "description": "Interactive quiz platform with React frontend + Neon PostgreSQL + JWT auth",
+    "status": "planned",
+    "files": []
+  },
+  "admin_dashboard": {
+    "description": "Admin dashboard with analytics, feedback loop, and data tracking",
+    "status": "planned",
+    "files": []
+  },
+  "langsmith_integration": {
+    "description": "LangSmith observability — v0.4: @traceable on all video services (build_videos, _build_kokoro_video, _build_kokoro_videos) + tts_engine, script_parser, file_parser; console logging via logging.basicConfig(); opt-in tracing, job metadata; v0.5+: Prompt Hub, Datasets, Annotation Queues",
+    "status": "partial",
+    "tests": "passing",
+    "files": ["backend/config.py", "backend/run_pipeline.py", "backend/services/tts_engine.py", "backend/services/script_parser.py", "backend/services/file_parser.py", "backend/services/video_builder.py"]
+  },
   "adaptive_assessment": {
-    "description": "Adaptive assessment feature (see PM-Docs/ for spec)",
+    "description": "Adaptive assessment feature (PPO + DKVMN, Phase 3)",
     "status": "planned",
     "files": []
   }

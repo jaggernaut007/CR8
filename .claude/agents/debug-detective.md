@@ -72,7 +72,7 @@ with the developer before touching the test.
 ```bash
 make test
 ```
-All 362 tests must pass before declaring the fix complete.
+All 426 tests must pass before declaring the fix complete.
 
 ## Rules
 - **Never modify test assertions to make a test pass** — assertions describe correct behaviour

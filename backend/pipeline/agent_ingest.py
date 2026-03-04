@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from backend.config import settings
-from backend.pipeline.state import PipelineState
+from backend.pipeline.state import PipelineCancelledError, PipelineState, _check_cancelled
 from backend.services.file_parser import extract_text
 from backend.services.llm import get_llm
 from backend.services.chromadb_store import ChromaStore
@@ -126,9 +126,12 @@ def ingest_node(state: PipelineState) -> dict:
             for idx, (source, texts) in enumerate(file_items)
         }
         for future in as_completed(future_to_idx):
+            _check_cancelled()
             idx = future_to_idx[future]
             try:
                 summaries[idx] = future.result()
+            except PipelineCancelledError:
+                raise
             except Exception as exc:
                 source = file_items[idx][0]
                 print(f"[Ingest] ERROR: summarization of '{source}' failed — {exc}")

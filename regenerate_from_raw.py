@@ -50,7 +50,7 @@ def main():
     if slide_data:
         ppt_path = os.path.join("outputs", f"{timestamp}_gap_analysis.pptx")
         print("[Regenerate] Building PPT...")
-        build_gap_ppt(slide_data=slide_data, output_path=ppt_path)
+        build_gap_ppt(slide_data=slide_data, output_path=ppt_path)  # returns (path, map)
         print(f"[Regenerate] PPT written to {ppt_path}")
     else:
         print("[Regenerate] No _slide_data found in raw outputs, skipping PPT.")

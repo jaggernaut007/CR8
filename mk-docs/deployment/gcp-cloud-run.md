@@ -12,7 +12,7 @@ Step-by-step guide to deploying the CR8 Learning Pipeline on Google Cloud Run.
                     │                                      │
 User ──HTTPS──>     │  Gunicorn + Uvicorn (1 worker)      │
                     │    └── FastAPI app                   │
-                    │         ├── /healthz                 │
+                    │         ├── /health                  │
                     │         ├── /api/upload              │
                     │         ├── /api/start ──> Pipeline  │──> OpenAI API
                     │         ├── /api/progress            │──> Tavily API
@@ -141,7 +141,7 @@ SERVICE_URL=$(gcloud run services describe cr8-pipeline \
     --region=europe-west2 --format='value(status.url)')
 
 # Health check
-curl ${SERVICE_URL}/healthz
+curl ${SERVICE_URL}/health
 # Expected: {"status":"ok","active_jobs":0}
 
 # Open the UI
@@ -170,16 +170,78 @@ make docker-run
 
 ## Cloud Run Configuration Reference
 
+### Without Video (PDF/PPT/Script only)
+
 | Setting | Value | Rationale |
 |---------|-------|-----------|
 | `--port` | 8080 | Cloud Run default |
 | `--memory` | 2Gi | Pipeline + ChromaDB + embeddings model |
 | `--cpu` | 2 | Parallel ThreadPoolExecutor workers |
-| `--timeout` | 3600 | Pipeline runs 5-15 min |
+| `--timeout` | 3600 | Pipeline runs 3-5 min without video |
 | `--min-instances` | 0 | Scale to zero when idle |
 | `--max-instances` | 1 | App enforces single concurrent job |
 | `--no-cpu-throttling` | — | Background threads need CPU between requests |
 | `--allow-unauthenticated` | — | Public access |
+
+### With Video — GPU Service (Recommended)
+
+The recommended video deployment uses two services: a CPU service for the
+pipeline and a separate GPU service for TTS + video composition on an NVIDIA L4.
+
+**CPU service** (`cr8-pipeline`, europe-west2, London):
+
+| Setting | Value | Rationale |
+|---------|-------|-----------|
+| `--memory` | 4Gi | Pipeline + ChromaDB + slide image export |
+| `--cpu` | 2 | Pipeline is I/O-bound (API calls) |
+| `--timeout` | 3600 | ~6-8 min total with GPU offload |
+| `--min-instances` | 0 | Scale to zero when idle |
+
+**GPU service** (`cr8-gpu`, europe-west1, Belgium):
+
+| Setting | Value | Rationale |
+|---------|-------|-----------|
+| `--memory` | **16Gi** | Minimum for L4 GPU + Kokoro model |
+| `--cpu` | **4** | Minimum for L4 GPU |
+| `--gpu` | 1 | NVIDIA L4 (24 GB VRAM) |
+| `--gpu-type` | nvidia-l4 | Only GPU type available on Cloud Run |
+| `--timeout` | 3600 | Video generation takes ~2-3 min on GPU |
+| `--min-instances` | 0 | Scale to zero (no GPU cost when idle) |
+| `--no-allow-unauthenticated` | — | Private — only CPU service calls it via IAM |
+
+The deployed GPU service URL is:
+`https://cr8-gpu-1000325314523.europe-west1.run.app` (private, IAM-authenticated).
+
+!!! info "GPU regions"
+    Cloud Run GPU support is available in `europe-west1` (Belgium) and
+    `europe-west4` (Netherlands) within Europe. CR8 deploys to `europe-west1`
+    (Belgium). Cross-region latency from the CPU service in europe-west2 is <10ms.
+
+!!! warning "Health endpoint: /health, not /healthz"
+    The GPU service exposes `GET /health`. Cloud Run intercepts requests to
+    `/healthz` for its own platform health checks. Probing `/healthz` directly
+    against the GPU service will return an unexpected response. Use `/health`
+    when checking GPU service readiness from the CPU service or from scripts.
+
+!!! tip "Cost comparison: GPU is cheaper per job"
+    A 5-topic video job costs ~$0.06 on GPU (3 min) vs ~$0.13 on CPU (20 min).
+    GPU finishes faster, so you pay for less compute time.
+
+### With Video — CPU Only (Legacy)
+
+For local development or when GPU is not available, video runs locally on CPU:
+
+| Setting | Value | Rationale |
+|---------|-------|-----------|
+| `--memory` | **4Gi** | Kokoro TTS peaks at ~3.4 GB; 2Gi will OOM |
+| `--cpu` | **4** | TTS synthesis + parallel ffmpeg encoding are CPU-bound |
+| `--timeout` | 3600 | Pipeline runs 15-25 min with video for 5 topics |
+
+!!! warning "Kokoro TTS requires 4 GiB minimum"
+    The Kokoro TTS model uses ~250 MB on disk and peaks at ~3.4 GB RAM during
+    synthesis. Deploying with `--memory=2Gi` and video enabled will cause the
+    container to be OOM-killed. Always use `--memory=4Gi` when
+    `VIDEO_PROVIDER=kokoro`.
 
 ### Environment Variables
 
@@ -194,6 +256,10 @@ Set via `--set-env-vars` in deploy.sh:
 | `CHROMA_PERSIST_DIR` | ./chroma_db | Vector DB directory |
 | `LANGCHAIN_TRACING_V2` | true | Enable LangSmith tracing |
 | `LANGCHAIN_PROJECT` | cr8-prototype | LangSmith project name |
+| `GPU_SERVICE_URL` | *(empty)* | URL of GPU video service (enables GPU offload) |
+| `GCS_BUCKET` | cr8-jobs | Shared GCS bucket name for CPU↔GPU data transfer |
+
+The production GCS bucket is `gs://cr8-jobs-cr8-learning`.
 
 ### Secrets
 
@@ -209,15 +275,17 @@ Injected from Secret Manager via `--set-secrets`:
 
 ## Cost Estimate
 
-With `min-instances=0`, you only pay when the app is actively handling requests:
+With `min-instances=0`, both services scale to zero and you only pay during active jobs:
 
-| Scenario | Estimated Monthly Cost |
-|----------|----------------------|
-| Idle (no traffic) | ~$0 |
-| Light use (a few jobs/day) | ~$5-20 |
-| Always-on (`min-instances=1`) | ~$137 |
+| Scenario | CPU Service | GPU Service | **Total** |
+|----------|-----------|-----------|-----------|
+| Idle (no traffic) | ~$0 | ~$0 | **~$0** |
+| Text only (5 jobs/month) | ~$0.10 | $0 | **~$0.10** |
+| Video (5 jobs/month) | ~$0.10 | ~$0.30 | **~$0.40** |
+| Video (20 jobs/month) | ~$0.40 | ~$1.20 | **~$1.60** |
+| Always-on CPU (`min-instances=1`) | ~$70/mo | ~$0 | **~$70/mo** |
 
-Cloud Run pricing (europe-west2): $0.000024/vCPU-sec, $0.0000025/GiB-sec.
+Cloud Run pricing (Tier 1): $0.000024/vCPU-sec, $0.0000025/GiB-sec, $0.000187/GPU-sec (L4).
 
 To switch to always-on (no cold starts), edit `deploy.sh` and change `--min-instances=0` to `--min-instances=1`.
 
@@ -261,6 +329,21 @@ gcloud secrets add-iam-policy-binding OPENAI_API_KEY \
     --role="roles/secretmanager.secretAccessor"
 ```
 
+### GPU service not responding
+
+Check that the CPU service is passing the correct `GPU_SERVICE_URL`. The GPU service health endpoint is `/health` (not `/healthz`):
+
+```bash
+# Check GPU service health directly (requires identity token outside GCP)
+GPU_URL="https://cr8-gpu-1000325314523.europe-west1.run.app"
+curl -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
+    ${GPU_URL}/health
+# Expected: {"status":"ok","gpu":"Tesla T4 ..."}
+
+# Check GPU service logs
+gcloud run services logs read cr8-gpu --region=europe-west1 --limit=50
+```
+
 ### Viewing logs
 
 ```bash
@@ -277,9 +360,8 @@ gcloud run services logs tail cr8-pipeline --region=europe-west2
 
 These are not needed for the initial deployment but worth considering as usage grows:
 
-1. **GCS Storage** — Move uploads/outputs to a Cloud Storage bucket so files persist across instance restarts and users can download later
-2. **CI/CD** — GitHub Actions pipeline to auto-deploy on push to main
-3. **Custom Domain** — Map a domain via `gcloud run domain-mappings create`
-4. **Authentication** — Add IAM or Identity-Aware Proxy to restrict access
-5. **Cloud Tasks** — Decouple job submission from execution for better reliability
-6. **Monitoring** — Set up Cloud Monitoring alerts for error rates and latency
+1. **CI/CD** — GitHub Actions pipeline to auto-deploy on push to main
+2. **Custom Domain** — Map a domain via `gcloud run domain-mappings create`
+3. **Authentication** — Add IAM or Identity-Aware Proxy to restrict access
+4. **Cloud Tasks** — Decouple job submission from execution for better reliability
+5. **Monitoring** — Set up Cloud Monitoring alerts for error rates and latency

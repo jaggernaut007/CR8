@@ -101,6 +101,11 @@ nav:
       - PDF Builder: services/pdf-builder.md
       - PPT Builder: services/ppt-builder.md
       - Video Builder: services/video-builder.md
+      - TTS Engine: services/tts-engine.md
+      - Script Parser: services/script-parser.md
+      - GPU Utils: services/gpu-utils.md
+      - GCS Client: services/gcs-client.md
+      - GPU Client: services/gpu-client.md
   - Evaluation Framework:
       - evals/index.md
       - Architecture: evals/architecture.md

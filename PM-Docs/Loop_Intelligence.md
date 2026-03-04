@@ -1,10 +1,10 @@
-# CR8 Loop Intelligence — Implementation & Strategy Brief v0.3
+# CR8 Loop Intelligence — Implementation & Strategy Brief v0.4
 
 ## This document is the link between the codebase and the business strategy. It summarises the current technical implementation so the strategic roadmap can be built without needing to read through all the code.
 
-**Last Updated**: 2026-03-03
-**Previous Version**: Loop Intelligence 0.2 (2026-02-27)
-**Version Delta**: Added Quiz Platform, Feedback Loop, Open-Source Video Pipeline; replanned video phases
+**Last Updated**: 2026-03-04 (GPU acceleration: MPS/CUDA TTS, hardware H.264 encoding, thread control, ETA calibration)
+**Previous Version**: Loop Intelligence 0.3 (2026-03-03)
+**Version Delta**: Restructured into v0.4→v0.6 roadmap; HeyGen kept (Kokoro added in parallel); Neon PostgreSQL; glassmorphism React frontend; LangSmith deep integration; security hardening at every step; commitizen semver; PPTX upload support added; video UI enabled with Kokoro TTS; web UI login password now configurable via AUTH_PASSWORD env var; GPU acceleration for TTS (MPS/CUDA) and video encoding (VideoToolbox/NVENC/QSV/AMF)
 
 ---
 
@@ -26,7 +26,7 @@ Built with LangGraph, OpenAI, ChromaDB, Tavily, fpdf2, FastAPI. Prototype operat
 
 ---
 
-## Current Implementation Status (as of v0.2)
+## Current Implementation Status (as of v0.4)
 
 The content generation prototype is **complete and deployed**.
 
@@ -40,7 +40,7 @@ The content generation prototype is **complete and deployed**.
 
 ### Web UI (Working)
 
-FastAPI web frontend with drag-and-drop PDF upload, format selection with dependency chain, real-time progress tracking (polling every 3s), file download.
+FastAPI web frontend with drag-and-drop PDF and PPTX upload (magic byte validation for both formats), format selection with dependency chain, real-time progress tracking (polling every 3s), file download. Video generation checkbox is enabled and labelled Kokoro TTS — no third-party API keys required. Video errors and warnings are captured during generation and displayed to the user as a yellow notice below the download buttons. Login password is configurable via the AUTH_PASSWORD environment variable (default: CR8-AI); should be set to a strong secret in any internet-facing deployment.
 
 ### Deployment (Working)
 
@@ -48,17 +48,17 @@ Dockerised on GCP Cloud Run (europe-west2). Single container, Gunicorn + Uvicorn
 
 ### Test Coverage
 
-144 tests passing (74 backend + 70 frontend).
+507 tests passing. Zero real API calls. Covers: GCS/GPU clients, video dispatch, GPU service worker/endpoints, gpu_utils, script parser (10), Kokoro TTS (10), slide export (6), video builder (rewritten for two-phase pipeline + GPU dispatch), progress capture (39, +7 for stage time budgets), PPTX upload, video UI, video provider validation. All backend services emit structured console logs with timestamps.
 
 ---
 
 ## What's New in v0.3: Three Major Additions
 
-### 1. Narrated Slide Video Pipeline (Open-Source)
+### 1. Narrated Slide Video Pipeline (Open-Source, Parallel to HeyGen)
 
 **Problem**: v0.2 video pipeline used HeyGen API (avatar-only on white background, no slide integration). Expensive, vendor-locked, and didn't actually show slides.
 
-**v0.3 Approach**: Two-phase implementation. Phase 1 (current sprint) removes the avatar entirely and delivers slides + voiceover using fully open-source tools. Phase 2 (future) adds an AI avatar overlay.
+**v0.4 Approach**: **HeyGen code stays untouched.** Kokoro TTS is added as a parallel `VIDEO_PROVIDER=kokoro` option. Two-phase implementation. Phase 1 (v0.4) delivers slides + voiceover using fully open-source tools alongside the existing HeyGen path. Phase 2 (future) adds an AI avatar overlay.
 
 #### Phase 1: Slides + Voiceover (Current Sprint)
 
@@ -90,15 +90,37 @@ PPT/PDF → slide PNGs → Script → Kokoro TTS → WAV audio per segment →
   6. Write final MP4 (H.264, AAC audio, 1080p)
 - `requirements.txt` — add `kokoro>=0.9.4`, `moviepy>=2.0`, `soundfile>=0.12`, `Pillow>=10.0`
 
-**Output spec:**
-- Resolution: 1920×1080 (or matches slide aspect ratio)
-- Codec: H.264 + AAC
-- Target duration: ~2 minutes per topic module
-- File size: ~15-30 MB per video
+**Output spec (measured 2026-03-04, M&A PDF, 33 slides, 5 topics):**
+- Resolution: 2000×1125 (matches PPT slide aspect ratio)
+- Codec: H.264 (h264_videotoolbox on Mac) + AAC
+- Duration per video: 4.2-4.6 min (total: 21.9 min across 5 videos)
+- File size per video: 73-95 MB (total: 423 MB)
 - Embeddable: standard MP4, plays in any browser `<video>` tag
 - Downloadable: served via FastAPI file download endpoint
 
 **Cost**: £0 per video (no API calls). Only compute cost on Cloud Run.
+
+**GPU Acceleration (added 2026-03-04):**
+
+The video pipeline now supports hardware acceleration on both TTS and encoding:
+
+| Component | CPU Fallback | GPU Accelerated |
+|-----------|-------------|-----------------|
+| Kokoro TTS | PyTorch on CPU | MPS (Apple Silicon), CUDA (NVIDIA) |
+| Video encoding | `libx264` (software) | `h264_videotoolbox` (macOS), `h264_nvenc` (NVIDIA), `h264_qsv` (Intel), `h264_amf` (AMD) |
+
+Device detection is handled by `backend/services/gpu_utils.py`. Set `VIDEO_DEVICE=auto` (default) to auto-detect, or force `cpu` for CPU-only mode. Hardware encoders are 5-10x faster than software. Per-worker thread control (`-threads cpu_count // max_workers`) prevents CPU contention during parallel ffmpeg composition.
+
+**Measured E2E benchmark (Mac MPS GPU, 2026-03-04):**
+
+| Stage | Duration |
+|-------|----------|
+| Ingest + Research + Generate | 5m 39s |
+| TTS Synthesis (Kokoro MPS, sequential) | 7m 7s |
+| ffmpeg Composition (5 parallel, VideoToolbox) | ~21m |
+| **Total pipeline** | **~34 min** |
+
+Bottleneck: ffmpeg raw-frame piping at 2000x1125 takes 62% of total time.
 
 #### Phase 2: Add Avatar Overlay (Future Sprint)
 
@@ -243,45 +265,71 @@ Quiz Performance Data (PostgreSQL) →
 | Web framework | FastAPI + uvicorn | Async HTTP server | Working |
 | Concurrency | ThreadPoolExecutor | Parallel agent execution (max_workers=8) | Working |
 | Eval framework | DeepSeek-V3 + structural checks | Two-layer quality evaluation | Working |
-| Observability | LangSmith | Trace every LLM call | Working |
+| **Auth (quiz)** | **JWT (python-jose)** | **Student + admin auth for quiz system** | **NEW — v0.5** |
+| Observability | LangSmith | Trace every LLM call + `@traceable` on services | Working → **Deep integration v0.4-v0.6** |
+| **Structured logging** | **structlog** | **JSON logs, correlation IDs, no PII** | **NEW — v0.6** |
+| **Admin charts** | **Recharts** | **Dashboard visualisations** | **NEW — v0.6** |
+| **Mind maps** | **Mermaid.js + mermaid-py** | **Visual topic maps from module JSON** | **NEW — v0.7** |
+| **Flashcard engine** | **supermemo2 (SM-2)** | **Spaced repetition scheduling** | **NEW — v0.7** |
+| **RAG chat** | **ChromaDB + GPT-5-mini** | **Student Q&A on course content** | **NEW — v0.7** |
+| **Student dashboard** | **React + Recharts** | **Progress visualisation** | **NEW — v0.7** |
+| **SCORM export** | **Python zipfile + Jinja2** | **LMS-compatible course bundles** | **NEW — v0.7** |
 | Deployment | Docker + GCP Cloud Run | Containerised, scales to zero | Working |
 
 ---
 
 ## Updated Strategic Roadmap
 
-### Phase 1 — Current Sprint (0-3 months)
+### Versioning
+Commitizen semver. Major feature bumps: 0.4, 0.5, 0.6. Patches: 0.4.1, 0.4.2. All via `cz bump`.
 
-1. **Open-source narrated slide video** — Slides + Kokoro TTS voiceover → MP4 via MoviePy/ffmpeg. No avatar. No API costs.
-2. **Quiz platform MVP** — Quiz Agent generates questions. React frontend for students. One-attempt quizzes with red/green feedback. PostgreSQL for data storage.
-3. **Admin dashboard v1** — Basic visualisation of quiz performance by topic and student. Question-level analytics.
-4. **React frontend upgrade** — Replace single-page HTML with full React SPA (serves both quiz and content generation UI).
-5. **Prompt v3 iteration** — Use eval framework for continued A/B testing.
+### v0.4 — Kokoro TTS Video Pipeline (Current)
+1. **Kokoro TTS parallel to HeyGen** — `VIDEO_PROVIDER=kokoro` adds local slides + voiceover pipeline. HeyGen code untouched.
+2. **LangSmith foundations** — Fix missing API key, env var propagation, job metadata on traces.
+3. **Security baseline** — SECURITY.md, LangSmith opt-in, temp file safety, subprocess hardening.
+4. **Agentic compliance** — Fix stale files, evals README, CLAUDE.md skills, hook fixes.
 
-### Phase 2 — Scale & Enrich (3-6 months)
+### v0.5 — React Frontend + Quiz Platform
+1. **Glassmorphism React SPA** — Frosted glass UI, dark mode, Tailwind, mobile-responsive. Replaces Jinja2 prototype.
+2. **Quiz platform** — Quiz Agent (separate LangGraph workflow), Neon PostgreSQL, JWT auth, one-attempt quizzes.
+3. **LangSmith enrichment** — `@traceable` on all services, Prompt Hub, Datasets integration.
+4. **Security hardening** — CORS lockdown, security headers, env-configurable password, CI/CD with pip-audit.
+5. **Infrastructure** — `.github/` setup, Dependabot, GitHub Actions.
 
-1. **Avatar overlay** — Add SadTalker/MuseTalk talking head to video pipeline (requires GPU infrastructure).
-2. **Content feedback loop** — Connect quiz analytics to Generate Agent. Automated content improvement based on student performance data.
-3. **Admin quiz customisation** — Admin can edit questions, set difficulty levels, customise feedback messages.
-4. **LMS integration** — LTI 1.3 API for Canvas, Moodle, Blackboard. Quiz results sync to grade books.
-5. **Expand eval datasets** — Test across computer science, engineering, business courses.
+### v0.6 — Admin Dashboard + Feedback Loop
+1. **Admin dashboard** — Recharts analytics, topic heatmaps, question analytics, user management, quiz editor.
+2. **Feedback loop** — Quiz data → content regeneration with eval regression prevention.
+3. **LangSmith advanced** — Eval judge tracing, Annotation Queues, Online Evaluation, cost tracking.
+4. **Observability** — Structured logging (structlog), audit logging, RBAC, data retention policy.
+5. **Full deploy** — React + FastAPI + Neon PostgreSQL + Kokoro video on Cloud Run.
+
+### v0.7 — Student Engagement & Competitive Features
+1. **Mind map generation** — Mermaid.js mindmap from module JSON → SVG/PNG via `mermaid-py`. New LangGraph node.
+2. **Flashcard engine** — SM-2 spaced repetition (`supermemo2` package), PostgreSQL scheduling tables, React review UI, Anki `.apkg` export.
+3. **RAG chat endpoint** — ChromaDB retrieval + GPT-5-mini streaming response. FastAPI WebSocket + React chat UI.
+4. **Student progress dashboard** — React + Recharts: topic mastery radar, flashcard progress, recommended study areas.
+5. **SCORM course bundle export** — ZIP with `imsmanifest.xml`, self-contained HTML quiz, all generated content. LMS-ready.
+6. **Competitive positioning** — Marketing materials, demo scripts, pilot comparison framework vs NoteGPT/GravityWrite.
+
+### Phase 2 — Scale & Enrich (3-6 months post v0.7)
+1. **Avatar overlay** — SadTalker/MuseTalk talking head (requires GPU/Kubernetes).
+2. **LMS integration** — LTI 1.3 for Canvas, Moodle, Blackboard. Validate SCORM bundles across platforms.
+3. **TTS upgrade** — Chatterbox or CosyVoice 3 on GPU.
+4. **Expand eval datasets** — Engineering, business, health courses.
 
 ### Phase 3 — Adaptive Intelligence (6-12 months)
-
-1. **PPO + DKVMN hybrid system** — RL-based adaptive content selection based on quiz performance data.
-2. **Cold start strategy** — ALEKS-style diagnostic assessment (20-30 questions).
-3. **Multi-agent expansion** — Assessment Agent, Analytics Agent, Quality Assurance Agent, Adaptation Agent.
-4. **Infrastructure migration** — Cloud Run → Kubernetes (GPU nodes), ChromaDB → PostgreSQL + DynamoDB, Redis Cluster.
-5. **TTS upgrade** — Kokoro → Chatterbox or CosyVoice 3 (GPU, higher quality).
+1. **PPO + DKVMN hybrid** — RL-based adaptive content selection from quiz data.
+2. **Cold start** — ALEKS-style diagnostic (20-30 questions).
+3. **Multi-agent expansion** — Assessment, Analytics, QA, Adaptation agents.
+4. **Infrastructure** — Cloud Run → Kubernetes, ChromaDB → PostgreSQL + DynamoDB.
 
 ### Phase 4 — Production Scale (12-18+ months)
+1. Multi-region Kubernetes, CDN for video (CloudFront)
+2. Event streaming (Kafka), WCAG 2.1 AA
+3. Published efficacy study, international expansion
 
-1. Multi-region Kubernetes deployment
-2. CDN for video delivery (CloudFront)
-3. Event streaming (Kafka) for interaction logging
-4. WCAG 2.1 AA accessibility compliance
-5. Published efficacy study
-6. International expansion (Ireland → Australia/Canada → EU)
+### Detailed Implementation Plan
+See: **`PM-Docs/v0.4-v0.6-detailed-plan.md`** — file-level specs, LangSmith integration matrix, security gap tracker, agentic guide compliance checklist.
 
 ---
 
@@ -301,49 +349,241 @@ Quiz Performance Data (PostgreSQL) →
 
 ---
 
+## Competitive Landscape & Positioning
+
+### Why This Matters for Implementation
+
+The following competitive context informs feature prioritisation for v0.5-v0.7. Two emerging tools — **NoteGPT** and **GravityWrite** — occupy adjacent spaces in AI-assisted education. Neither is a direct competitor, but both influence user expectations and procurement conversations.
+
+### NoteGPT (Threat: Medium)
+
+B2C AI study tool. Summarises YouTube/PDFs into notes, flashcards, mind maps, quizzes. Pricing: Free (15 quotas) → $19.92/mo unlimited. **What CR8 should adopt**: mind maps, flashcards with SM-2 spaced repetition, RAG chat. **What CR8 already beats**: curriculum grounding, institutional data ownership, feedback loop, B2B model, video generation.
+
+### GravityWrite (Threat: Low)
+
+Generic AI content mill with 250+ templates including education (curriculum designer, quiz generator). Template-based, not curriculum-aware. No assessment, no video, no feedback loop. **What CR8 should adopt**: nothing — GravityWrite's approach is fundamentally different. **Positioning**: demo-first sales showing the qualitative gap between template output and curriculum-grounded generation.
+
+### CR8 Competitive Moat (5 Pillars)
+
+1. **Curriculum-grounded generation** — ingests actual university PDFs/slides, not generic prompts
+2. **Live industry research** — Tavily web search enriches content with current job market data
+3. **Closed-loop improvement** — quiz data feeds back into generation (no competitor has this)
+4. **Institutional data ownership** — student performance data belongs to the university
+5. **B2B model** — sells to institutions (£10-50K/year contracts) not individual students ($7-20/mo)
+
+### Features to Build (Competitive Response)
+
+| Feature | Competitive Source | CR8 Advantage | Target Version |
+|---------|-------------------|---------------|----------------|
+| Mind maps (Mermaid.js) | NoteGPT | Curriculum-grounded, gap-analysis-enriched | v0.7 |
+| Flashcards + SM-2 spaced repetition | NoteGPT | Quiz data seeds difficulty, Bloom's tagged | v0.7 |
+| RAG chat (ask questions about content) | Gap in all competitors | ChromaDB already exists | v0.7 |
+| Student progress dashboard | Gap in all competitors | Institutional + individual views | v0.7 |
+| SCORM course bundle export | Gap in all competitors | Direct LMS import, procurement enabler | v0.7 |
+
+See Section H (Coding Agent Guide) for full technical implementation specs.
+
+---
+
 ## Immediate To-Do List (Ordered by Priority)
 
-### Sprint 1: Video Pipeline (Weeks 1-3)
+### v0.4 — Kokoro TTS Video Pipeline + LangSmith Foundations + Security
 
-- [ ] **T-001**: Add `export_slides_as_images()` to `file_parser.py` — PyMuPDF for PDF slides, LibreOffice CLI for PPTX → PDF → PNG via pdftoppm
-- [ ] **T-002**: Create `tts_engine.py` — wrapper around Kokoro TTS. Input: text string. Output: WAV file + duration in seconds. Handle sentence splitting for natural pacing.
-- [ ] **T-003**: Rewrite `video_builder.py` — parse `[SLIDE N]` markers from script, match to slide PNGs, generate audio per segment, composite via MoviePy, output MP4.
-- [ ] **T-004**: Add video download endpoint to FastAPI — serve generated MP4 files. Add `<video>` embed support.
-- [ ] **T-005**: Update `requirements.txt` — add `kokoro>=0.9.4`, `moviepy>=2.0`, `soundfile>=0.12`, `Pillow>=10.0`, `numpy>=1.24`.
-- [ ] **T-005b**: Create `src/utils/script_parser.py` — parse `[SLIDE N]` markers from script text into segment list (see Section B.3).
-- [ ] **T-006**: Update Dockerfile — add `ffmpeg`, `espeak-ng`, `libreoffice-core`, `libreoffice-impress`, `poppler-utils`. **espeak-ng is critical** — Kokoro fails without it.
-- [ ] **T-006b**: **BLOCKING** — Increase Cloud Run memory from 2 GiB to 4 GiB (see Section B.8). Kokoro peaks at ~3.4 GB RAM.
-- [ ] **T-007**: Test video pipeline end-to-end with cs224n dataset. Verify: slides render correctly, audio syncs to slides, MP4 plays in browser.
-- [ ] **T-008**: Update ProgressCapture — add video generation stage weighting.
+**Architecture**: HeyGen stays as-is. Kokoro added as `VIDEO_PROVIDER=kokoro` parallel provider.
+**Versioning**: `cz bump --increment MINOR` → v0.4.0
 
-### Sprint 2: Quiz Platform (Weeks 3-6)
+#### Core Feature
+- [x] **T-001**: Research notes — `kokoro-tts.md`, `moviepy-v2.md`, `pymupdf-slide-export.md` in `docs/research/`
+- [x] **T-002**: Create `backend/services/script_parser.py` — parse `[SLIDE N]` markers → segment list
+- [x] **T-003**: Create `backend/services/tts_engine.py` — Kokoro TTS wrapper (`synthesize()`, `synthesize_segments()`)
+- [x] **T-004**: Add `export_slides_as_images()` to `file_parser.py` — PyMuPDF for PDF, LibreOffice CLI for PPTX
+- [x] **T-005**: Modify `video_builder.py` — add `_build_kokoro_video()`, add `"kokoro"` branch in `build_videos()`, make `NotImplementedError` provider-conditional
+- [x] **T-006**: Update `agent_generate.py` — pass Kokoro kwargs to both `build_videos()` call sites, call `export_slides_as_images()` when provider is kokoro
+- [x] **T-007**: Update `state.py` (add `slide_images`), `config.py` (kokoro settings), `run_pipeline.py` (allow kokoro provider)
+- [x] **T-008**: Update `pyproject.toml` (add kokoro, moviepy, soundfile), `.env.example`, `Dockerfile` (ffmpeg, espeak-ng, poppler-utils)
+- [x] **T-009**: Update `ProgressCapture.STAGE_WEIGHTS` in `frontend/app.py`
+- [x] **T-010**: Write tests — `test_script_parser.py`, `test_tts_engine.py` (mocked), update `test_video_builder.py` + `test_file_parser.py` + `test_progress_capture.py`
+- [x] **T-011**: E2E test: `VIDEO_PROVIDER=kokoro python -m backend.run_pipeline --format pdf,ppt,script,video test.pdf`
 
-- [ ] **T-009**: Create Quiz Agent — new LangGraph node. Input: learning module markdown. Output: structured quiz JSON (question text, options, correct answer, difficulty, Bloom's level, source section tag).
-- [ ] **T-010**: Set up PostgreSQL — schema for: students, quizzes, questions, responses, scores. Deploy on Cloud SQL or containerised.
-- [ ] **T-011**: Build quiz API endpoints — `POST /quiz/generate`, `GET /quiz/{id}`, `POST /quiz/{id}/submit`, `GET /quiz/{id}/results`.
-- [ ] **T-012**: Build React quiz frontend — question display, option selection, submit, results page (green/red answers), feedback display. One-attempt enforcement.
-- [ ] **T-013**: Build basic admin dashboard — topic performance heatmap, student score distribution, question difficulty analysis.
-- [ ] **T-014**: Add JWT authentication — `src/web/auth.py` + `src/web/auth_routes.py`. Student login, admin login, role-based access. Use `python-jose[cryptography]` + `passlib[bcrypt]`. See Section G.3.
-- [ ] **T-014b**: Add CORS middleware to `app.py` — allow React dev server on :3000. See Section G.2.
-- [ ] **T-014c**: Set up Alembic for database migrations — `src/db/migrations/`. See Section G.4.
-- [ ] **T-014d**: React build + FastAPI static serving — multi-stage Dockerfile, mount `/static`, catch-all route for SPA. See Section G.2.
-- [ ] **T-015**: Write tests — Quiz Agent output validation, API endpoint tests, frontend component tests.
+#### LangSmith Foundations
+- [x] **T-012**: Add `langchain_api_key` to `config.py`, apply LangSmith env vars at import time
+- [x] **T-013**: Attach `job_id`, `output_formats`, `file_count` metadata to `pipeline.invoke()` in `run_pipeline.py`
+- [x] **T-014**: Wrap new files (`tts_engine.py`, `script_parser.py`, `export_slides_as_images`) with `@traceable`
 
-### Sprint 3: Feedback Loop & Polish (Weeks 6-9)
+#### Security & Compliance
+- [x] **T-015**: Create `SECURITY.md` at project root
+- [x] **T-016**: Change `langchain_tracing_v2` default to `False` (opt-in, not opt-out)
+- [x] **T-017**: Temp file cleanup — use `tempfile.TemporaryDirectory()` context managers in video pipeline
+- [x] **T-018**: Subprocess safety — LibreOffice calls use `subprocess.run()` with explicit arg list, timeout
+- [x] **T-019**: Path traversal prevention in `export_slides_as_images()`
 
-- [ ] **T-016**: Create `feedback_analyser.py` — query PostgreSQL for per-topic quiz aggregates. Output: structured feedback JSON with weak sections and recommendations.
-- [ ] **T-017**: Modify `generate_agent.py` — accept optional `feedback_context`. Inject into GENERATE_MODULE prompt. Validate via eval framework that regenerated content doesn't regress.
-- [ ] **T-018**: Admin quiz customisation UI — add/edit/delete questions, set difficulty, customise feedback text per question.
-- [ ] **T-019**: Video embed/download integration — embed videos on quiz results page for review. Download button on all generated outputs.
-- [ ] **T-020**: Deploy full stack — React frontend + FastAPI + PostgreSQL + video pipeline on Cloud Run. Update CI/CD.
-- [ ] **T-021**: End-to-end integration test — upload curriculum → generate all outputs (PDF, PPT, video, quiz) → student takes quiz → admin views dashboard → feedback loop triggers regeneration.
+#### Agentic Guide Fixes
+- [x] **T-020**: Fix `feature_list.json` — `output_video_heygen` → `"scaffold"`, add `video_pipeline_kokoro`
+- [x] **T-021**: Create `backend/evals/README.md`
+- [x] **T-022**: Update CLAUDE.md Skills section — add `commit-ready`, `coverage-report`, `new-feature`
+- [x] **T-023**: Fix PostToolUse hook — remove `|| true` so ruff failures surface
 
-### Future Sprints (Phase 2+)
+**Blocker**: Cloud Run memory must increase to 4 GiB before deploying Kokoro (peaks at 3.4 GB). Local dev works fine.
 
-- [ ] **T-022**: Avatar overlay — integrate SadTalker for talking head generation (requires GPU node).
-- [ ] **T-023**: LTI 1.3 integration — Canvas, Moodle, Blackboard grade sync.
-- [ ] **T-024**: TTS upgrade — evaluate Chatterbox vs CosyVoice 3 on GPU infrastructure.
-- [ ] **T-025**: PPO + DKVMN prototype — adaptive content selection using quiz interaction data.
+---
+
+### v0.5 — Polished React Frontend + Interactive Quiz + Neon PostgreSQL
+
+**Design**: Glassmorphism / frosted glass theme. Dark mode. WCAG 2.1 AA accessible.
+**Database**: Neon free tier (serverless PostgreSQL, 512 MB free forever).
+**Quiz Agent**: Separate LangGraph workflow (on-demand, reads completed pipeline state including `gap_summary`).
+**Auth**: JWT (python-jose) for quiz system. Existing bcrypt session auth stays for content generation.
+**Versioning**: `cz bump --increment MINOR` → v0.5.0
+
+#### Foundation Work
+- [ ] **T-024**: Write ADR-001 (LangGraph pipeline), ADR-002 (PostgreSQL/Neon), ADR-003 (React frontend)
+- [ ] **T-025**: Research notes — `react-vite-fastapi.md`, `asyncpg-postgresql.md`, `python-jose-jwt.md`, `tailwindcss-glassmorphism.md`, `neon-serverless-postgres.md`
+
+#### React Frontend
+- [ ] **T-026**: Scaffold `frontend/react-app/` — Vite + React + Tailwind + React Router
+- [ ] **T-027**: Build design system — GlassCard, DarkModeToggle components, CSS custom properties, Tailwind glassmorphism utilities
+- [ ] **T-028**: Port UploadPage (drag-drop), ProgressPage (real-time), ResultsPage (downloads), LoginPage (frosted glass card)
+- [ ] **T-029**: Build QuizPage (take quiz) + QuizResultsPage (red/green results, per-question feedback)
+- [ ] **T-030**: Build React dev server proxy to FastAPI on :8080, production static build served by FastAPI
+
+#### Quiz Backend
+- [ ] **T-031**: Create `backend/pipeline/agent_quiz.py` — Quiz Agent LangGraph workflow (reads gap_summary + modules)
+- [ ] **T-032**: Create `backend/prompts/quiz.py` — quiz generation prompt (30% easy / 50% medium / 20% hard)
+- [ ] **T-033**: Create `backend/services/postgres_client.py` — async Neon client (asyncpg), CRUD for quizzes/attempts/responses
+- [ ] **T-034**: Create `backend/db/schema.sql` + Alembic migrations (students, quizzes, questions, quiz_attempts, responses)
+- [ ] **T-035**: Create `frontend/quiz_routes.py` — `/api/quiz/generate`, `/{id}`, `/{id}/submit`, `/{id}/results`
+- [ ] **T-036**: Create `frontend/auth_routes.py` — JWT auth (`/api/auth/register`, `/api/auth/token`, `/api/auth/me`)
+
+#### LangSmith Enrichment
+- [ ] **T-037**: Add model tier + severity metadata to every `llm.invoke()` call in all 3 agents
+- [ ] **T-038**: Wrap Tavily `search()`, ChromaDB `query()`, and all 3 agent nodes with `@traceable`
+- [ ] **T-039**: Fix ThreadPoolExecutor context propagation (`get_current_run_tree`)
+- [ ] **T-040**: Upload production prompts to LangSmith Prompt Hub
+
+#### Security Hardening
+- [ ] **T-041**: CORS lockdown — replace `allow_origins=["*"]` with configurable `ALLOWED_ORIGINS` whitelist
+- [ ] **T-042**: Security headers middleware — CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy
+- [ ] **T-043**: Replace hardcoded `CR8-AI` password with `AUTH_PASSWORD` env var
+- [ ] **T-044**: JWT auth with HS256, configurable expiry, refresh tokens
+- [ ] **T-045**: SQL injection prevention — asyncpg parameterized queries only
+- [ ] **T-046**: Create `.github/` directory — copilot-instructions.md symlink, Dependabot, GitHub Actions CI (ruff + pytest + pip-audit)
+- [ ] **T-047**: Rewrite negative instructions in CLAUDE.md → positive framing
+
+#### Tests
+- [ ] **T-048**: Backend tests — `test_quiz_agent.py`, `test_postgres_client.py`, `test_quiz_routes.py`, `test_auth_routes.py`
+- [ ] **T-049**: React tests (Vitest) — QuestionCard, quiz submission flow, results display, dark mode toggle
+
+---
+
+### v0.6 — Admin Dashboard + Data Tracking + Feedback Loop
+
+**Dashboard**: Recharts visualisations, glassmorphism stat cards.
+**Feedback Loop**: Quiz data → `feedback_analyser.py` → `agent_generate.py` → eval regression check → conditional replace.
+**Versioning**: `cz bump --increment MINOR` → v0.6.0
+
+#### Foundation Work
+- [ ] **T-050**: Write ADR-004 (Feedback loop), ADR-005 (Observability stack)
+- [ ] **T-051**: Research notes — `recharts.md`, `structured-logging-python.md`, backfill `fpdf2.md`, `python-pptx.md`, `chromadb.md`
+
+#### Admin Dashboard
+- [ ] **T-052**: AdminOverview.jsx — stat cards (students, quizzes, avg scores, active jobs)
+- [ ] **T-053**: TopicHeatmap.jsx — per-topic performance heatmap (Recharts)
+- [ ] **T-054**: QuestionAnalytics.jsx — success rates, most-chosen wrong answers
+- [ ] **T-055**: StudentTrends.jsx — score trends over time, cohort comparison
+- [ ] **T-056**: QuizEditor.jsx — add/edit/delete questions, set difficulty, customise feedback
+- [ ] **T-057**: UserManagement.jsx — view students, assign roles, deactivate accounts
+- [ ] **T-058**: SystemHealth.jsx — pipeline job history, error rates, resource usage
+- [ ] **T-059**: Create `frontend/admin_routes.py` — admin API endpoints
+
+#### Feedback Loop
+- [ ] **T-060**: Create `backend/services/feedback_analyser.py` — query PostgreSQL for per-topic aggregates (50+ completions, avg < 60% = weak)
+- [ ] **T-061**: Create `backend/pipeline/regeneration.py` — analyse → regenerate → eval → conditional replace
+- [ ] **T-062**: Modify `agent_generate.py` — accept optional `feedback_context` in `_generate_module()`
+- [ ] **T-063**: Create `backend/prompts/feedback.py` — feedback injection template
+
+#### LangSmith Advanced
+- [ ] **T-064**: Wrap eval judge calls with `@traceable`, populate `langsmith_run_id` in `EvalResult`
+- [ ] **T-065**: Submit eval scores as LangSmith feedback on original pipeline runs
+- [ ] **T-066**: Configure Annotation Queues + Online Evaluation automations in LangSmith UI
+
+#### Security & Observability
+- [ ] **T-067**: RBAC — admin endpoints gated by JWT `role: "admin"` claim
+- [ ] **T-068**: Audit logging — all admin actions logged to PostgreSQL `audit_log` table
+- [ ] **T-069**: Structured logging — replace print/logging with `structlog` (JSON, no PII, correlation IDs)
+- [ ] **T-070**: Data retention policy + GDPR-style `DELETE /api/admin/users/{id}/data`
+- [ ] **T-071**: Add `make test` to Stop hook; add CodeQL/Bandit to CI
+- [ ] **T-072**: Health check hardening — `/health` checks PostgreSQL, disk, memory (503 if degraded)
+
+#### Tests & Deploy
+- [ ] **T-073**: Tests — `test_feedback_analyser.py`, `test_regeneration.py`, `test_admin_routes.py`
+- [ ] **T-074**: E2E integration test — upload → generate → quiz → dashboard → feedback → regeneration
+- [ ] **T-075**: Full stack deploy — React + FastAPI + Neon PostgreSQL + Kokoro video on Cloud Run
+
+---
+
+### v0.7 — Student Engagement & Competitive Features
+
+**Goal**: Add consumer-grade study features (mind maps, flashcards, RAG chat, student dashboard, SCORM export) with CR8's curriculum-grounding advantage. Competitive response to NoteGPT.
+**Versioning**: `cz bump --increment MINOR` → v0.7.0
+
+#### Mind Map Generation
+- [ ] **T-080**: Research notes — `mermaid-mindmap.md`, `mermaid-py.md` in `docs/research/`
+- [ ] **T-081**: Create `backend/services/mindmap_generator.py` — Convert module JSON (topics/subtopics) to Mermaid mindmap syntax → SVG/PNG via `mermaid-py`
+- [ ] **T-082**: Add mindmap LangGraph node — runs after Generate Agent, produces mind map per module
+- [ ] **T-083**: Add mind map React component — interactive SVG display with zoom/pan, download button
+- [ ] **T-084**: Add `mermaid-py` to `pyproject.toml`, test server-side rendering
+- [ ] **T-085**: Tests — `test_mindmap_generator.py` (JSON → Mermaid syntax, SVG output, edge cases)
+
+#### Flashcard Engine (SM-2 Spaced Repetition)
+- [ ] **T-086**: Research notes — `sm2-algorithm.md`, `supermemo2-package.md`, `anki-apkg-format.md`
+- [ ] **T-087**: Create `backend/services/flashcard_generator.py` — Generate flashcards from module content via GPT-5-mini (front/back pairs, Bloom's tagged, source_section linked)
+- [ ] **T-088**: Create `backend/services/sm2_scheduler.py` — Wrap `supermemo2` package, manage card scheduling (next_review_date, ease_factor, interval, repetitions)
+- [ ] **T-089**: Alembic migration — `flashcards` table (id, module_topic, front_text, back_text, blooms_level, source_section, created_at) + `flashcard_reviews` table (id, student_id, flashcard_id, quality_rating, next_review_date, ease_factor, interval, repetitions, reviewed_at)
+- [ ] **T-090**: Create `frontend/flashcard_routes.py` — `/api/flashcards/generate`, `/due`, `/{id}/review`, `/export/anki`
+- [ ] **T-091**: React FlashcardReview.jsx — card flip animation, quality rating (0-5), due card queue
+- [ ] **T-092**: Anki `.apkg` export — SQLite database + media files in ZIP
+- [ ] **T-093**: Tests — `test_flashcard_generator.py`, `test_sm2_scheduler.py`, `test_flashcard_routes.py`
+
+#### RAG Chat Endpoint
+- [ ] **T-094**: Create `backend/services/rag_chat.py` — ChromaDB retrieval (top-k=5, filtered by module_topic) → GPT-5-mini with streaming response
+- [ ] **T-095**: Create `frontend/chat_routes.py` — `/api/chat` POST endpoint (question, module_topic) → streaming JSON response
+- [ ] **T-096**: React ChatPanel.jsx — message history, streaming response display, topic selector, citation highlights
+- [ ] **T-097**: Add `@traceable` to RAG chat for LangSmith visibility
+- [ ] **T-098**: Tests — `test_rag_chat.py` (retrieval filtering, response grounding, empty context handling)
+
+#### Student Progress Dashboard
+- [ ] **T-099**: Create React StudentDashboard.jsx — topic mastery radar chart (Recharts), quiz score trends, flashcard progress
+- [ ] **T-100**: Create `frontend/student_routes.py` — `/api/student/progress`, `/api/student/recommendations`
+- [ ] **T-101**: Recommendation engine — identify lowest-scoring quiz sections + overdue flashcards → prioritised study list
+- [ ] **T-102**: Tests — `test_student_routes.py`, React component tests
+
+#### SCORM Course Bundle Export
+- [ ] **T-103**: Research notes — `scorm-package-spec.md`, `imsmanifest-template.md`
+- [ ] **T-104**: Create `backend/services/scorm_bundler.py` — Assemble ZIP with `imsmanifest.xml`, all generated content (PDF, PPT, MP4, SVG mind map, flashcards JSON), self-contained HTML quiz with SCORM API wrapper
+- [ ] **T-105**: Create `imsmanifest.xml` Jinja2 template — SCORM 1.2 metadata, SCO references, resource declarations
+- [ ] **T-106**: Create self-contained `quiz.html` — embedded quiz (no server dependency), SCORM API communication (cmi.core.score.raw, cmi.core.lesson_status)
+- [ ] **T-107**: Create `frontend/export_routes.py` — `/api/export/scorm/{job_id}` → ZIP download
+- [ ] **T-108**: Validate SCORM package with SCORM Cloud test environment (Rustici)
+- [ ] **T-109**: Tests — `test_scorm_bundler.py` (ZIP structure, manifest validity, quiz HTML rendering)
+
+#### Integration & Deploy
+- [ ] **T-110**: E2E test — upload → generate → mind map → flashcards → quiz → RAG chat → SCORM export
+- [ ] **T-111**: Update `pyproject.toml` — add `mermaid-py`, `supermemo2`, update version
+- [ ] **T-112**: Update Dockerfile — add Node.js for Mermaid CLI fallback (if `mermaid-py` needs Puppeteer)
+- [ ] **T-113**: Full stack deploy — React + FastAPI + Neon PostgreSQL + all v0.7 features on Cloud Run
+
+---
+
+### Future (Phase 2+)
+
+- [ ] **T-114**: Avatar overlay — SadTalker/MuseTalk talking head (requires GPU node)
+- [ ] **T-115**: LTI 1.3 integration — Canvas, Moodle, Blackboard grade sync
+- [ ] **T-116**: TTS upgrade — evaluate Chatterbox vs CosyVoice 3 on GPU
+- [ ] **T-117**: PPO + DKVMN prototype — adaptive content selection from quiz data
+- [ ] **T-118**: Collaborative annotation — students annotate generated content, annotations visible to cohort
+- [ ] **T-119**: Multilingual content — CosyVoice 3 for non-English narration, GPT-5 for translation
+- [ ] **T-120**: Chrome extension — summarise/annotate web content within CR8 ecosystem
+- [ ] **T-121**: Video summarisation — students upload external videos, CR8 generates notes/flashcards
 
 ---
 
@@ -356,6 +596,12 @@ Quiz Performance Data (PostgreSQL) →
 5. What quiz completion rate can we expect without gamification? (Benchmark against MOOC quiz completion: ~20-40%)
 6. How quickly does PPO policy converge in an educational domain?
 7. What is the optimal reward function weighting (α, β, γ, δ) across different disciplines?
+8. Does `mermaid-py` server-side rendering require Puppeteer/Chromium, or can it render SVG natively? (Impacts Docker image size and Cloud Run memory)
+9. What is the optimal number of flashcards per learning module? (Hypothesis: 15-25, derived from key concepts)
+10. Can quiz question failure rates be used to auto-generate targeted flashcards? (Cross-feature synergy: quiz → flashcard pipeline)
+11. What is the optimal RAG chunk size and top-k for educational Q&A? (Hypothesis: 500-token chunks, top-k=5)
+12. Which SCORM version should CR8 target — SCORM 1.2 (widest LMS support) or SCORM 2004 (richer data model)? (Hypothesis: SCORM 1.2 for MVP, 2004 for Phase 2)
+13. How does NoteGPT's user retention curve compare to CR8's projected institutional retention? (Informs competitive positioning)
 
 ---
 
@@ -1512,4 +1758,813 @@ class Settings(BaseSettings):
     QUIZ_DIFFICULTY_DISTRIBUTION: str = "0.3,0.5,0.2"
     FEEDBACK_MIN_COMPLETIONS: int = 50
     FEEDBACK_WEAK_THRESHOLD: float = 0.60
+
+    # Mind Maps (v0.7)
+    MINDMAP_OUTPUT_FORMAT: str = "svg"  # "svg" or "png"
+    MINDMAP_MAX_DEPTH: int = 4          # max hierarchy levels in mind map
+
+    # Flashcards (v0.7)
+    FLASHCARD_DEFAULT_COUNT: int = 20
+    FLASHCARD_SM2_INITIAL_EASE: float = 2.5
+    FLASHCARD_SM2_MIN_EASE: float = 1.3
+
+    # RAG Chat (v0.7)
+    RAG_TOP_K: int = 5
+    RAG_CHUNK_SIZE: int = 500          # tokens
+    RAG_MODEL: str = "gpt-5-mini"
+
+    # SCORM (v0.7)
+    SCORM_VERSION: str = "1.2"          # "1.2" or "2004"
+```
+
+---
+
+### SECTION H: WHAT TO BUILD — v0.7 (STUDENT ENGAGEMENT & COMPETITIVE FEATURES)
+
+> **Goal:** Add consumer-grade study features that match NoteGPT's best offerings while maintaining CR8's curriculum-grounding advantage. Five features: mind maps, flashcards (SM-2), RAG chat, student dashboard, SCORM export.
+
+---
+
+#### H.1 Mind Map Generator (`backend/services/mindmap_generator.py`)
+
+**What it does:** Converts the structured topic/subtopic JSON from the Generate Agent into a visual mind map using Mermaid.js mindmap syntax, rendered to SVG/PNG via the `mermaid-py` package.
+
+**Input:** Module JSON from Generate Agent (already contains hierarchical topic → subtopic → key concept structure).
+
+**Output:** SVG or PNG file of the mind map.
+
+```python
+# NEW FILE: backend/services/mindmap_generator.py
+
+import mermaid as md
+from mermaid.graph import Graph
+from src.config import settings
+
+class MindMapGenerator:
+    """
+    Generates visual mind maps from learning module content.
+
+    Uses Mermaid.js mindmap syntax rendered server-side via mermaid-py.
+    No browser/Puppeteer needed — mermaid-py uses the Mermaid CLI (mmdc).
+
+    Dependencies:
+        pip install mermaid-py
+        # mermaid-py requires Node.js + @mermaid-js/mermaid-cli (npx mmdc)
+        # Add to Dockerfile: RUN npm install -g @mermaid-js/mermaid-cli
+    """
+
+    def generate_mindmap_syntax(self, module_data: dict) -> str:
+        """
+        Convert module JSON to Mermaid mindmap syntax.
+
+        Input example:
+        {
+            "topic": "Neural Network Optimisation",
+            "subtopics": [
+                {
+                    "name": "Gradient Descent",
+                    "concepts": ["Batch GD", "Stochastic GD", "Mini-Batch SGD"]
+                },
+                {
+                    "name": "Regularisation",
+                    "concepts": ["L1 (Lasso)", "L2 (Ridge)", "Dropout"]
+                }
+            ]
+        }
+
+        Output:
+        mindmap
+          root((Neural Network Optimisation))
+            Gradient Descent
+              Batch GD
+              Stochastic GD
+              Mini-Batch SGD
+            Regularisation
+              L1 Lasso
+              L2 Ridge
+              Dropout
+        """
+        lines = ["mindmap"]
+        # Root node — double parentheses for rounded shape
+        topic_clean = module_data["topic"].replace("(", "").replace(")", "")
+        lines.append(f"  root(({topic_clean}))")
+
+        for subtopic in module_data.get("subtopics", []):
+            sub_clean = subtopic["name"].replace("(", "").replace(")", "")
+            lines.append(f"    {sub_clean}")
+            for concept in subtopic.get("concepts", []):
+                concept_clean = concept.replace("(", "").replace(")", "")
+                lines.append(f"      {concept_clean}")
+
+        return "\n".join(lines)
+
+    def render_to_file(self, module_data: dict, output_path: str) -> str:
+        """
+        Generate mind map and render to SVG/PNG.
+
+        Args:
+            module_data: Structured module JSON with topic/subtopics/concepts
+            output_path: Output file path (e.g., "mindmap.svg" or "mindmap.png")
+
+        Returns:
+            Path to rendered file
+        """
+        syntax = self.generate_mindmap_syntax(module_data)
+        graph = Graph("mindmap", syntax)
+        rendered = md.Mermaid(graph)
+        rendered.to_svg(output_path) if output_path.endswith(".svg") else rendered.to_png(output_path)
+        return output_path
+
+    def generate_from_modules(self, modules: list[dict], output_dir: str) -> list[str]:
+        """
+        Generate mind maps for all modules in a pipeline run.
+
+        Returns: List of file paths to rendered mind maps.
+        """
+        paths = []
+        for i, module in enumerate(modules):
+            ext = settings.MINDMAP_OUTPUT_FORMAT
+            path = f"{output_dir}/mindmap_{i+1:03d}.{ext}"
+            self.render_to_file(module, path)
+            paths.append(path)
+        return paths
+```
+
+**Key constraints:**
+- `mermaid-py` requires Node.js + `@mermaid-js/mermaid-cli` installed globally (`npm install -g @mermaid-js/mermaid-cli`)
+- Add to Dockerfile: `RUN npm install -g @mermaid-js/mermaid-cli`
+- Mermaid mindmap syntax uses indentation for hierarchy (2 spaces per level)
+- Special characters in node text (parentheses, brackets) must be stripped or escaped
+- SVG output is preferred (smaller, scalable, embeddable in React); PNG as fallback
+- Maximum depth: 4 levels (root → topic → subtopic → concept) to avoid cluttered diagrams
+
+**LangGraph integration:**
+```python
+# Add new node to graph.py
+graph.add_node("mindmap", run_mindmap)
+graph.add_edge("generate", "mindmap")  # runs after content generation
+```
+
+---
+
+#### H.2 Flashcard Engine with SM-2 Spaced Repetition
+
+**What it does:** Generates flashcards from learning module content, schedules reviews using the SM-2 algorithm, and provides a React UI for card review with quality rating.
+
+##### H.2a Flashcard Generator (`backend/services/flashcard_generator.py`)
+
+```python
+# NEW FILE: backend/services/flashcard_generator.py
+
+from src.config import settings
+
+FLASHCARD_PROMPT = """
+You are generating flashcards for a learning module.
+
+MODULE CONTENT:
+{module_markdown}
+
+Generate {num_cards} flashcards with these requirements:
+- Each card has a FRONT (question/prompt) and BACK (answer/explanation)
+- Cards should test key concepts, definitions, applications, and relationships
+- Tag each card with Bloom's taxonomy level (remember, understand, apply, analyse)
+- Link each card to a specific section of the module (source_section)
+- Mix card types: definition, concept application, comparison, cause-effect
+- Difficulty distribution: 30% easy (remember), 50% medium (understand/apply), 20% hard (analyse)
+
+Output as JSON:
+{{
+    "cards": [
+        {{
+            "front": "What is the purpose of batch normalisation?",
+            "back": "Batch normalisation stabilises training by normalising inputs to each layer, reducing internal covariate shift and enabling higher learning rates.",
+            "blooms_level": "understand",
+            "source_section": "Core Content > Optimisation Techniques",
+            "difficulty": "medium"
+        }}
+    ]
+}}
+"""
+
+class FlashcardGenerator:
+    """
+    Generates flashcards from learning modules using GPT-5-mini.
+    Cards are structured for SM-2 spaced repetition scheduling.
+    """
+
+    def generate(self, module_markdown: str, num_cards: int = None) -> list[dict]:
+        """
+        Generate flashcards from module content.
+
+        Returns: List of flashcard dicts with front, back, blooms_level,
+                 source_section, difficulty fields.
+        """
+        num_cards = num_cards or settings.FLASHCARD_DEFAULT_COUNT
+        # Call GPT-5-mini with FLASHCARD_PROMPT
+        # Parse JSON response
+        # Validate card structure
+        # Return list of card dicts
+```
+
+##### H.2b SM-2 Scheduler (`backend/services/sm2_scheduler.py`)
+
+```python
+# NEW FILE: backend/services/sm2_scheduler.py
+
+from supermemo2 import SMTwo
+from datetime import datetime, timedelta
+from src.config import settings
+
+class SM2Scheduler:
+    """
+    Wraps the supermemo2 package for flashcard scheduling.
+
+    SM-2 Algorithm:
+    - Quality rating: 0-5 (0=complete blackout, 5=perfect recall)
+    - Quality >= 3: successful recall → increase interval
+    - Quality < 3: failed recall → reset to interval=1
+    - Ease factor starts at 2.5, adjusts with each review
+    - Minimum ease factor: 1.3
+
+    Usage:
+        scheduler = SM2Scheduler()
+        result = scheduler.review(quality=4, repetitions=3, ease_factor=2.5, interval=10)
+        # result: {"repetitions": 4, "ease_factor": 2.6, "interval": 26, "next_review": "2026-03-29"}
+    """
+
+    def review(self, quality: int, repetitions: int = 0,
+               ease_factor: float = None, interval: int = 0) -> dict:
+        """
+        Process a single flashcard review.
+
+        Args:
+            quality: Student's self-rated recall quality (0-5)
+            repetitions: Number of consecutive successful reviews
+            ease_factor: Current ease factor (default: FLASHCARD_SM2_INITIAL_EASE)
+            interval: Current interval in days
+
+        Returns:
+            Dict with updated repetitions, ease_factor, interval, next_review_date
+        """
+        ease_factor = ease_factor or settings.FLASHCARD_SM2_INITIAL_EASE
+        review = SMTwo(quality, repetitions, ease_factor, interval)
+        # Or use the functional API:
+        # review = SMTwo.first_review(quality) for first review
+        # review = SMTwo(quality, repetitions, ease_factor, interval) for subsequent
+
+        return {
+            "repetitions": review.repetitions,
+            "ease_factor": max(review.easiness, settings.FLASHCARD_SM2_MIN_EASE),
+            "interval": review.interval,
+            "next_review_date": (datetime.now() + timedelta(days=review.interval)).isoformat(),
+        }
+
+    def get_due_cards(self, student_id: str, limit: int = 20) -> list[dict]:
+        """
+        Query PostgreSQL for flashcards due for review.
+
+        SELECT f.*, fr.ease_factor, fr.interval, fr.repetitions
+        FROM flashcards f
+        JOIN flashcard_reviews fr ON f.id = fr.flashcard_id
+        WHERE fr.student_id = :student_id
+          AND fr.next_review_date <= NOW()
+        ORDER BY fr.next_review_date ASC
+        LIMIT :limit
+        """
+        # Implementation queries PostgreSQL via postgres_client
+```
+
+##### H.2c Flashcard Database Schema
+
+```sql
+-- ADD via Alembic migration
+
+CREATE TABLE flashcards (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    module_topic VARCHAR(500) NOT NULL,
+    job_id VARCHAR(255),
+    front_text TEXT NOT NULL,
+    back_text TEXT NOT NULL,
+    blooms_level VARCHAR(20),
+    source_section VARCHAR(500),
+    difficulty VARCHAR(20) CHECK (difficulty IN ('easy', 'medium', 'hard')),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE flashcard_reviews (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID REFERENCES students(id),
+    flashcard_id UUID REFERENCES flashcards(id),
+    quality_rating INTEGER CHECK (quality_rating BETWEEN 0 AND 5),
+    ease_factor DECIMAL(4,2) DEFAULT 2.50,
+    interval INTEGER DEFAULT 0,        -- days
+    repetitions INTEGER DEFAULT 0,
+    next_review_date TIMESTAMP DEFAULT NOW(),
+    reviewed_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(student_id, flashcard_id)   -- one active schedule per student per card
+);
+
+CREATE INDEX idx_flashcard_due ON flashcard_reviews(student_id, next_review_date);
+```
+
+##### H.2d Anki Export
+
+```python
+# ADD to backend/services/flashcard_generator.py
+
+import sqlite3
+import zipfile
+import json
+
+def export_anki_apkg(flashcards: list[dict], output_path: str) -> str:
+    """
+    Export flashcards to Anki .apkg format.
+
+    .apkg format: ZIP containing:
+    - collection.anki2 (SQLite database with notes, cards, models)
+    - media (empty JSON object if no media)
+
+    This is a minimal implementation for basic front/back cards.
+    """
+    # 1. Create SQLite database (collection.anki2) in memory
+    # 2. Create model (note type) with Front/Back fields
+    # 3. Insert each flashcard as a note + card
+    # 4. ZIP the database + media file
+    # 5. Return path to .apkg file
+```
+
+**Dependencies:** `pip install supermemo2`
+
+---
+
+#### H.3 RAG Chat Endpoint
+
+**What it does:** Allows students to ask natural-language questions about the generated learning materials. Uses ChromaDB (already populated by Ingest + Research agents) for retrieval, GPT-5-mini for response generation.
+
+```python
+# NEW FILE: backend/services/rag_chat.py
+
+from langsmith import traceable
+from src.chromadb_store import ChromaDBStore
+from src.config import settings
+
+class RAGChatService:
+    """
+    Retrieval-Augmented Generation chat for learning content.
+
+    Architecture:
+    1. Student asks question + provides module_topic context
+    2. Query ChromaDB for relevant chunks (filtered by module_topic)
+    3. Construct prompt with retrieved context
+    4. Stream GPT-5-mini response back to student
+
+    ChromaDB already contains:
+    - 'curriculum' collection: embedded chunks from uploaded PDFs/PPTX
+    - 'research' collection: embedded web research results from Tavily
+
+    This endpoint queries BOTH collections for comprehensive answers.
+    """
+
+    def __init__(self):
+        self.store = ChromaDBStore()
+
+    @traceable(name="rag_chat_query")
+    async def answer_question(
+        self, question: str, module_topic: str, stream: bool = True
+    ):
+        """
+        Answer a student question using RAG.
+
+        Args:
+            question: Student's natural-language question
+            module_topic: Topic context (filters ChromaDB retrieval)
+            stream: Whether to stream the response
+
+        Returns:
+            Generator yielding response chunks (if stream=True)
+            or complete response string (if stream=False)
+        """
+        # Step 1: Retrieve relevant chunks from both collections
+        curriculum_chunks = self.store.query(
+            collection="curriculum",
+            query_text=question,
+            n_results=settings.RAG_TOP_K,
+            where={"module_topic": module_topic}  # filter by topic
+        )
+        research_chunks = self.store.query(
+            collection="research",
+            query_text=question,
+            n_results=settings.RAG_TOP_K,
+            where={"module_topic": module_topic}
+        )
+
+        # Step 2: Construct prompt with context
+        context = self._format_context(curriculum_chunks, research_chunks)
+        prompt = f"""You are a helpful educational assistant for the topic: {module_topic}.
+
+Answer the student's question using ONLY the provided context from their course materials.
+If the context doesn't contain enough information, say so clearly.
+Always cite which section the information comes from.
+
+CONTEXT FROM COURSE MATERIALS:
+{context}
+
+STUDENT QUESTION: {question}
+
+ANSWER:"""
+
+        # Step 3: Call GPT-5-mini with streaming
+        # Use OpenAI client with stream=True for streaming responses
+        # Yield chunks for real-time display in React frontend
+
+    def _format_context(self, curriculum_chunks, research_chunks) -> str:
+        """Format retrieved chunks into a readable context string."""
+        sections = []
+        for chunk in curriculum_chunks:
+            sections.append(f"[Curriculum] {chunk['text']}")
+        for chunk in research_chunks:
+            sections.append(f"[Industry Research] {chunk['text']}")
+        return "\n\n---\n\n".join(sections)
+```
+
+**FastAPI endpoint:**
+
+```python
+# NEW FILE: frontend/chat_routes.py
+
+from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
+from src.services.rag_chat import RAGChatService
+from src.web.auth import require_student
+
+router = APIRouter(prefix="/api/chat")
+
+@router.post("/")
+async def chat(
+    question: str,
+    module_topic: str,
+    user = Depends(require_student)
+):
+    """
+    RAG chat endpoint. Streams response chunks.
+
+    Request body: {"question": "What is backpropagation?", "module_topic": "Neural Networks"}
+    Response: Server-Sent Events stream of response text chunks
+    """
+    service = RAGChatService()
+
+    async def event_stream():
+        async for chunk in service.answer_question(question, module_topic):
+            yield f"data: {chunk}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+```
+
+**React component:**
+
+```jsx
+// frontend/react-app/src/components/ChatPanel.jsx
+
+// Key UX requirements:
+// - Message history in browser state (useState, no localStorage)
+// - Streaming response display (SSE via EventSource)
+// - Topic selector dropdown (filters retrieval to current module)
+// - Citation highlights: when response references "[Curriculum]" or "[Industry Research]",
+//   render as styled badges
+// - Input: text field + send button
+// - Auto-scroll to bottom on new messages
+```
+
+**Key constraints:**
+- Filter ChromaDB queries by `module_topic` to prevent cross-module information leakage
+- Use GPT-5-mini (not GPT-5.1) for cost efficiency — chat is high-volume
+- Stream responses via Server-Sent Events (SSE) for real-time display
+- No server-side message history storage for MVP (browser state only)
+- Add `@traceable` decorator for LangSmith visibility on RAG quality
+
+---
+
+#### H.4 Student Progress Dashboard
+
+**React components:**
+
+```jsx
+// frontend/react-app/src/pages/StudentDashboard.jsx
+
+// Three main visualisations:
+
+// 1. Topic Mastery Radar Chart (Recharts RadarChart)
+//    - Each axis = one module topic
+//    - Value = average quiz score for that topic (0-100%)
+//    - Overlaid with class average for comparison
+//    - Data source: /api/student/progress
+
+// 2. Flashcard Progress Timeline (Recharts LineChart)
+//    - X-axis: dates
+//    - Y-axis: cards reviewed / cards mastered / cards due
+//    - Shows spaced repetition progress over time
+//    - Data source: /api/student/flashcard-stats
+
+// 3. Recommended Study Areas (sorted list)
+//    - Combines: lowest quiz scores + overdue flashcards + sections not yet reviewed
+//    - Each recommendation links to the relevant content section or flashcard deck
+//    - Data source: /api/student/recommendations
+```
+
+**API endpoints:**
+
+```python
+# NEW FILE: frontend/student_routes.py
+
+from fastapi import APIRouter, Depends
+from src.web.auth import require_student
+from src.db.postgres_client import PostgresClient
+
+router = APIRouter(prefix="/api/student")
+
+@router.get("/progress")
+async def get_progress(user = Depends(require_student), db: PostgresClient = Depends()):
+    """
+    Return student's quiz scores per topic for radar chart.
+
+    Query: SELECT q.module_topic, qa.total_score
+           FROM quiz_attempts qa JOIN quizzes q ON qa.quiz_id = q.id
+           WHERE qa.student_id = :student_id AND qa.completed_at IS NOT NULL
+    """
+
+@router.get("/flashcard-stats")
+async def get_flashcard_stats(user = Depends(require_student), db: PostgresClient = Depends()):
+    """
+    Return flashcard review statistics over time.
+
+    Query: SELECT DATE(reviewed_at) as date,
+                  COUNT(*) as reviewed,
+                  SUM(CASE WHEN interval >= 21 THEN 1 ELSE 0 END) as mastered,
+                  (SELECT COUNT(*) FROM flashcard_reviews
+                   WHERE student_id = :id AND next_review_date <= NOW()) as due
+           FROM flashcard_reviews WHERE student_id = :student_id
+           GROUP BY DATE(reviewed_at) ORDER BY date
+    """
+
+@router.get("/recommendations")
+async def get_recommendations(user = Depends(require_student), db: PostgresClient = Depends()):
+    """
+    Return prioritised study recommendations.
+
+    Algorithm:
+    1. Get quiz topics with score < 70% → "Review this topic"
+    2. Get flashcard decks with > 10 overdue cards → "Review flashcards for..."
+    3. Get sections with < 50% question correct rate → "Focus on..."
+    4. Sort by urgency (lowest score first, most overdue first)
+    5. Return top 5 recommendations
+    """
+```
+
+---
+
+#### H.5 SCORM Course Bundle Export
+
+```python
+# NEW FILE: backend/services/scorm_bundler.py
+
+import zipfile
+import os
+from jinja2 import Template
+from src.config import settings
+
+class SCORMBundler:
+    """
+    Packages all generated content for a module into a SCORM-compatible ZIP.
+
+    SCORM 1.2 structure:
+    course_bundle.zip
+    ├── imsmanifest.xml          # SCORM metadata
+    ├── content/
+    │   ├── learning_guide.pdf    # Generated PDF
+    │   ├── gap_analysis.pptx     # Generated PPT
+    │   ├── lecture_video.mp4     # Generated video
+    │   ├── quiz.html             # Self-contained quiz (HTML + JS)
+    │   ├── mindmap.svg           # Generated mind map
+    │   └── flashcards.json       # Flashcard data
+    ├── css/
+    │   └── styles.css            # Quiz styling
+    └── js/
+        └── scorm_api.js          # SCORM 1.2 API wrapper
+
+    The quiz.html is self-contained: no server dependency.
+    It communicates with the LMS via the SCORM JavaScript API
+    (LMSInitialize, LMSSetValue, LMSCommit, LMSFinish).
+    """
+
+    MANIFEST_TEMPLATE = '''<?xml version="1.0" encoding="UTF-8"?>
+<manifest identifier="CR8-{{ module_id }}" version="1.0"
+  xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2"
+  xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <metadata>
+    <schema>ADL SCORM</schema>
+    <schemaversion>1.2</schemaversion>
+  </metadata>
+  <organizations default="CR8_org">
+    <organization identifier="CR8_org">
+      <title>{{ module_title }}</title>
+      <item identifier="item_1" identifierref="resource_1">
+        <title>{{ module_title }} — Learning Materials</title>
+      </item>
+    </organization>
+  </organizations>
+  <resources>
+    <resource identifier="resource_1" type="webcontent" adlcp:scormtype="sco"
+      href="content/quiz.html">
+      {% for file in content_files %}
+      <file href="{{ file }}" />
+      {% endfor %}
+    </resource>
+  </resources>
+</manifest>'''
+
+    def bundle(self, job_id: str, module_topic: str, output_path: str) -> str:
+        """
+        Assemble SCORM ZIP from generated content.
+
+        Args:
+            job_id: Pipeline job ID (to locate generated files)
+            module_topic: Topic name for manifest metadata
+            output_path: Path for output ZIP file
+
+        Returns:
+            Path to generated SCORM ZIP
+        """
+        job_dir = f"/tmp/jobs/{job_id}/output"
+
+        with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            # Add generated content files
+            content_files = []
+            for fname in ["learning_guide.pdf", "gap_analysis.pptx",
+                         "lecture_video.mp4", "mindmap.svg", "flashcards.json"]:
+                fpath = os.path.join(job_dir, fname)
+                if os.path.exists(fpath):
+                    zf.write(fpath, f"content/{fname}")
+                    content_files.append(f"content/{fname}")
+
+            # Generate and add self-contained quiz HTML
+            quiz_html = self._generate_quiz_html(job_id)
+            zf.writestr("content/quiz.html", quiz_html)
+            content_files.append("content/quiz.html")
+
+            # Add SCORM API wrapper
+            zf.writestr("js/scorm_api.js", self._get_scorm_api_js())
+            content_files.append("js/scorm_api.js")
+
+            # Add CSS
+            zf.writestr("css/styles.css", self._get_quiz_css())
+            content_files.append("css/styles.css")
+
+            # Generate and add manifest
+            manifest = Template(self.MANIFEST_TEMPLATE).render(
+                module_id=job_id[:8],
+                module_title=module_topic,
+                content_files=content_files
+            )
+            zf.writestr("imsmanifest.xml", manifest)
+
+        return output_path
+
+    def _generate_quiz_html(self, job_id: str) -> str:
+        """
+        Generate self-contained HTML quiz with embedded questions + SCORM API.
+
+        The quiz loads questions from embedded JSON (no server dependency).
+        On completion, it reports the score to the LMS via:
+        - API.LMSSetValue("cmi.core.score.raw", score)
+        - API.LMSSetValue("cmi.core.lesson_status", "completed"/"failed")
+        - API.LMSCommit("")
+        - API.LMSFinish("")
+        """
+        # Load quiz data from PostgreSQL or job output
+        # Embed as JSON in <script> tag
+        # Include SCORM API calls for LMS communication
+        # Return complete HTML string
+
+    def _get_scorm_api_js(self) -> str:
+        """Return SCORM 1.2 API wrapper JavaScript."""
+        return '''
+// SCORM 1.2 API Wrapper
+var API = null;
+
+function findAPI(win) {
+    var findAPITries = 0;
+    while ((win.API == null) && (win.parent != null) && (win.parent != win)) {
+        findAPITries++;
+        if (findAPITries > 7) return null;
+        win = win.parent;
+    }
+    return win.API;
+}
+
+function initSCORM() {
+    API = findAPI(window);
+    if (API) API.LMSInitialize("");
+}
+
+function reportScore(score, maxScore) {
+    if (!API) return;
+    API.LMSSetValue("cmi.core.score.raw", String(score));
+    API.LMSSetValue("cmi.core.score.max", String(maxScore));
+    API.LMSSetValue("cmi.core.lesson_status", score >= (maxScore * 0.6) ? "passed" : "failed");
+    API.LMSCommit("");
+}
+
+function finishSCORM() {
+    if (API) API.LMSFinish("");
+}
+
+window.onload = initSCORM;
+window.onunload = finishSCORM;
+'''
+```
+
+**Key constraints:**
+- SCORM 1.2 for maximum LMS compatibility (Canvas, Moodle, Blackboard all support it)
+- Quiz HTML must be completely self-contained (no fetch calls, no server dependency)
+- Quiz questions embedded as JSON in a `<script>` tag within the HTML
+- SCORM API communication: `LMSInitialize`, `LMSSetValue`, `LMSCommit`, `LMSFinish`
+- Pass threshold: 60% (configurable)
+- Validate with [SCORM Cloud](https://cloud.scorm.com/) before production
+
+---
+
+#### H.6 Updated Tech Stack Summary (v0.7 Additions)
+
+| Layer | Technology | Purpose | Status |
+|-------|-----------|---------|--------|
+| **Mind map rendering** | **Mermaid.js + mermaid-py** | **Module JSON → SVG/PNG mind maps** | **NEW — v0.7** |
+| **Flashcard generation** | **GPT-5-mini** | **Generate front/back card pairs from modules** | **NEW — v0.7** |
+| **Spaced repetition** | **supermemo2 (SM-2)** | **Flashcard review scheduling** | **NEW — v0.7** |
+| **RAG chat** | **ChromaDB + GPT-5-mini** | **Student Q&A grounded in course content** | **NEW — v0.7** |
+| **Student dashboard** | **React + Recharts** | **Progress visualisation, recommendations** | **NEW — v0.7** |
+| **SCORM export** | **Python zipfile + Jinja2** | **LMS-compatible course bundles** | **NEW — v0.7** |
+| **Anki export** | **sqlite3 + zipfile** | **Flashcard export to .apkg** | **NEW — v0.7** |
+
+#### H.7 Updated Dependency Graph (v0.7)
+
+```
+v0.7 (depends on v0.6 completion for PostgreSQL, React, admin infrastructure):
+
+  Mind Maps (independent — can start immediately):
+    T-081 (mindmap generator) → T-082 (LangGraph node) → T-083 (React component)
+    T-084 (mermaid-py setup) — do FIRST
+    T-085 (tests) — after T-081
+
+  Flashcards (depends on PostgreSQL from v0.5):
+    T-087 (flashcard generator) → T-090 (API endpoints) → T-091 (React UI)
+    T-088 (SM-2 scheduler) → T-090 (API endpoints)
+    T-089 (Alembic migration) — do FIRST
+    T-092 (Anki export) — independent, do after T-087
+    T-093 (tests) — after T-090
+
+  RAG Chat (depends on ChromaDB + FastAPI from existing pipeline):
+    T-094 (rag_chat.py) → T-095 (chat API endpoint) → T-096 (React ChatPanel)
+    T-097 (LangSmith tracing) — after T-094
+    T-098 (tests) — after T-095
+
+  Student Dashboard (depends on quiz data + flashcard data):
+    T-099 (React dashboard) → depends on T-100 (API endpoints)
+    T-101 (recommendation engine) → T-100
+    T-102 (tests) — after T-100
+
+  SCORM Export (depends on ALL content types being generated):
+    T-104 (scorm_bundler.py) → T-105 (manifest template) → T-106 (quiz HTML)
+    T-107 (export API) — after T-104
+    T-108 (SCORM Cloud validation) — after T-107
+    T-109 (tests) — after T-107
+
+  Integration:
+    T-110 (E2E test) — LAST, depends on all above
+    T-111 (pyproject.toml) — do FIRST
+    T-112 (Dockerfile update) — do FIRST
+    T-113 (deploy) — after T-110
+```
+
+#### H.8 New Error Types (add to `src/utils/errors.py`)
+
+```python
+# ADD to src/utils/errors.py
+
+class MindMapError(CR8Error):
+    """Mermaid mind map generation or rendering failed."""
+    pass
+
+class FlashcardError(CR8Error):
+    """Flashcard generation or SM-2 scheduling failed."""
+    pass
+
+class RAGChatError(CR8Error):
+    """RAG chat retrieval or response generation failed."""
+    pass
+
+class SCORMBundleError(CR8Error):
+    """SCORM package assembly or validation failed."""
+    pass
 ```

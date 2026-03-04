@@ -1,6 +1,6 @@
 [project]
 name = "cr8-prototype"
-version = "0.3.0"
+version = "0.4.0"
 requires-python = ">=3.11"
 dependencies = [
     "langchain>=0.3",
@@ -19,11 +19,15 @@ dependencies = [
     "jinja2>=3.1",
     "markdown>=3.6",
     "requests>=2.31",
+    "kokoro>=0.9",
+    "moviepy>=2.0",
+    "soundfile>=0.12",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.34",
     "python-multipart>=0.0.9",
     "gunicorn>=22.0",
     "bcrypt>=4.0",
+    "google-cloud-storage>=2.14",
 ]
 
 [project.optional-dependencies]
@@ -50,18 +54,18 @@ docs = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["backend/tests", "frontend/tests"]
+testpaths = ["backend/tests", "frontend/tests", "gpu_service/tests"]
 pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
 
 [tool.setuptools.packages.find]
-include = ["backend*", "frontend*"]
+include = ["backend*", "frontend*", "gpu_service*"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.3.0"
+version = "0.4.0"
 tag_format = "v$version"
 version_files = ["pyproject.toml:version"]
 changelog_file = "CHANGELOG.md"

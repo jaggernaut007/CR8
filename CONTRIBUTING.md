@@ -34,7 +34,7 @@
 - All external API calls mocked — zero real API calls in the test suite
 - Test naming: `test_[function]_[scenario]`
 - Use `hypothesis` for property-based testing, `syrupy` for snapshot regression
-- Run `make test` and read the output — all 362 tests must pass
+- Run `make test` and read the output — all 426 tests must pass
 
 ## Workflow Before Committing
 
@@ -65,7 +65,7 @@ docs: update services/llm.md with new model routing table
 chore: bump langgraph to 0.2.x
 ```
 
-Include test counts in feat commits: `feat: add video script streaming (362 → 375 tests)`
+Include test counts in feat commits: `feat: add video script streaming (426 → 439 tests)`
 
 ## Pull Request Checklist
 - [ ] `make lint` passes (ruff clean)

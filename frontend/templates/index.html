@@ -38,6 +38,9 @@
     .btn-primary:disabled { background: #c7c7cc; cursor: not-allowed; }
     .btn-secondary { background: #e8e8ed; color: #1d1d1f; margin-top: 16px; width: 100%; }
     .btn-secondary:hover { background: #d1d1d6; }
+    .btn-danger { background: #cc0000; color: #fff; margin-top: 16px; width: 100%; }
+    .btn-danger:hover:not(:disabled) { background: #a00; }
+    .btn-danger:disabled { background: #e0a0a0; cursor: not-allowed; }
 
     /* Progress */
     .progress-info { margin-bottom: 16px; }
@@ -79,9 +82,9 @@
       <div id="sec-upload" class="section active">
         <div class="drop-zone" id="drop-zone">
           <div class="drop-zone-text">
-            Drag &amp; drop your <strong>PDF</strong> here<br>or click to browse
+            Drag &amp; drop your <strong>PDF</strong> or <strong>PPTX</strong> here<br>or click to browse
           </div>
-          <input type="file" id="file-input" accept=".pdf">
+          <input type="file" id="file-input" accept=".pdf,.pptx">
           <div class="file-name" id="file-name"></div>
         </div>
 
@@ -104,9 +107,9 @@
               <span class="hint">Synced to PPT slides</span>
             </label>
             <label class="checkbox-label">
-              <input type="checkbox" id="chk-video" value="video" disabled>
-              <span>Video (.mp4 via HeyGen)</span>
-              <span class="hint">Requires HeyGen API keys</span>
+              <input type="checkbox" id="chk-video" value="video">
+              <span>Video (.mp4)</span>
+              <span class="hint">Local generation via Kokoro TTS</span>
             </label>
           </div>
         </div>
@@ -120,6 +123,7 @@
         <div class="progress-info">
           <div class="filename" id="proc-filename"></div>
           <div class="stage" id="proc-stage">Starting pipeline...</div>
+          <div class="stage" id="proc-detail" style="margin-top:4px;font-size:0.8rem;color:#a0a0a5"></div>
         </div>
         <div class="progress-bar-container">
           <div class="progress-bar" id="progress-bar"></div>
@@ -131,6 +135,18 @@
         <div class="log-area">
           <pre id="log-output"></pre>
         </div>
+        <button class="btn btn-danger" id="btn-stop" onclick="cancelJob()">Stop Pipeline</button>
+      </div>
+
+      <!-- SECTION 2b: Cancelled -->
+      <div id="sec-cancelled" class="section">
+        <div class="results-header">
+          <div class="check" style="color:#cc8800">&#9632;</div>
+          <h2>Cancelled</h2>
+          <p id="cancelled-time"></p>
+        </div>
+        <div class="download-list" id="cancelled-downloads"></div>
+        <button class="btn btn-secondary" id="btn-new-after-cancel" onclick="resetUI()">Start New</button>
       </div>
 
       <!-- SECTION 3: Complete -->
@@ -191,12 +207,14 @@
     let jobId = null;
     let fileName = null;
     let pollTimer = null;
+    let cancelRequested = false;
 
     // Elements
     const secUpload = document.getElementById('sec-upload');
     const secProcessing = document.getElementById('sec-processing');
     const secComplete = document.getElementById('sec-complete');
     const secError = document.getElementById('sec-error');
+    const secCancelled = document.getElementById('sec-cancelled');
     const dropZone = document.getElementById('drop-zone');
     const fileInput = document.getElementById('file-input');
     const fileNameEl = document.getElementById('file-name');
@@ -221,8 +239,21 @@
     });
 
     function showSection(sec) {
-      [secUpload, secProcessing, secComplete, secError].forEach(s => s.classList.remove('active'));
+      [secUpload, secProcessing, secComplete, secError, secCancelled].forEach(s => s.classList.remove('active'));
       sec.classList.add('active');
+    }
+
+    async function cancelJob() {
+      if (!jobId || cancelRequested) return;
+      cancelRequested = true;
+      const btn = document.getElementById('btn-stop');
+      btn.disabled = true;
+      btn.textContent = 'Stopping...';
+      try {
+        await apiFetch('/api/cancel/' + jobId, { method: 'POST' });
+      } catch (err) {
+        // Best-effort
+      }
     }
 
     // --- Upload ---
@@ -237,12 +268,13 @@
     fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
 
     async function handleFile(file) {
-      if (!file.name.toLowerCase().endsWith('.pdf')) {
-        showError('Please select a PDF file.');
+      const lowerName = file.name.toLowerCase();
+      if (!lowerName.endsWith('.pdf') && !lowerName.endsWith('.pptx')) {
+        showError('Please select a PDF or PPTX file.');
         return;
       }
       if (file.size > MAX_FILE_SIZE) {
-        showError('File is too large (max 20 MB). Please select a smaller PDF.');
+        showError('File is too large (max 20 MB).');
         return;
       }
       uploadError.style.display = 'none';
@@ -314,15 +346,37 @@
 
         // Stage
         const stageNames = { starting: 'Starting...', Ingest: 'Ingesting & Extracting Topics', Research: 'Researching Industry Gaps', Generate: 'Generating Learning Modules', Script: 'Creating Video Scripts', Video: 'Rendering Videos' };
-        document.getElementById('proc-stage').textContent = stageNames[data.stage] || data.stage;
+        let stageText = stageNames[data.stage] || data.stage;
+        if (data.status === 'cancelling') stageText += ' (stopping...)';
+        document.getElementById('proc-stage').textContent = stageText;
 
-        // Time
+        // GPU sub-progress detail
+        const detailEl = document.getElementById('proc-detail');
+        if (data.gpu_progress) {
+          const gp = data.gpu_progress;
+          let parts = [];
+          if (gp.current_topic != null && gp.total_topics != null) {
+            parts.push('TTS: topic ' + gp.current_topic + '/' + gp.total_topics);
+          }
+          if (gp.completed_videos != null && gp.total_videos != null) {
+            parts.push('Composing: video ' + gp.completed_videos + '/' + gp.total_videos);
+          }
+          detailEl.textContent = parts.join('  |  ');
+        } else {
+          detailEl.textContent = '';
+        }
+
+        // Time — stage-aware ETA, with GPU override when available
         const elapsed = data.elapsed;
         const elapsedStr = formatTime(elapsed);
         let timeText = 'Elapsed: ' + elapsedStr;
-        if (data.percent > 5) {
-          const est = (elapsed / (data.percent / 100)) - elapsed;
-          timeText += '  |  Est. remaining: ~' + formatTime(est);
+        if (data.gpu_progress && data.gpu_progress.eta_s != null) {
+          timeText += '  |  Est. remaining: ~' + formatTime(data.gpu_progress.eta_s);
+        } else {
+          const eta = computeETA(data);
+          if (eta !== null && data.percent > 2 && data.percent < 99) {
+            timeText += '  |  Est. remaining: ~' + formatTime(eta);
+          }
         }
         document.getElementById('proc-time').textContent = timeText;
 
@@ -334,9 +388,37 @@
         // Complete
         if (data.status === 'complete') {
           clearInterval(pollTimer);
-          document.getElementById('complete-time').textContent = 'Finished in ' + formatTime(data.elapsed);
+          let completeMsg = 'Finished in ' + formatTime(data.elapsed);
+          if (data.warnings && data.warnings.length > 0) {
+            completeMsg += ' (' + data.warnings.length + ' warning' + (data.warnings.length > 1 ? 's' : '') + ')';
+          }
+          document.getElementById('complete-time').textContent = completeMsg;
           renderDownloads(data.files || []);
+          if (data.warnings && data.warnings.length > 0) {
+            renderWarnings(data.warnings);
+          }
           showSection(secComplete);
+        }
+
+        // Cancelled
+        if (data.status === 'cancelled') {
+          clearInterval(pollTimer);
+          document.getElementById('cancelled-time').textContent = 'Stopped after ' + formatTime(data.elapsed);
+          const dlList = document.getElementById('cancelled-downloads');
+          dlList.innerHTML = '';
+          if (data.files && data.files.length > 0) {
+            data.files.forEach(f => {
+              const item = document.createElement('div');
+              item.className = 'download-item';
+              const sizeStr = f.size ? ' (' + formatSize(f.size) + ')' : '';
+              item.innerHTML = '<div><div class="dl-name">' + f.name + '</div><div class="dl-size">' + sizeStr + '</div></div>' +
+                '<a href="/api/download/' + jobId + '/' + f.type + '" download>Download</a>';
+              dlList.appendChild(item);
+            });
+          } else {
+            dlList.innerHTML = '<p style="color:#6e6e73;font-size:0.85rem;text-align:center">No partial outputs available.</p>';
+          }
+          showSection(secCancelled);
         }
 
         // Error
@@ -349,6 +431,34 @@
       } catch (err) {
         // Ignore transient fetch errors
       }
+    }
+
+    function computeETA(data) {
+      const stages = ['Ingest', 'Research', 'Generate', 'Script', 'Video'];
+      const budgets = data.stage_time_budgets;
+      if (!budgets || !data.stage) return null;
+
+      const currentStage = data.stage;
+      const stageElapsed = data.stage_elapsed || 0;
+      const currentIdx = stages.indexOf(currentStage);
+      if (currentIdx === -1) {
+        // Fallback to linear for unknown stages (e.g. "starting")
+        if (data.percent > 5) return (data.elapsed / (data.percent / 100)) - data.elapsed;
+        return null;
+      }
+
+      // Current stage: remaining = max(budget - elapsed, small buffer)
+      const currentBudget = (!data.has_video && (currentStage === 'Script' || currentStage === 'Video')) ? 0 : (budgets[currentStage] || 60);
+      const currentRemaining = Math.max(currentBudget - stageElapsed, 5);
+
+      // Future stages: sum their full budgets
+      let futureTotal = 0;
+      for (let i = currentIdx + 1; i < stages.length; i++) {
+        if (!data.has_video && (stages[i] === 'Script' || stages[i] === 'Video')) continue;
+        futureTotal += budgets[stages[i]] || 0;
+      }
+
+      return currentRemaining + futureTotal;
     }
 
     function formatTime(seconds) {
@@ -377,6 +487,14 @@
       });
     }
 
+    function renderWarnings(warnings) {
+      const list = document.getElementById('download-list');
+      const box = document.createElement('div');
+      box.style.cssText = 'background:#fff8e1;border:1px solid #ffcc02;border-radius:8px;padding:14px 16px;font-size:0.85rem;color:#7a5900;margin-top:8px';
+      box.innerHTML = '<strong>Warnings:</strong><br>' + warnings.map(w => w.replace(/^\[Video\]\s*/, '')).join('<br>');
+      list.appendChild(box);
+    }
+
     // --- Reset ---
     document.getElementById('btn-new').addEventListener('click', resetUI);
     document.getElementById('btn-retry').addEventListener('click', resetUI);
@@ -384,14 +502,19 @@
     function resetUI() {
       jobId = null;
       fileName = null;
+      cancelRequested = false;
       if (pollTimer) clearInterval(pollTimer);
       fileNameEl.textContent = '';
       fileInput.value = '';
       btnGenerate.disabled = true;
       document.getElementById('chk-ppt').checked = false;
       document.getElementById('chk-script').checked = false;
+      document.getElementById('chk-video').checked = false;
       document.getElementById('progress-bar').style.width = '0%';
       document.getElementById('log-output').textContent = '';
+      document.getElementById('proc-detail').textContent = '';
+      document.getElementById('btn-stop').disabled = false;
+      document.getElementById('btn-stop').textContent = 'Stop Pipeline';
       uploadError.style.display = 'none';
       showSection(secUpload);
     }

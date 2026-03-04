@@ -1,3 +1,6 @@
+import logging
+import os
+
 from pydantic_settings import BaseSettings
 
 
@@ -14,6 +17,7 @@ class Settings(BaseSettings):
         - **Tavily** -- web search API key.
         - **ChromaDB** -- persistence directory.
         - **HeyGen / Synthesia** -- video generation credentials.
+        - **Kokoro** -- local TTS video generation settings.
         - **Output formats** -- which artifacts to produce.
         - **Concurrency** -- thread pool sizes.
         - **LangSmith** -- tracing configuration.
@@ -21,7 +25,7 @@ class Settings(BaseSettings):
     """
 
     # OpenAI — model tiers
-    openai_api_key: str
+    openai_api_key: str = ""  # required for pipeline, optional for GPU video service
     openai_model: str = "gpt-5.1"              # backward-compat alias (maps to premium)
     openai_model_premium: str = "gpt-5.1"      # creative generation, critical modules
     openai_model_mini: str = "gpt-5-mini"      # analysis, structured output
@@ -33,7 +37,7 @@ class Settings(BaseSettings):
     temp_creative: float = 0.55                # video scripts, creative writing
 
     # Tavily
-    tavily_api_key: str
+    tavily_api_key: str = ""  # required for pipeline, optional for GPU video service
 
     # ChromaDB
     chroma_persist_dir: str = "./chroma_db"
@@ -48,25 +52,45 @@ class Settings(BaseSettings):
     synthesia_avatar_id: str = ""
 
     # Video provider and tuning
-    video_provider: str = "heygen"           # "heygen" or "synthesia"
+    video_provider: str = "heygen"           # "heygen", "synthesia", or "kokoro"
     video_avatar_emotion: str = "Friendly"
     video_avatar_speed: float = 1.05         # slightly faster for natural enthusiasm
+
+    # Kokoro TTS (local video generation — no API key needed)
+    kokoro_voice: str = "af_heart"
+    kokoro_lang: str = "a"
+    video_fps: int = 5                     # static slides — low fps saves ~80% encode time
+
+    # Slide export resolution
+    slide_export_dpi: int = 144            # 144 = exactly 1920x1080 for 13.333"x7.5" slides
 
     # Output formats — comma-separated: "pdf", "script", "video", or combinations like "pdf,script"
     output_formats: str = "pdf"
     video_topic_limit: int = 5  # max topics to generate scripts/videos for
 
+    # HuggingFace — authenticated downloads (faster, higher rate limits)
+    hf_token: str = ""
+
     # Concurrency
     max_workers: int = 12
-    video_max_workers: int = 6                 # parallel video generation jobs
+    video_max_workers: int = 12                # parallel video composition workers
 
-    # LangSmith
-    langchain_tracing_v2: bool = True
+    # Hardware acceleration — "auto" detects best GPU (cuda > mps > cpu)
+    video_device: str = "auto"                 # auto | cpu | mps | cuda
+
+    # LangSmith (tracing is opt-in — set LANGCHAIN_API_KEY to enable)
+    langchain_api_key: str = ""
+    langchain_tracing_v2: bool = False
     langchain_project: str = "cr8-prototype"
 
     # DeepSeek (eval judge)
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
+
+    # GPU service (video offload to Cloud Run GPU)
+    gpu_service_url: str = ""         # e.g. "https://cr8-gpu-xxx.run.app"
+    gpu_fallback_url: str = ""        # fallback GPU service (europe-west1)
+    gcs_bucket: str = "cr8-jobs"      # shared GCS bucket for CPU↔GPU data transfer
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
@@ -77,5 +101,28 @@ class Settings(BaseSettings):
             return self.output_formats
         return [f.strip() for f in self.output_formats.split(",")]
 
+    @property
+    def should_use_gpu_service(self) -> bool:
+        """True when a remote GPU service URL is configured."""
+        return bool(self.gpu_service_url)
+
 
 settings = Settings()
+
+# Configure logging for the backend package
+if not logging.root.handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+# Propagate HF_TOKEN so huggingface_hub uses authenticated (faster) downloads.
+if settings.hf_token:
+    os.environ.setdefault("HF_TOKEN", settings.hf_token)
+
+# Apply LangSmith env vars so auto-tracing works when a key is provided.
+if settings.langchain_api_key:
+    os.environ.setdefault("LANGCHAIN_API_KEY", settings.langchain_api_key)
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", str(settings.langchain_tracing_v2).lower())
+    os.environ.setdefault("LANGCHAIN_PROJECT", settings.langchain_project)

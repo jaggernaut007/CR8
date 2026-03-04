@@ -3,7 +3,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from backend.config import settings
-from backend.pipeline.state import PipelineState
+from backend.pipeline.state import PipelineCancelledError, PipelineState, _check_cancelled
 from backend.services.llm import get_llm
 from backend.services.chromadb_store import ChromaStore
 from backend.services.web_search import search
@@ -29,11 +29,15 @@ def _research_topic(i, topic, total, store, llm, curriculum_scope):
         )
         try:
             job_results = job_future.result(timeout=30)
+        except PipelineCancelledError:
+            raise
         except Exception as exc:
             print(f"[Research] WARNING: job search failed for '{name}': {exc}")
             job_results = []
         try:
             trend_results = trend_future.result(timeout=30)
+        except PipelineCancelledError:
+            raise
         except Exception as exc:
             print(f"[Research] WARNING: trend search failed for '{name}': {exc}")
             trend_results = []
@@ -138,9 +142,12 @@ def research_node(state: PipelineState) -> dict:
             for i, topic in enumerate(topics)
         }
         for future in as_completed(future_to_idx):
+            _check_cancelled()
             idx = future_to_idx[future]
             try:
                 gap_summary[idx] = future.result()
+            except PipelineCancelledError:
+                raise
             except Exception as exc:
                 topic_name = topics[idx]["name"]
                 print(f"[Research] ERROR: topic '{topic_name}' failed — {exc}")

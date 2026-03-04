@@ -23,11 +23,20 @@
 - Run `./scripts/init.sh` at session start and after major changes
 
 ### Hallucination Prevention
-- For any external library or API, check `docs/research/` first
-- If research docs don't cover it, perform a web search for the current official docs before writing implementation code
+- For any external library or API, try **Context7 MCP first** (`resolve-library-id` → `get-library-docs`) — it covers LangGraph, FastAPI, ChromaDB, python-pptx, fpdf2, MoviePy, PyMuPDF
+- If Context7 doesn't cover it, check `docs/research/` for an existing research note
+- If no research note exists, perform a web search for the current official docs before writing implementation code
 - Pin library versions in all research queries — do not assume the latest API matches training data
+
+### MCP Servers
+- **Context7** — version-specific library docs. Use before web search for any library question.
+- **GitHub** — PR management, issues, CI status. Use for all GitHub operations.
+- **Playwright** — browser automation. Use to test web UI at localhost:8080.
+- **Sequential Thinking** — structured reasoning for architecture decisions.
 
 ## Skills Available
 <!-- Skills are loaded on-demand — only metadata is preloaded -->
 - `session-handoff` — write/read session state between conversations
-- Add your own skills in `.claude/skills/`
+- `commit-ready` — pre-commit verification (lint + test + docs build)
+- `coverage-report` — generate and display test coverage summary
+- `new-feature` — scaffold a new feature with service, tests, and docs

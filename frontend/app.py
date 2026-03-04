@@ -35,9 +35,9 @@ TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
 # Auth — password hashing
 # ---------------------------------------------------------------------------
 
-# bcrypt hash computed once at startup. Plaintext is used only here at import
-# time and not retained after this line executes.
-_PASSWORD_HASH: bytes = bcrypt.hashpw(b"CR8-AI", bcrypt.gensalt())
+# bcrypt hash computed once at startup from AUTH_PASSWORD env var.
+_AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "CR8-AI")
+_PASSWORD_HASH: bytes = bcrypt.hashpw(_AUTH_PASSWORD.encode(), bcrypt.gensalt())
 
 # ---------------------------------------------------------------------------
 # Auth — session store (token -> expiry Unix timestamp)
@@ -174,15 +174,29 @@ jobs: dict[str, "ProgressCapture"] = {}
 # Progress capture
 # ---------------------------------------------------------------------------
 
+from backend.pipeline.state import PipelineCancelledError  # noqa: E402
+
+
 class ProgressCapture:
     """Captures stdout from the pipeline thread and parses progress."""
 
     STAGE_WEIGHTS = {
-        "Ingest": 15,
-        "Research": 50,
-        "Generate": 25,
-        "Script": 8,
-        "Video": 2,
+        "Ingest": 10,
+        "Research": 35,
+        "Generate": 20,
+        "Script": 10,
+        "Video": 25,  # Kokoro local TTS + MoviePy composition is CPU-intensive
+    }
+
+    # Expected wall-clock seconds per stage (video-enabled, 5-topic run).
+    # Used by the frontend for stage-aware ETA calculation.
+    # Benchmarked 2026-03-04: M&A PDF (33 slides, 5 topics) on Mac MPS GPU.
+    STAGE_TIME_BUDGETS = {
+        "Ingest": 51,       # PDF parse + summarize + embed (51s measured)
+        "Research": 150,    # Tavily web search per topic (2m 29s measured)
+        "Generate": 140,    # LLM content gen + PDF/PPT build (2m 19s measured)
+        "Script": 14,       # Slide export PPTX→PNG (14s measured, included in generate)
+        "Video": 1690,      # TTS 7m7s + ffmpeg 21m = ~28m (MPS GPU measured)
     }
 
     def __init__(self):
@@ -190,21 +204,41 @@ class ProgressCapture:
         self.current_stage = "starting"
         self.percent = 0
         self.start_time = time.time()
-        self.status = "running"  # running | complete | error
+        self.stage_start_time = time.time()
+        self.status = "running"  # running | complete | error | cancelled
         self.error: str | None = None
+        self.warnings: list[str] = []
         self.result: dict | None = None
+        self.formats: list[str] = []
         self._lock = threading.Lock()
         self._original_stdout = sys.stdout
+        # Cancellation support
+        self.cancel_requested = False
+        self._cancel_at_boundary = False
+        self.video_job_id: str | None = None
+        self.gpu_progress: dict | None = None
+
+    def is_cancelled(self) -> bool:
+        with self._lock:
+            return self.cancel_requested
+
+    def request_cancel(self) -> None:
+        with self._lock:
+            self.cancel_requested = True
 
     # Called by print() when stdout is redirected
     def write(self, text: str):
         self._original_stdout.write(text)  # tee to console
+        should_cancel = False
         with self._lock:
             for line in text.strip().split("\n"):
                 line = line.strip()
                 if line:
                     self.logs.append(line)
                     self._parse_line(line)
+            should_cancel = self._cancel_at_boundary
+        if should_cancel:
+            raise PipelineCancelledError("Pipeline cancelled by user")
 
     def flush(self):
         self._original_stdout.flush()
@@ -227,12 +261,54 @@ class ProgressCapture:
             self.current_stage = stage
             return
 
+        # Capture video errors/warnings for UI display
+        if line.startswith("[Video] ERROR:") or line.startswith("[Video] WARNING:"):
+            self.warnings.append(line)
+
+        # Capture GPU video job ID for cancel forwarding
+        gpu_id_match = re.match(r"\[Video\] GPU_JOB_ID: (.+)", line)
+        if gpu_id_match:
+            self.video_job_id = gpu_id_match.group(1).strip()
+            return
+
+        # GPU compose progress: [Video] GPU_COMPOSE: 3/5
+        compose_match = re.match(r"\[Video\] GPU_COMPOSE: (\d+)/(\d+)", line)
+        if compose_match:
+            if self.gpu_progress is None:
+                self.gpu_progress = {}
+            self.gpu_progress["completed_videos"] = int(compose_match.group(1))
+            self.gpu_progress["total_videos"] = int(compose_match.group(2))
+            return
+
+        # GPU TTS progress: [Video] GPU_TTS: 2/5
+        tts_match = re.match(r"\[Video\] GPU_TTS: (\d+)/(\d+)", line)
+        if tts_match:
+            if self.gpu_progress is None:
+                self.gpu_progress = {}
+            self.gpu_progress["current_topic"] = int(tts_match.group(1))
+            self.gpu_progress["total_topics"] = int(tts_match.group(2))
+            return
+
+        # GPU time: [Video] GPU_TIME: elapsed=120 eta=300
+        time_match = re.match(r"\[Video\] GPU_TIME: elapsed=(\d+) eta=(\d+|\?)", line)
+        if time_match:
+            if self.gpu_progress is None:
+                self.gpu_progress = {}
+            self.gpu_progress["elapsed_s"] = int(time_match.group(1))
+            eta_val = time_match.group(2)
+            self.gpu_progress["eta_s"] = int(eta_val) if eta_val != "?" else None
+            return
+
         # Match generic "[Ingest] ..." lines for stage transitions
         stage_match = re.match(r"\[(\w+)\]", line)
         if stage_match:
             stage = stage_match.group(1)
             if stage in self.STAGE_WEIGHTS and stage != self.current_stage:
+                # Check cancellation at stage boundaries
+                if self.cancel_requested:
+                    self._cancel_at_boundary = True
                 self.current_stage = stage
+                self.stage_start_time = time.time()
                 cumulative = 0
                 for s, w in self.STAGE_WEIGHTS.items():
                     if s == stage:
@@ -242,17 +318,29 @@ class ProgressCapture:
 
     def get_state(self) -> dict:
         with self._lock:
+            effective_status = self.status
+            if self.cancel_requested and self.status == "running":
+                effective_status = "cancelling"
             state = {
-                "status": self.status,
+                "status": effective_status,
                 "stage": self.current_stage,
                 "percent": self.percent,
                 "logs": self.logs[-30:],
                 "elapsed": round(time.time() - self.start_time, 1),
+                "stage_elapsed": round(time.time() - self.stage_start_time, 1),
+                "stage_time_budgets": self.STAGE_TIME_BUDGETS,
+                "has_video": "video" in self.formats,
             }
-            if self.status == "complete" and self.result:
+            if self.status in ("complete", "cancelled") and self.result:
                 state["files"] = _collect_output_files(self.result)
             if self.status == "error":
                 state["error"] = self.error
+            if self.status == "cancelled":
+                state["error"] = self.error or "Cancelled by user"
+            if self.warnings:
+                state["warnings"] = self.warnings
+            if self.gpu_progress:
+                state["gpu_progress"] = self.gpu_progress
             return state
 
 
@@ -260,8 +348,24 @@ class ProgressCapture:
 # Background pipeline runner
 # ---------------------------------------------------------------------------
 
+def _cleanup_partial_audio(result: dict) -> None:
+    """Remove ``_audio_*`` temp directories left by cancelled video builds."""
+    import glob
+    import shutil
+
+    video_dir = result.get("video_dir") if result else None
+    if not video_dir or not os.path.isdir(video_dir):
+        return
+    for audio_dir in glob.glob(os.path.join(video_dir, "_audio_*")):
+        try:
+            shutil.rmtree(audio_dir)
+        except OSError:
+            pass
+
+
 def _run_pipeline_sync(file_paths: list[str], formats: list[str], capture: ProgressCapture):
     """Runs the pipeline with stdout redirected to capture."""
+    capture.formats = formats
     old_stdout = sys.stdout
     sys.stdout = capture  # type: ignore[assignment]
     try:
@@ -270,6 +374,14 @@ def _run_pipeline_sync(file_paths: list[str], formats: list[str], capture: Progr
             capture.result = result
             capture.percent = 100
             capture.status = "complete"
+    except PipelineCancelledError:
+        with capture._lock:
+            capture.status = "cancelled"
+            capture.error = "Cancelled by user"
+            # Preserve partial results if any outputs were already generated
+            if capture.result is None:
+                capture.result = {}
+        _cleanup_partial_audio(capture.result)
     except Exception as e:
         import traceback
         with capture._lock:
@@ -399,13 +511,16 @@ async def index():
 
 @app.post("/api/upload")
 async def upload(file: UploadFile = File(...)):
-    """Upload a curriculum PDF and receive a job ID.
+    """Upload a curriculum file (PDF or PPTX) and receive a job ID.
 
     Validates file extension, magic bytes, and size before saving.
     """
     # Extension check
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        return JSONResponse({"error": "Please upload a PDF file"}, status_code=400)
+    if not file.filename:
+        return JSONResponse({"error": "Please upload a PDF or PPTX file"}, status_code=400)
+    ext = file.filename.lower().rsplit(".", 1)[-1] if "." in file.filename else ""
+    if ext not in ("pdf", "pptx"):
+        return JSONResponse({"error": "Please upload a PDF or PPTX file"}, status_code=400)
 
     content = await file.read()
 
@@ -413,9 +528,11 @@ async def upload(file: UploadFile = File(...)):
     if len(content) > MAX_UPLOAD_BYTES:
         return JSONResponse({"error": "File too large (max 20 MB)"}, status_code=413)
 
-    # Magic bytes — verify it is actually a PDF, not just named .pdf
-    if not content.startswith(b"%PDF-"):
+    # Magic bytes — verify file content matches its extension
+    if ext == "pdf" and not content.startswith(b"%PDF-"):
         return JSONResponse({"error": "File is not a valid PDF"}, status_code=400)
+    if ext == "pptx" and not content.startswith(b"PK\x03\x04"):
+        return JSONResponse({"error": "File is not a valid PPTX"}, status_code=400)
 
     # Sanitize filename to prevent path traversal
     safe_filename = os.path.basename(file.filename)
@@ -453,15 +570,18 @@ async def start(body: dict):
     if not os.path.exists(job_dir):
         return JSONResponse({"error": "Job not found. Upload a file first."}, status_code=404)
 
-    pdf_files = [os.path.join(job_dir, f) for f in os.listdir(job_dir) if f.lower().endswith(".pdf")]
-    if not pdf_files:
-        return JSONResponse({"error": "No PDF found for this job"}, status_code=404)
+    input_files = [
+        os.path.join(job_dir, f) for f in os.listdir(job_dir)
+        if f.lower().endswith((".pdf", ".pptx"))
+    ]
+    if not input_files:
+        return JSONResponse({"error": "No PDF or PPTX found for this job"}, status_code=404)
 
     capture = ProgressCapture()
     jobs[job_id] = capture
 
     asyncio.get_running_loop().run_in_executor(
-        None, _run_pipeline_sync, pdf_files, formats, capture
+        None, _run_pipeline_sync, input_files, formats, capture
     )
 
     return {"status": "running"}
@@ -477,6 +597,31 @@ async def progress(job_id: str):
     if not capture:
         return JSONResponse({"error": "Job not found"}, status_code=404)
     return capture.get_state()
+
+
+@app.post("/api/cancel/{job_id}")
+async def cancel(job_id: str):
+    """Cancel a running pipeline job."""
+    if not JOB_ID_RE.match(job_id):
+        return JSONResponse({"error": "Invalid job_id"}, status_code=400)
+
+    capture = jobs.get(job_id)
+    if not capture:
+        return JSONResponse({"error": "Job not found"}, status_code=404)
+
+    if capture.status in ("complete", "error", "cancelled"):
+        return JSONResponse(
+            {"error": f"Job already {capture.status}"},
+            status_code=409,
+        )
+
+    capture.request_cancel()
+
+    # The pipeline thread's poll loop (GPU) or build loop (local CPU) checks
+    # capture.is_cancelled() every iteration and will cancel the active GPU
+    # job on the correct region before re-raising PipelineCancelledError.
+
+    return {"status": "cancelling"}
 
 
 @app.get("/api/download/{job_id}/{file_type}")

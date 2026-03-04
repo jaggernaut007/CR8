@@ -1,0 +1,140 @@
+# Dockerfile.gpu — CR8 GPU Video Service
+# Deployed to Cloud Run with: --gpu=1 --gpu-type=nvidia-l4 --memory=16Gi --cpu=4
+#
+# Build:  docker buildx build --platform linux/amd64 -f Dockerfile.gpu -t cr8-gpu .
+# Run:    docker run -p 8080:8080 --gpus all cr8-gpu
+
+# ---- Stage 1: FFmpeg with NVENC ----
+# Use the devel image which includes NVENC headers (nv-codec-headers via cuda_nvenc)
+FROM nvidia/cuda:12.2.2-devel-ubuntu22.04 AS ffmpeg-builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git nasm yasm pkg-config libx264-dev build-essential wget && \
+    # Install nv-codec-headers (required for NVENC at compile time)
+    git clone --depth 1 --branch n12.1.14.0 \
+        https://github.com/FFmpeg/nv-codec-headers.git /tmp/nv-codec-headers && \
+    cd /tmp/nv-codec-headers && make install && \
+    # Compile ffmpeg with NVENC + libx264
+    wget -q https://ffmpeg.org/releases/ffmpeg-7.0.2.tar.xz && \
+    tar xf ffmpeg-7.0.2.tar.xz && cd ffmpeg-7.0.2 && \
+    ./configure \
+        --enable-gpl --enable-nonfree \
+        --enable-nvenc --enable-cuda \
+        --enable-libx264 \
+        --disable-debug --disable-doc --disable-ffplay --disable-network \
+        --extra-cflags="-I/usr/local/cuda/include" \
+        --extra-ldflags="-L/usr/local/cuda/lib64" && \
+    make -j$(nproc) && make install && \
+    rm -rf /tmp/nv-codec-headers /tmp/ffmpeg-7.0.2*
+
+# ---- Stage 2: Python dependencies ----
+FROM python:3.11-slim AS py-builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libsndfile1-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install only GPU-relevant Python dependencies
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    "kokoro>=0.9" \
+    "moviepy>=2.0" \
+    "soundfile>=0.12" \
+    "fastapi>=0.115" \
+    "uvicorn[standard]>=0.34" \
+    "gunicorn>=22.0" \
+    "pydantic-settings>=2.0" \
+    "google-cloud-storage>=2.14" \
+    "requests>=2.31" \
+    "langsmith>=0.2"
+
+# Pre-download Kokoro model + voice file so runtime needs no HuggingFace access
+ENV HF_HOME=/opt/hf_cache
+RUN python -c "\
+from kokoro import KPipeline; \
+p = KPipeline(lang_code='a', device='cpu'); \
+# Force voice download \
+p.load_voice('af_heart'); \
+print('Kokoro model + voice cached successfully')"
+
+
+# ---- Stage 3: Runtime ----
+FROM nvidia/cuda:12.2.2-runtime-ubuntu22.04 AS runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Python 3.11 + system deps for TTS (no stock ffmpeg — we use the NVENC build)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-venv \
+    libglib2.0-0 \
+    libsndfile1 \
+    libx264-163 \
+    espeak-ng \
+    && rm -rf /var/lib/apt/lists/* \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+# Copy NVENC-capable ffmpeg from builder
+COPY --from=ffmpeg-builder /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
+COPY --from=ffmpeg-builder /usr/local/bin/ffprobe /usr/local/bin/ffprobe
+
+# Verify ffmpeg was compiled with NVENC support (build-time check).
+# At runtime libnvidia-encode.so is injected by nvidia-container-toolkit;
+# NVIDIA_DRIVER_CAPABILITIES=all (set below) ensures encode libs are mounted.
+RUN ffmpeg -hide_banner -encoders 2>/dev/null | grep -q h264_nvenc \
+    && echo "OK: ffmpeg built with h264_nvenc support" \
+    || echo "WARN: ffmpeg missing h264_nvenc — will fall back to libx264"
+
+COPY --from=py-builder /opt/venv /opt/venv
+COPY --from=py-builder /opt/hf_cache /opt/hf_cache
+
+# Fix venv shebangs: builder uses /opt/venv/bin/python (Debian) but runtime
+# has python at /usr/bin/python3.11 (deadsnakes PPA). Rewrite to use env lookup.
+RUN find /opt/venv/bin -type f -exec sed -i 's|^#!/opt/venv/bin/python.*|#!/usr/bin/env python3|' {} + 2>/dev/null || true
+
+ENV PATH="/opt/venv/bin:/usr/local/bin:$PATH" \
+    PYTHONPATH="/opt/venv/lib/python3.11/site-packages" \
+    HF_HOME="/opt/hf_cache" \
+    IMAGEIO_FFMPEG_EXE="/usr/local/bin/ffmpeg" \
+    TOKENIZERS_PARALLELISM="false" \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=all
+
+WORKDIR /app
+
+# Copy only the backend service files the GPU service needs
+COPY backend/__init__.py backend/__init__.py
+COPY backend/config.py backend/config.py
+COPY backend/services/__init__.py backend/services/__init__.py
+COPY backend/services/tts_engine.py backend/services/tts_engine.py
+COPY backend/services/video_builder.py backend/services/video_builder.py
+COPY backend/services/gpu_utils.py backend/services/gpu_utils.py
+COPY backend/services/script_parser.py backend/services/script_parser.py
+
+# Copy the GPU service package
+COPY gpu_service/ ./gpu_service/
+
+RUN mkdir -p /app/workdir
+
+EXPOSE 8080
+
+# Single gunicorn worker — GPU workloads are not parallelizable per-instance
+CMD ["python3", "-m", "gunicorn", "gpu_service.app:app", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--workers", "1", \
+     "--bind", "0.0.0.0:8080", \
+     "--timeout", "3600", \
+     "--keep-alive", "65", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-"]

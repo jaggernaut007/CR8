@@ -16,7 +16,12 @@ Read the relevant note before implementing any feature that uses an external lib
 
 | Topic | File | Version | Date | Status |
 |-------|------|---------|------|--------|
-| *(none yet — add entries here as research notes are created)* | | | | |
+| Kokoro TTS | [kokoro-tts.md](kokoro-tts.md) | >=0.9 | 2026-03-03 | Current |
+| MoviePy v2 | [moviepy-v2.md](moviepy-v2.md) | >=2.0 | 2026-03-03 | Current |
+| PyMuPDF Slide Export | [pymupdf-slide-export.md](pymupdf-slide-export.md) | >=1.24 | 2026-03-03 | Current |
+| Deployment Strategies | [deployment-strategies.md](deployment-strategies.md) | — | 2026-03-04 | Current |
+| MCP Dev Tools | [mcp-dev-tools.md](mcp-dev-tools.md) | — | 2026-03-04 | Current |
+| MCP Pipeline Integration | [mcp-pipeline-integration.md](mcp-pipeline-integration.md) | MCP Spec 2025-11-25 | 2026-03-04 | Current |
 
 ## Priority Research Needed
 
@@ -31,6 +36,7 @@ These libraries are used in CR8 but have no research notes yet:
 | HeyGen | REST API (no Python SDK) | Avatar video generation — undocumented edge cases |
 | fpdf2 | `>=2.8` | Multi-column PDF layout — complex API |
 | python-pptx | `>=1.0` | Slide master styles, shape positioning |
+| google-cloud-storage | `>=2.0` | Blob upload/download patterns, IAM, signed URLs |
 
 ## Notes That Are Outdated
 

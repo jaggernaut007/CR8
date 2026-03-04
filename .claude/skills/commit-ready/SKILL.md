@@ -45,15 +45,15 @@ Do NOT continue to subsequent steps on FAIL.
 make test
 ```
 
-**PASS**: All tests pass and count is >= 362.
+**PASS**: All tests pass and count is >= 426.
 **FAIL**: Any test failure or error.
 
 On FAIL, stop and report:
 > FAIL — Test suite has failures. Invoke the debug-detective agent:
 > "Tests are failing before my commit — [failing test name]."
 
-On PASS, confirm the test count. If the count is LOWER than 362, report:
-> WARN — Test count decreased (expected >= 362, found N).
+On PASS, confirm the test count. If the count is LOWER than 426, report:
+> WARN — Test count decreased (expected >= 426, found N).
 > New features must have corresponding tests. Consider invoking test-writer.
 
 Do NOT continue past a FAIL.

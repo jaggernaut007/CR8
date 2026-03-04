@@ -16,7 +16,7 @@ paths:
   - `frontend/tests/test_api.py` → tests `frontend/app.py` endpoints
 
 ## Mocking (Critical)
-- Mock ALL external API calls — the full 362-test suite must run with zero real API calls
+- Mock ALL external API calls — the full 426-test suite must run with zero real API calls
 - Use `unittest.mock.patch` or `pytest-mock` for OpenAI, Tavily, HeyGen, ChromaDB calls
 - Never use real API keys in tests — if a test requires them, it belongs in a manual eval
 - Check `backend/tests/test_services.py` for established mock patterns to follow
@@ -29,13 +29,13 @@ paths:
 - **Slow tests**: mark with `@pytest.mark.slow` for tests taking over 1 second
 
 ## Definition of Done for Tests
-- Run `make test` and confirm all 362 tests pass before marking any task complete
+- Run `make test` and confirm all 426 tests pass before marking any task complete
 - Read the test output via tool calls — never assume tests pass
 - New features require new tests — no exceptions
 
 ## Running Tests
 ```bash
-make test              # run full suite (362 tests)
+make test              # run full suite (426 tests)
 pytest -v -k "keyword" # run specific tests
 pytest --tb=short -q   # fast summary
 ```

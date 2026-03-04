@@ -9,6 +9,9 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
+# Ensure AUTH_PASSWORD is set before importing app (which hashes at import time)
+os.environ.setdefault("AUTH_PASSWORD", "CR8-AI")
+
 from frontend.app import app, jobs, _sessions, _failed_attempts, ProgressCapture, UPLOAD_DIR
 
 
@@ -66,6 +69,19 @@ def sample_pdf(tmp_path):
         b"xref\n0 4\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n0\n%%EOF"
     )
     return pdf_path
+
+
+@pytest.fixture
+def sample_pptx(tmp_path):
+    """Create a minimal valid PPTX file for upload tests.
+
+    PPTX files are ZIP archives (Office Open XML), so they start with PK magic bytes.
+    """
+    pptx_path = tmp_path / "test.pptx"
+    import zipfile
+    with zipfile.ZipFile(pptx_path, "w") as zf:
+        zf.writestr("[Content_Types].xml", '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"></Types>')
+    return pptx_path
 
 
 # ---------------------------------------------------------------------------
@@ -172,15 +188,27 @@ class TestIndexRoute:
         assert 'id="file-input"' in resp.text
         assert 'id="btn-generate"' in resp.text
 
+    def test_file_input_accepts_pdf_and_pptx(self, authed_client):
+        resp = authed_client.get("/")
+        assert 'accept=".pdf,.pptx"' in resp.text
+
+    def test_drop_zone_mentions_pptx(self, authed_client):
+        resp = authed_client.get("/")
+        assert "PPTX" in resp.text
+
     def test_contains_format_checkboxes(self, authed_client):
         resp = authed_client.get("/")
         assert 'id="chk-script"' in resp.text
         assert 'id="chk-video"' in resp.text
 
-    def test_video_checkbox_disabled(self, authed_client):
+    def test_video_checkbox_enabled(self, authed_client):
         resp = authed_client.get("/")
         video_line = [line for line in resp.text.split("\n") if "chk-video" in line][0]
-        assert "disabled" in video_line
+        assert "disabled" not in video_line
+
+    def test_video_label_mentions_kokoro(self, authed_client):
+        resp = authed_client.get("/")
+        assert "Kokoro TTS" in resp.text
 
     def test_contains_sign_out_button(self, authed_client):
         resp = authed_client.get("/")
@@ -214,7 +242,7 @@ class TestUploadEndpoint:
         fake_txt = io.BytesIO(b"not a pdf")
         resp = authed_client.post("/api/upload", files={"file": ("notes.txt", fake_txt, "text/plain")})
         assert resp.status_code == 400
-        assert "PDF" in resp.json()["error"]
+        assert "PDF or PPTX" in resp.json()["error"]
 
     def test_upload_rejects_no_file(self, authed_client):
         resp = authed_client.post("/api/upload")
@@ -256,6 +284,45 @@ class TestUploadEndpoint:
         for fname in os.listdir(job_dir):
             os.remove(os.path.join(job_dir, fname))
         os.rmdir(job_dir)
+
+    def test_upload_pptx_returns_job_id(self, authed_client, sample_pptx):
+        with open(sample_pptx, "rb") as f:
+            resp = authed_client.post(
+                "/api/upload",
+                files={"file": ("slides.pptx", f, "application/vnd.openxmlformats-officedocument.presentationml.presentation")},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "job_id" in data
+        assert data["filename"] == "slides.pptx"
+        # Cleanup
+        job_id = data["job_id"]
+        job_dir = os.path.join(UPLOAD_DIR, job_id)
+        for fname in os.listdir(job_dir):
+            os.remove(os.path.join(job_dir, fname))
+        os.rmdir(job_dir)
+
+    def test_upload_pptx_creates_file_on_disk(self, authed_client, sample_pptx):
+        with open(sample_pptx, "rb") as f:
+            resp = authed_client.post(
+                "/api/upload",
+                files={"file": ("test.pptx", f, "application/octet-stream")},
+            )
+        job_id = resp.json()["job_id"]
+        saved_path = os.path.join(UPLOAD_DIR, job_id, "test.pptx")
+        assert os.path.exists(saved_path)
+        os.remove(saved_path)
+        os.rmdir(os.path.join(UPLOAD_DIR, job_id))
+
+    def test_upload_rejects_pptx_with_invalid_magic_bytes(self, authed_client):
+        """A .pptx extension with non-ZIP content should be rejected."""
+        fake = io.BytesIO(b"NOT A PPTX - just text pretending")
+        resp = authed_client.post(
+            "/api/upload",
+            files={"file": ("evil.pptx", fake, "application/octet-stream")},
+        )
+        assert resp.status_code == 400
+        assert "valid PPTX" in resp.json()["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +399,51 @@ class TestStartEndpoint:
             os.remove(os.path.join(job_dir, f))
         os.rmdir(job_dir)
 
+    def test_start_launches_pipeline_with_pptx(self, authed_client, sample_pptx):
+        with open(sample_pptx, "rb") as f:
+            upload_resp = authed_client.post(
+                "/api/upload",
+                files={"file": ("slides.pptx", f, "application/octet-stream")},
+            )
+        job_id = upload_resp.json()["job_id"]
+
+        with patch("frontend.app.run_job") as mock_run:
+            mock_run.return_value = {"pdf_path": "/fake/out.pdf", "video_dir": ""}
+            resp = authed_client.post("/api/start", json={"job_id": job_id, "formats": ["pdf"]})
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "running"
+        # Verify the PPTX file was passed to run_job
+        call_args = mock_run.call_args
+        assert any(f.endswith(".pptx") for f in call_args[0][0])
+
+        job_dir = os.path.join(UPLOAD_DIR, job_id)
+        for f in os.listdir(job_dir):
+            os.remove(os.path.join(job_dir, f))
+        os.rmdir(job_dir)
+
+    def test_start_with_video_format_calls_run_job(self, authed_client, sample_pdf):
+        with open(sample_pdf, "rb") as f:
+            upload_resp = authed_client.post("/api/upload", files={"file": ("test.pdf", f, "application/pdf")})
+        job_id = upload_resp.json()["job_id"]
+
+        with patch("frontend.app.run_job") as mock_run:
+            mock_run.return_value = {"pdf_path": "/fake/out.pdf", "ppt_path": "", "video_dir": "/fake/videos"}
+            resp = authed_client.post(
+                "/api/start",
+                json={"job_id": job_id, "formats": ["pdf", "ppt", "script", "video"]},
+            )
+
+        assert resp.status_code == 200
+        # Verify run_job was called with video in formats
+        call_args = mock_run.call_args
+        assert "video" in call_args[0][1]  # second positional arg = formats list
+
+        job_dir = os.path.join(UPLOAD_DIR, job_id)
+        for f in os.listdir(job_dir):
+            os.remove(os.path.join(job_dir, f))
+        os.rmdir(job_dir)
+
     def test_start_defaults_to_pdf_format(self, authed_client, sample_pdf):
         with open(sample_pdf, "rb") as f:
             upload_resp = authed_client.post("/api/upload", files={"file": ("test.pdf", f, "application/pdf")})
@@ -394,6 +506,30 @@ class TestProgressEndpoint:
         assert data["percent"] == 100
         assert len(data["files"]) == 1
         assert data["files"][0]["type"] == "pdf"
+
+    def test_returns_complete_state_with_video_files(self, authed_client, tmp_path):
+        fake_pdf = tmp_path / "guide.pdf"
+        fake_pdf.write_bytes(b"%PDF-1.0 fake content")
+        video_dir = tmp_path / "videos"
+        video_dir.mkdir()
+        (video_dir / "01_Topic.mp4").write_bytes(b"\x00\x00\x00 ftyp")
+        scripts_dir = video_dir / "scripts"
+        scripts_dir.mkdir()
+        (scripts_dir / "01_Topic.txt").write_text("Script content")
+
+        cap = ProgressCapture()
+        cap.status = "complete"
+        cap.percent = 100
+        cap.result = {"pdf_path": str(fake_pdf), "ppt_path": "", "video_dir": str(video_dir)}
+        jobs["abed1234"] = cap
+
+        resp = authed_client.get("/api/progress/abed1234")
+        data = resp.json()
+        assert data["status"] == "complete"
+        file_types = [f["type"] for f in data["files"]]
+        assert "pdf" in file_types
+        assert "scripts" in file_types
+        assert "videos" in file_types
 
     def test_returns_error_state(self, authed_client):
         cap = ProgressCapture()
@@ -484,6 +620,37 @@ class TestDownloadEndpoint:
         resp = authed_client.get("/api/download/dace1234/pdf")
         assert resp.status_code == 404
 
+    def test_download_all_artifacts_from_video_job(self, authed_client, tmp_path):
+        """Full video job produces PDF + scripts + videos — all downloadable."""
+        fake_pdf = tmp_path / "guide.pdf"
+        fake_pdf.write_bytes(b"%PDF-1.0 test content")
+        video_dir = tmp_path / "videos"
+        video_dir.mkdir()
+        (video_dir / "01_Topic.mp4").write_bytes(b"\x00\x00\x00 ftyp")
+        scripts_dir = video_dir / "scripts"
+        scripts_dir.mkdir()
+        (scripts_dir / "01_Topic.txt").write_text("Script for topic 1")
+
+        cap = ProgressCapture()
+        cap.status = "complete"
+        cap.result = {"pdf_path": str(fake_pdf), "ppt_path": "", "video_dir": str(video_dir)}
+        jobs["aace1234"] = cap
+
+        # PDF download
+        resp = authed_client.get("/api/download/aace1234/pdf")
+        assert resp.status_code == 200
+        assert resp.content.startswith(b"%PDF-1.0")
+
+        # Scripts download (zip)
+        resp = authed_client.get("/api/download/aace1234/scripts")
+        assert resp.status_code == 200
+        assert resp.content[:2] == b"PK"
+
+        # Videos download (zip)
+        resp = authed_client.get("/api/download/aace1234/videos")
+        assert resp.status_code == 200
+        assert resp.content[:2] == b"PK"
+
     def test_download_missing_pdf_returns_404(self, authed_client):
         cap = ProgressCapture()
         cap.status = "complete"
@@ -492,3 +659,64 @@ class TestDownloadEndpoint:
 
         resp = authed_client.get("/api/download/face1234/pdf")
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /api/cancel/<job_id> (authenticated)
+# ---------------------------------------------------------------------------
+
+class TestCancelEndpoint:
+
+    def test_cancel_without_auth_returns_401(self, client):
+        resp = client.post("/api/cancel/ab001234")
+        assert resp.status_code == 401
+
+    def test_cancel_invalid_job_id_returns_400(self, authed_client):
+        resp = authed_client.post("/api/cancel/notvalid")
+        assert resp.status_code == 400
+
+    def test_cancel_unknown_job_returns_404(self, authed_client):
+        resp = authed_client.post("/api/cancel/deadbeef")
+        assert resp.status_code == 404
+
+    def test_cancel_running_job_returns_cancelling(self, authed_client):
+        cap = ProgressCapture()
+        cap._original_stdout = io.StringIO()
+        cap.status = "running"
+        jobs["ab001234"] = cap
+
+        resp = authed_client.post("/api/cancel/ab001234")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "cancelling"
+        assert cap.cancel_requested is True
+
+    def test_cancel_completed_job_returns_409(self, authed_client):
+        cap = ProgressCapture()
+        cap.status = "complete"
+        cap.result = {"pdf_path": "", "video_dir": ""}
+        jobs["ab001234"] = cap
+
+        resp = authed_client.post("/api/cancel/ab001234")
+        assert resp.status_code == 409
+
+    def test_cancel_already_cancelled_returns_409(self, authed_client):
+        cap = ProgressCapture()
+        cap.status = "cancelled"
+        jobs["ab001234"] = cap
+
+        resp = authed_client.post("/api/cancel/ab001234")
+        assert resp.status_code == 409
+
+    def test_cancel_sets_cancel_requested(self, authed_client):
+        """Cancel endpoint sets cancel_requested; the pipeline poll loop
+        propagates cancellation to whichever GPU region is active."""
+        cap = ProgressCapture()
+        cap._original_stdout = io.StringIO()
+        cap.status = "running"
+        cap.video_job_id = "vj_test_abc"
+        jobs["ab001234"] = cap
+
+        resp = authed_client.post("/api/cancel/ab001234")
+
+        assert resp.status_code == 200
+        assert cap.cancel_requested is True

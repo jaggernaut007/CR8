@@ -57,14 +57,14 @@ Dockerized on GCP Cloud Run (europe-west2). Single container with Gunicorn + Uvi
     Password-protected access added: bcrypt-hashed password, 256-bit server-side session tokens (8-hour TTL), IP-based rate limiting (5 attempts per 15 min), `BaseHTTPMiddleware` as outermost ASGI layer that intercepts every request before FastAPI routing. Upload endpoint validates PDF magic bytes (`%PDF-`), enforces 20 MB cap, sanitizes filenames, validates `job_id` format (`^[a-f0-9]{8}$`) before any filesystem access. AI pipeline hardened against adversarial PDFs: `_sanitize()` strips control characters from extracted text; all document content wrapped in `<document>` tags with privilege-separation notice (OWASP LLM01). 48 new endpoint tests added, all passing. **The Cloud Run URL can now be shared externally.**
 
 !!! success "Concurrency raised (`b41e94a`)"
-    `ThreadPoolExecutor max_workers` increased from 8 → 12; `video_max_workers` from 4 → 6. A full 15-topic curriculum set now processes in approximately 4-5 minutes on the 2 vCPU Cloud Run configuration.
+    `ThreadPoolExecutor max_workers` increased from 8 → 12; `video_max_workers` raised to 12. Video pipeline restructured into two-phase: sequential TTS (shared engine) → parallel ffmpeg composition. A full 15-topic curriculum set now processes in approximately 4-5 minutes on the 2 vCPU Cloud Run configuration (without video).
 
 !!! success "Pipeline stability (`fddbab3`, `0725c09`)"
     All three LangGraph agents now catch and log exceptions per-topic rather than crashing the entire run. ChromaDB `add()` call skips empty document batches (race condition fix). `ProgressCapture` uses a threading lock for thread-safe stdout updates. `get_event_loop()` replaced with `get_running_loop()` (correct async context). Pipeline is stable for repeated multi-session use.
 
 ### Test Coverage
 
-362 tests passing. Covers file parsing, ChromaDB operations, PDF generation edge cases (Unicode, malformed markdown, special characters), run_job validation, all FastAPI endpoints, ProgressCapture thread safety, auth flows, upload edge cases, job ID validation, eval harness, structural checks, and graph integration.
+426 tests passing. Covers file parsing, ChromaDB operations, PDF generation edge cases (Unicode, malformed markdown, special characters), run_job validation, all FastAPI endpoints, ProgressCapture thread safety (including stage-aware ETA), auth flows, upload edge cases, job ID validation, eval harness, structural checks, graph integration, and video builder two-phase pipeline.
 
 ---
 
@@ -81,13 +81,13 @@ Dockerized on GCP Cloud Run (europe-west2). Single container with Gunicorn + Uvi
 | Embeddings | all-MiniLM-L6-v2 | Local, free, no API cost |
 | Web search | Tavily API | Industry trends and job requirements |
 | PDF extraction | PyMuPDF + python-pptx | Extract text from PDFs and slides |
-| Slide image export | PyMuPDF + LibreOffice (planned) | Export slides as PNG for video backgrounds |
-| Video composition | HeyGen API v2 (+ Elai.io fallback) | Avatar + slide scene-based video generation |
+| Slide image export | PyMuPDF + LibreOffice | Export slides as PNG for video backgrounds |
+| Video composition | Kokoro TTS + MoviePy (default) / HeyGen API v2 | Narrated slide videos with two-phase pipeline |
 | PDF generation | fpdf2 | Compile learning guide PDF (rich text, code blocks) |
 | PPT generation | python-pptx | Gap analysis PowerPoint with severity badges |
 | Web framework | FastAPI + uvicorn | Async HTTP server for web UI |
 | Authentication | bcrypt + Starlette BaseHTTPMiddleware | Password auth, 256-bit server-side sessions, IP-based rate limiting |
-| Concurrency | ThreadPoolExecutor | Parallel agent execution (max_workers=12, video_max_workers=6) |
+| Concurrency | ThreadPoolExecutor | Parallel agent execution (max_workers=12, video_max_workers=12) |
 | Configuration | pydantic-settings | Type-safe env loading |
 | Eval framework | DeepSeek-V3 + structural checks | Two-layer quality evaluation (L1 free + L2 ~$0.02/run) |
 | Observability | LangSmith | Trace every LLM call |
@@ -190,7 +190,7 @@ A complete inventory of significant files. Use this to locate any capability and
 
 | File | What it is | What it contains |
 |---|---|---|
-| `backend/config.py` | Pydantic settings | All env vars: API keys (OpenAI, Tavily, HeyGen, DeepSeek, LangSmith), model tier names, temperature presets (`temp_analysis=0.2`, `temp_structured=0.3`, `temp_creative=0.55`), concurrency limits (`max_workers=12`, `video_max_workers=6`), output format flags |
+| `backend/config.py` | Pydantic settings | All env vars: API keys (OpenAI, Tavily, HeyGen, DeepSeek, LangSmith), model tier names, temperature presets (`temp_analysis=0.2`, `temp_structured=0.3`, `temp_creative=0.55`), concurrency limits (`max_workers=12`, `video_max_workers=12`), `hf_token` for HuggingFace downloads, output format flags |
 | `.env` / `.env.example` | Environment secrets | API keys (not committed); `.env.example` contains placeholder values |
 | `pyproject.toml` | Package manifest | All 40+ Python dependencies and project metadata |
 
@@ -204,7 +204,7 @@ A complete inventory of significant files. Use this to locate any capability and
 | `backend/services/web_search.py` | Web search client | `search(query, max_results)` — singleton `TavilyClient` wrapper |
 | `backend/services/pdf_builder.py` | PDF generator | `fpdf2`-based A4 PDF with "Midnight Teal" design (Deep Navy #0D1B2A, Teal #1B998B, Warm Gold #F4B942); LaTeX math via `matplotlib`; renders 7-section learning modules |
 | `backend/services/ppt_builder.py` | PPT generator | `python-pptx` 16:9 presentations; 8 slide types: Title, Section Divider, Executive Summary (KPI callouts), Severity Overview, Market Intelligence Spotlight, Teaching Slide (assertion-evidence format), Quiz, Recommendations; radar chart for gap severity overview |
-| `backend/services/video_builder.py` | Video generation | HeyGen API v2 client; `ThreadPoolExecutor` for parallel generation; Synthesia scaffold present (not yet activated); generates avatar+TTS videos from scripts |
+| `backend/services/video_builder.py` | Video generation | Two-phase Kokoro pipeline (sequential TTS → parallel ffmpeg composition) + HeyGen API v2 client; shared TTSEngine, `preset='fast'` encoding; Synthesia scaffold present (not yet activated) |
 
 ### Prompts
 

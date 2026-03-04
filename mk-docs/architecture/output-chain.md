@@ -22,7 +22,7 @@ graph LR
 
 4. **Scripts** -- Each script is synced to its PPT slide. The `SCRIPT_FROM_SLIDES` prompt receives the PPT slide structure, the PDF module content, and research/gap data for that specific topic. Output uses `[SLIDE N: title]` markers mapping 1:1 to PPT slides. Each script receives only its own topic's data (filtered context), saving ~86% on input tokens compared to passing all modules. Hook variety is enforced across scripts using thread-safe tracking.
 
-5. **Videos** -- HeyGen API v2 renders scripts as AI avatar videos. Configurable avatar emotion (`Friendly` default), speech speed (1.05x default), and parallel generation (4 concurrent jobs default). Limited to `VIDEO_TOPIC_LIMIT` topics (default 5).
+5. **Videos** -- Kokoro TTS (default) or HeyGen API renders scripts as narrated slide videos. Video generation uses a two-phase pipeline: sequential TTS synthesis with a shared engine (memory-heavy), then parallel ffmpeg composition (`VIDEO_MAX_WORKERS` threads, default 12). When `GPU_SERVICE_URL` is configured, TTS and encoding are offloaded to a dedicated NVIDIA L4 Cloud Run service in europe-west1 via GCS data transfer (~2-3 min for 5 videos on GPU vs ~28 min locally). Configurable avatar emotion (`Friendly` default), speech speed (1.05x default). Limited to `VIDEO_TOPIC_LIMIT` topics (default 5).
 
 ## Format Selection
 
@@ -54,7 +54,11 @@ If PPT is not selected but scripts are requested, the pipeline falls back to per
 
 ## Parallel Execution
 
-Within the generate agent, PDF and PPT structuring run in parallel when both formats are requested. Script generation follows after PPT is complete (since scripts depend on slide structure). Video rendering then runs in parallel across topics using a separate `ThreadPoolExecutor` with `VIDEO_MAX_WORKERS` (default 4).
+Within the generate agent, PDF and PPT structuring run in parallel when both formats are requested. Script generation follows after PPT is complete (since scripts depend on slide structure). Video rendering uses one of two paths:
+
+**Local path** (default, `GPU_SERVICE_URL` empty): Two-phase pipeline — Phase 1 sequential TTS synthesis with a shared engine (avoids reloading the ~250 MB model per video), Phase 2 parallel ffmpeg composition via `ThreadPoolExecutor` with `VIDEO_MAX_WORKERS` (default 12).
+
+**GPU service path** (`GPU_SERVICE_URL` set): Slide PNGs are uploaded to GCS, a job is submitted to the remote GPU service, and the CPU pipeline polls for completion before downloading the finished MP4s. The local container is freed from memory-heavy TTS work.
 
 ```
                     ┌─────────┐
@@ -77,9 +81,12 @@ Within the generate agent, PDF and PPT structuring run in parallel when both for
                 │           │ Scripts │  (parallel per topic)
                 │           └────┬────┘
                 │                │
-                │           ┌────▼────┐
-                │           │ Videos  │  (parallel per topic)
-                │           └────┬────┘
+                │           ┌────▼────────────────────────────┐
+                │           │ Videos                           │
+                │           │  local: TTS seq → ffmpeg par     │
+                │           │  GPU:   GCS upload → submit job  │
+                │           │         → poll → download MP4s   │
+                │           └────┬────────────────────────────┘
                 │                │
                 └────────┬───────┘
                          │
