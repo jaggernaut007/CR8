@@ -187,8 +187,8 @@ Download MP4s from GCS <──────────────────�
 - HeyGen/Synthesia providers raise NotImplementedError (by design until implemented)
 
 ## Next Steps (Prioritised)
-1. **v0.5** — Glassmorphism React frontend + Quiz platform + Neon PostgreSQL + JWT auth
-3. **v0.6** — Admin dashboard + feedback loop + structured logging + RBAC
+1. **v0.5** — Glassmorphism React frontend + Quiz platform + Neon PostgreSQL + JWT auth + CORS lockdown + FastAPI-MCP mount
+2. **v0.6** — Admin dashboard + feedback loop + structured logging + RBAC + audit logging
 
 ## Recent Decisions
 | Date | Decision | Rationale | ADR |

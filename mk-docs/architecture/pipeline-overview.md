@@ -86,13 +86,18 @@ Software/
 │   │
 │   ├── services/
 │   │   ├── __init__.py
-│   │   ├── file_parser.py    # PDF/PPTX text extraction
+│   │   ├── file_parser.py    # PDF/PPTX text extraction + slide export
 │   │   ├── chromadb_store.py # ChromaDB wrapper (add, query, reset)
 │   │   ├── llm.py            # OpenAI wrapper (nano/mini/premium tiers)
 │   │   ├── web_search.py     # Tavily search wrapper
 │   │   ├── pdf_builder.py    # fpdf2 PDF generation (rich text, code blocks)
 │   │   ├── ppt_builder.py    # python-pptx gap analysis PowerPoint
-│   │   └── video_builder.py  # HeyGen/Synthesia video generation
+│   │   ├── video_builder.py  # Kokoro TTS video pipeline (two-phase: TTS → ffmpeg)
+│   │   ├── script_parser.py  # Parse [SLIDE N] markers from video scripts
+│   │   ├── tts_engine.py     # Kokoro TTS wrapper (GPU-aware device selection)
+│   │   ├── gpu_utils.py      # GPU/hardware detection (torch device, ffmpeg encoder)
+│   │   ├── gcs_client.py     # GCS upload/download for CPU↔GPU data transfer
+│   │   └── gpu_client.py     # HTTP client for GPU service (identity token auth)
 │   │
 │   ├── prompts/
 │   │   ├── __init__.py
@@ -126,6 +131,12 @@ Software/
 │       ├── __init__.py
 │       ├── test_api.py       # FastAPI endpoint tests
 │       └── test_progress_capture.py
+│
+├── gpu_service/              # GPU microservice (Kokoro TTS + ffmpeg on NVIDIA L4)
+│   ├── app.py                # FastAPI endpoints for video jobs
+│   ├── worker.py             # Video rendering worker
+│   ├── config.py             # GPU service configuration
+│   └── gcs_client.py         # GCS client for downloading/uploading
 │
 ├── docs/                     # Project documentation
 ├── outputs/                  # Generated PDFs (gitignored)

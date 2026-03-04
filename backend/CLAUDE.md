@@ -15,10 +15,15 @@ One file per external integration. Never add external API calls anywhere else:
 - `llm.py` — OpenAI wrapper with model routing (nano/mini/model/premium)
 - `chromadb_store.py` — ChromaDB vector store with all-MiniLM-L6-v2 embeddings
 - `web_search.py` — Tavily API wrapper
-- `file_parser.py` — PyMuPDF PDF extraction + python-pptx PPTX parsing
+- `file_parser.py` — PyMuPDF PDF extraction + python-pptx PPTX parsing + slide export
 - `pdf_builder.py` — fpdf2 output builder
 - `ppt_builder.py` — python-pptx output builder
-- `video_builder.py` — HeyGen API for AI avatar video generation
+- `video_builder.py` — Kokoro TTS video pipeline (two-phase: sequential TTS → parallel ffmpeg)
+- `script_parser.py` — Parses `[SLIDE N]` markers from video scripts into segments
+- `tts_engine.py` — Kokoro TTS wrapper with lazy model loading, GPU-aware device selection
+- `gpu_utils.py` — GPU/hardware detection: torch device selection, ffmpeg encoder probing
+- `gcs_client.py` — GCS upload/download for CPU↔GPU video data transfer
+- `gpu_client.py` — HTTP client for GPU Cloud Run service (identity token auth, polling)
 
 ### Prompts (backend/prompts/)
 All prompt strings are Python constants — never put prompts inline in agents or services:

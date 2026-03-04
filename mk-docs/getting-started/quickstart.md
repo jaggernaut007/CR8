@@ -24,6 +24,20 @@ python -m backend.run_pipeline slides/01.pdf slides/02.pdf slides/03.pdf
 python -m backend.run_pipeline NLP_Course/CS224N_Downloads/Slides/*.pdf
 ```
 
+### PPTX files
+
+```bash
+python -m backend.run_pipeline path/to/slides.pptx
+```
+
+### With video generation (Kokoro TTS)
+
+```bash
+python -m backend.run_pipeline --format pdf,ppt,script,video path/to/lecture.pdf
+```
+
+This produces PDF, PPT, video scripts, and rendered MP4 videos with slide backgrounds and AI voiceover.
+
 ## Checking Output
 
 The output PDF is saved to `outputs/<timestamp>_learning_guide.pdf`.

@@ -6,17 +6,28 @@
 
 ## Current POC State
 
-The prototype is fully operational and deployed on GCP Cloud Run. The 3-agent pipeline (Ingest → Research → Generate) produces PDF learning guides, PPT gap analysis, and video scripts from curriculum PDFs. The web UI is password-protected and externally shareable with stakeholders.
+The prototype is fully operational and deployed on GCP Cloud Run with dual-service architecture (CPU + GPU). The 3-agent pipeline (Ingest → Research → Generate) produces PDF learning guides, PPT gap analysis, video scripts, and **rendered videos with slide backgrounds and AI voiceover** from curriculum PDFs/PPTXs. The web UI is password-protected and externally shareable with stakeholders.
 
-**Working:** PDF, PPT, Video Scripts
-**Not yet implemented:** Video rendering (HeyGen/Synthesia — API integration pending)
+**Working:** PDF, PPT, Video Scripts, **Kokoro TTS Videos (MP4)**, PPTX upload
+**Not yet implemented:** HeyGen/Synthesia AI avatar videos (optional — Kokoro is the primary provider)
 
 ### March 2026 Hardening — Complete ✓
 
 The pipeline underwent a full hardening pass covering:
 - **10 bug fixes** across ChromaDB threading, eval harness math, progress parsing, and structural checks
-- **Test suite expansion**: 144 → 362 tests (0 real API calls) with property-based testing (`hypothesis`), snapshot regression testing (`syrupy`), and full LangGraph graph integration tests
-- **New test coverage**: all 3 pipeline agents, eval harness comparator/scorer, structural checks, and services are now fully tested with mock isolation
+- **Test suite expansion**: 144 → 362 → **507 tests** (0 real API calls) with property-based testing (`hypothesis`), snapshot regression testing (`syrupy`), and full LangGraph graph integration tests
+- **New test coverage**: all 3 pipeline agents, eval harness comparator/scorer, structural checks, services, GCS/GPU clients, video dispatch, and GPU service worker/endpoints
+
+### v0.4.0 Kokoro Video Pipeline — Complete ✓ (2026-03-04)
+
+The pipeline now produces fully rendered videos:
+- **Kokoro TTS** (open-source, zero API cost) generates voiceover from slide-synced scripts
+- **Two-phase pipeline**: sequential TTS → parallel ffmpeg composition with hardware H.264 encoding
+- **GPU service offload**: NVIDIA L4 on Cloud Run (europe-west1/europe-west4) via GCS data transfer
+- **PPTX upload support**: drag-drop accepts both PDF and PPTX with magic byte validation
+- **Stage-aware ETA**: per-stage time budgets calibrated from measured benchmark
+- **Security**: configurable `AUTH_PASSWORD`, LangSmith tracing opt-in, SECURITY.md
+- **507 tests**, ruff clean, version bumped to v0.4.0
 
 The codebase is now in a stable, well-tested state suitable for external demos and continued iteration.
 
@@ -24,12 +35,11 @@ The codebase is now in a stable, well-tested state suitable for external demos a
 
 ## Immediate — Before First External Demo
 
-### 1. Slides-in-Video
-**What:** Extend the pipeline to produce actual videos with slide backgrounds, not just scripts.
-**How:** Export PPT slides as images (PyMuPDF for PDFs, LibreOffice CLI for PPTX), then pass them as scene backgrounds in HeyGen's scene API. The `[SLIDE N]` markers in generated scripts are already implemented and sync-ready.
-**Why now:** This is the highest-impact demo moment for universities. Static scripts are not compelling; a real AI avatar video with slides is.
+### ~~1. Slides-in-Video~~ ✅ Complete (v0.4.0)
+~~Extend the pipeline to produce actual videos with slide backgrounds, not just scripts.~~
+**Delivered:** Kokoro TTS local video pipeline with GPU service offload. Open-source, zero API cost. Videos render slides as backgrounds with AI voiceover. Two-phase pipeline with hardware H.264 encoding.
 
-### 2. React Frontend
+### 2. React Frontend (Next Priority)
 **What:** Replace the vanilla JS single-page app with a React SPA.
 **Priority features:** multi-job list, job history, cleaner progress UI, institutional branding.
 **Why now:** The current UI is functional but will not meet institutional UX expectations. Universities judge product maturity by interface quality.
@@ -51,10 +61,9 @@ The codebase is now in a stable, well-tested state suitable for external demos a
 **Why:** The current architecture blocks all users when one job is running. Multiple university stakeholders demoing simultaneously will reveal this immediately.
 **Approach:** Submit jobs to Cloud Tasks queue → worker reads from queue → state stored in GCS → frontend polls GCS for progress.
 
-### 5. Elai.io Fallback
-**What:** Test Elai.io's native PPTX upload API as an alternative to HeyGen scene backgrounds.
-**Why:** Elai.io accepts PPTX files directly, which may produce better slide-video sync than manually passing background images to HeyGen.
-**Action:** POC both approaches in parallel; pick the one with better visual output for the demo.
+### ~~5. Elai.io Fallback~~ — Deprioritised
+~~Test Elai.io's native PPTX upload API as an alternative to HeyGen scene backgrounds.~~
+**Status:** Kokoro TTS delivers good-quality video locally at zero cost. AI avatar providers (HeyGen, Elai.io) remain optional upgrades for when a talking-head avatar is needed. Not blocking any demo or pilot.
 
 ### 6. Expand Eval Datasets
 **What:** Capture 3–5 domain datasets beyond `cs224n` using `capture_dataset.py`.
@@ -105,7 +114,7 @@ See `Loop/Loop_Intelligence.md` for full technical architecture and Phase 2/3 pl
 
 | Phase | Timeline | Indicative Budget |
 |-------|----------|------------------|
-| POC (current) | Now | API costs ~$50–100/month |
+| POC (current — v0.4.0) | Now | API costs ~$50–100/month + GPU Cloud Run ~$15–30/month |
 | MVP (Phase 1) | 0–6 months | ~£30–40K (salaries + infra) |
 | Scale (Phase 2) | 6–12 months | ~£150–200K |
 | Production (Phase 3) | 12–18+ months | ~£400–600K/year |

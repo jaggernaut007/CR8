@@ -60,14 +60,20 @@
     "files": ["backend/services/chromadb_store.py"]
   },
   "docker_deployment": {
-    "description": "Docker containerisation",
+    "description": "Docker containerisation (CPU + GPU images)",
     "status": "complete",
-    "files": ["Dockerfile"]
+    "files": ["Dockerfile", "Dockerfile.gpu"]
   },
   "gcp_cloud_run": {
-    "description": "GCP Cloud Run deployment",
+    "description": "GCP Cloud Run dual-service deployment (CPU + GPU)",
     "status": "complete",
-    "files": ["mk-docs/deployment/gcp-cloud-run.md"]
+    "files": ["deploy.sh", "mk-docs/deployment/gcp-cloud-run.md"]
+  },
+  "gpu_service": {
+    "description": "GPU microservice for video rendering — Kokoro TTS + ffmpeg on NVIDIA L4, GCS data transfer, identity token auth, region fallback",
+    "status": "complete",
+    "tests": "passing",
+    "files": ["gpu_service/", "backend/services/gcs_client.py", "backend/services/gpu_client.py", "backend/services/gpu_utils.py"]
   },
   "agent_readiness_setup": {
     "description": "Claude Code agentic scaffolding (AGENTS.md, skills, hooks, rules)",

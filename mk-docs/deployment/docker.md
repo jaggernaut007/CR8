@@ -66,7 +66,7 @@ Required variables:
 |----------|-------------|
 | `OPENAI_API_KEY` | OpenAI API key for GPT models |
 | `TAVILY_API_KEY` | Tavily API key for web search |
-| `HEYGEN_API_KEY` | HeyGen API key for video generation |
+| `HEYGEN_API_KEY` | HeyGen API key (optional — only if using HeyGen provider) |
 
 Optional variables:
 
@@ -75,6 +75,10 @@ Optional variables:
 | `PORT` | `8080` | Port the server listens on |
 | `WORKERS` | `1` | Number of Gunicorn workers |
 | `LOG_LEVEL` | `info` | Logging level |
+| `VIDEO_PROVIDER` | `kokoro` | Video provider (kokoro, heygen, synthesia) |
+| `AUTH_PASSWORD` | `CR8-AI` | Login password |
+| `GPU_SERVICE_URL` | (empty) | GPU service URL for video offload |
+| `GCS_BUCKET` | `cr8-jobs` | GCS bucket for CPU↔GPU transfer |
 
 ## Cloud Run Settings
 
@@ -119,3 +123,46 @@ docker run --rm -p 9090:8080 --env-file .env cr8-pipeline
 ```
 
 Then access the application at http://localhost:9090.
+
+## GPU Service Docker Image
+
+CR8 includes a separate `Dockerfile.gpu` for the video rendering GPU service. This is only needed for Cloud Run GPU deployment — local development uses the CPU container or runs Kokoro TTS directly.
+
+### Dockerfile.gpu Overview
+
+The GPU Dockerfile uses a **3-stage CUDA build**:
+
+```
+Stage 1: FFmpeg Builder
+├── Build ffmpeg with NVENC support from source
+└── Produces static ffmpeg binary
+
+Stage 2: Python Dependencies
+├── CUDA 12.x base image
+├── Install Python packages (kokoro, torch, soundfile)
+└── Pre-cache Kokoro TTS model to reduce cold start
+
+Stage 3: Runtime
+├── Copy ffmpeg binary from Stage 1
+├── Copy Python env from Stage 2
+├── Copy gpu_service/ application code
+├── Install espeak-ng for phoneme generation
+└── Configure Uvicorn entrypoint
+```
+
+### Build
+
+```bash
+docker build -f Dockerfile.gpu -t cr8-gpu-service .
+```
+
+### GPU Service Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GCS_BUCKET` | `cr8-jobs` | GCS bucket for slide/video exchange |
+| `KOKORO_VOICE` | `af_heart` | Kokoro TTS voice ID |
+| `KOKORO_LANG` | `a` | Kokoro language code |
+| `VIDEO_FPS` | `24` | Output video frame rate |
+
+The GPU service receives video jobs from the CPU service via HTTP, downloads slide PNGs from GCS, runs Kokoro TTS + ffmpeg with NVIDIA hardware encoding (NVENC), and uploads finished MP4s back to GCS.

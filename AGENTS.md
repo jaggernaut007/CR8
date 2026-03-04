@@ -5,7 +5,7 @@
 ## Project Overview
 CR8 — Adaptive Learning Pipeline. A 3-agent AI system (Ingest → Research → Generate) that
 transforms university curriculum PDFs into market-enriched learning guides (PDF, PPT, scripts,
-AI avatar videos). Stack: Python 3.11+, FastAPI, LangGraph, OpenAI, ChromaDB, Tavily.
+AI voiceover videos). Stack: Python 3.11+, FastAPI, LangGraph, OpenAI, ChromaDB, Tavily, Kokoro TTS.
 
 ## Tech Stack
 - Language: Python 3.11+
@@ -14,7 +14,7 @@ AI avatar videos). Stack: Python 3.11+, FastAPI, LangGraph, OpenAI, ChromaDB, Ta
 - LLM: OpenAI (gpt-5.1 / gpt-5-mini / gpt-5-nano via model routing)
 - Vector store: ChromaDB (local, all-MiniLM-L6-v2 embeddings)
 - Web search: Tavily API
-- Testing: pytest — 426 tests, zero real API calls
+- Testing: pytest — 507 tests, zero real API calls
 - Linting: Ruff (line-length = 100)
 - Docs: MkDocs Material — source in `mk-docs/`, config at `mkdocs.yml`
 - Deployment: Docker + GCP Cloud Run
@@ -23,7 +23,7 @@ AI avatar videos). Stack: Python 3.11+, FastAPI, LangGraph, OpenAI, ChromaDB, Ta
 ```bash
 make install      # pip install -e ".[dev]"
 make dev          # FastAPI dev server → http://localhost:8080
-make test         # pytest -v  (426 tests, ~60s)
+make test         # pytest -v  (507 tests, ~60s)
 make lint         # ruff check .
 make lint-fix     # ruff check . --fix
 make docs-serve   # mkdocs preview → http://localhost:8000
@@ -37,7 +37,7 @@ make run ARGS="path/to/file.pdf"  # CLI pipeline
 - Use typed `TypedDict` for all LangGraph state schemas in `backend/pipeline/state.py`
 - Mock all external API calls in tests — the full test suite runs with zero real API calls
 - Run `ruff check .` and confirm clean before marking any task complete
-- Run `make test` and confirm all 426 tests pass before marking any task complete
+- Run `make test` and confirm all 507 tests (0 real API calls) pass before marking any task complete
 
 ## Testing Requirements
 - All new features require tests before the task is marked complete
@@ -49,7 +49,7 @@ make run ARGS="path/to/file.pdf"  # CLI pipeline
 
 ## Definition of Done
 A task is complete only when ALL of the following are true:
-1. `make test` passes (all 426 tests)
+1. `make test` passes (all 507 tests (0 real API calls))
 2. `make lint` passes (ruff clean)
 3. Docs updated if any public behaviour changed
 4. `PROGRESS.md` updated with what was done

@@ -16,6 +16,7 @@ State is a `TypedDict` defined in `backend/pipeline/state.py` that accumulates d
 | `pdf_path` | Agent 3 | `str` | Path to output PDF |
 | `ppt_path` | Agent 3 | `str` | Path to output PPT |
 | `video_dir` | Agent 3 | `str` | Path to video output directory |
+| `slide_images` | Agent 3 | `NotRequired[list[str]]` | Paths to exported slide PNGs (set when `VIDEO_PROVIDER=kokoro`) |
 | `current_stage` | All agents | `str` | `starting` -> `ingested` -> `researched` -> `complete` |
 
 ## State Flow

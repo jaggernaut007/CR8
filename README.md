@@ -1,13 +1,13 @@
 # CR8 — Adaptive Learning Pipeline
 
-A 3-agent AI pipeline that transforms university curriculum materials into market-enriched learning guides. Feed in lecture PDFs, get out a structured PDF with industry context, gap analysis, and curated resources.
+A 3-agent AI pipeline that transforms university curriculum materials into market-enriched learning guides. Feed in lecture PDFs or PPTXs, get out structured PDFs with industry context, gap analysis PowerPoints, video scripts, and rendered videos with AI voiceover.
 
 ```
-Curriculum PDFs  ──>  [Ingest]  ──>  [Research]  ──>  [Generate]  ──>  Learning Guide PDF
-                      Agent 1        Agent 2          Agent 3         + PPT + Scripts + Videos
+Curriculum PDF/PPTX  ──>  [Ingest]  ──>  [Research]  ──>  [Generate]  ──>  Learning Guide PDF
+                           Agent 1        Agent 2          Agent 3         + PPT + Scripts + Videos (MP4)
 ```
 
-Built with LangGraph, OpenAI, ChromaDB, Tavily, fpdf2, and FastAPI.
+Built with LangGraph, OpenAI, ChromaDB, Tavily, fpdf2, Kokoro TTS, and FastAPI.
 
 **[Full Documentation](docs/index.md)** | **[Architecture](docs/architecture/index.md)** | **[API Reference](docs/api/index.md)**
 
@@ -42,7 +42,7 @@ Output is saved to `outputs/<timestamp>/`.
 ### Run Tests
 
 ```bash
-make test   # 144 tests (74 backend + 70 frontend)
+make test   # 507 tests (backend + frontend + GPU service)
 ```
 
 ---
@@ -51,10 +51,14 @@ make test   # 144 tests (74 backend + 70 frontend)
 
 - **3-agent pipeline** — Ingest, Research, Generate, orchestrated by LangGraph
 - **Multi-model routing** — GPT-5-nano (extraction), GPT-5-mini (analysis), GPT-5.1 (generation) with severity-based routing
-- **Chained outputs** — PDF → PPT → Scripts → Videos, each building on the previous
+- **Chained outputs** — PDF → PPT → Scripts → Videos (MP4), each building on the previous
+- **Kokoro TTS video pipeline** — Open-source voiceover + slide backgrounds → rendered MP4 videos at zero API cost
+- **GPU service offload** — Dual-service Cloud Run deployment: CPU (pipeline) + NVIDIA L4 GPU (video rendering)
+- **PDF and PPTX upload** — Drag-drop with magic byte validation
 - **Vector-backed context** — ChromaDB stores curriculum and research for semantic retrieval
-- **Web UI** — Upload PDFs, select formats, track progress in real time
+- **Web UI** — Upload files, select formats, track progress with stage-aware ETA
 - **Evaluation framework** — L1 structural checks (free) + L2 DeepSeek-V3 judge (~$0.02/run)
+- **507-test suite** — Full coverage with zero real API calls
 
 ---
 
@@ -105,14 +109,15 @@ Software/
 │   ├── config.py             # Pydantic-settings configuration
 │   ├── run_pipeline.py       # CLI entry point
 │   ├── pipeline/             # LangGraph agents (ingest, research, generate)
-│   ├── services/             # LLM, ChromaDB, file parser, builders
+│   ├── services/             # LLM, ChromaDB, file parser, builders, TTS, GPU client
 │   ├── prompts/              # All prompt templates
 │   ├── evals/                # Evaluation framework
 │   └── tests/                # Backend tests
 ├── frontend/
-│   ├── app.py                # FastAPI server
+│   ├── app.py                # FastAPI server + ProgressCapture
 │   ├── templates/            # Web UI
 │   └── tests/                # Frontend tests
+├── gpu_service/              # GPU microservice (Kokoro TTS + ffmpeg on NVIDIA L4)
 ├── docs/                     # Documentation (MkDocs + Material)
 ├── mkdocs.yml                # Documentation config
 ├── Makefile                  # Dev shortcuts

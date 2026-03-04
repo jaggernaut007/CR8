@@ -20,8 +20,15 @@
      filtered context per script, parallel PDF+PPT, split PPT structuring, ChromaDB caching,
      map-reduce summarization, module validation, hook variety enforcement, richer PDF rendering.
 
+5. ~~We must be able to create a video of the slides created by the agent, a voice based video with the slides should be created. Use opensource technologies to create this video.~~
+   - **Implemented (v0.4.0)**: Kokoro TTS local video pipeline — open-source, zero-cost. `VIDEO_PROVIDER=kokoro` chains: script parsing → Kokoro TTS (82M model, GPU-aware) → slide export (PyMuPDF/LibreOffice) → ffmpeg composition → MP4. Two-phase pipeline: sequential TTS → parallel ffmpeg. Hardware H.264 encoding (VideoToolbox/NVENC/QSV/AMF). GPU service offload via Cloud Run NVIDIA L4 + GCS data transfer. Videos are embeddable and downloadable. 507 tests passing.
+
 ## Upcoming
 
-5. Improve image/graphic generation for PPT slides (AI-generated diagrams, charts from data)
-6. Add template support for PPT (custom .pptx templates for branding)
-7. Multi-file batch processing with combined gap analysis across all documents
+6. Create a quiz-based website for the content created by the agent (→ v0.5)
+7. Create a feedback loop for the agent to improve content based on quiz performance (→ v0.6)
+8. Admin quiz customisation — add/remove questions, difficulty levels, custom feedback (→ v0.6)
+9. Quiz shows wrong/right answers in red/green after completion, one-attempt-only (→ v0.5)
+10. Improve image/graphic generation for PPT slides (AI-generated diagrams, charts from data)
+11. Add template support for PPT (custom .pptx templates for branding)
+12. Multi-file batch processing with combined gap analysis across all documents

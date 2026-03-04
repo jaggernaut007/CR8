@@ -34,7 +34,7 @@
 - All external API calls mocked — zero real API calls in the test suite
 - Test naming: `test_[function]_[scenario]`
 - Use `hypothesis` for property-based testing, `syrupy` for snapshot regression
-- Run `make test` and read the output — all 426 tests must pass
+- Run `make test` and read the output — all 507 tests must pass
 
 ## Workflow Before Committing
 
@@ -65,7 +65,7 @@ docs: update services/llm.md with new model routing table
 chore: bump langgraph to 0.2.x
 ```
 
-Include test counts in feat commits: `feat: add video script streaming (426 → 439 tests)`
+Include test counts in feat commits: `feat: add video script streaming (507 → 520 tests)`
 
 ## Pull Request Checklist
 - [ ] `make lint` passes (ruff clean)
@@ -75,8 +75,22 @@ Include test counts in feat commits: `feat: add video script streaming (426 → 
 - [ ] ADR created if architectural decision was made
 - [ ] Research note created if new external library was integrated
 
+## Video Pipeline Development
+
+The video pipeline uses `VIDEO_PROVIDER=kokoro` (default) for local TTS + ffmpeg rendering:
+
+| Env Var | Default | Purpose |
+|---------|---------|---------|
+| `VIDEO_PROVIDER` | `kokoro` | Video provider (kokoro, heygen, synthesia) |
+| `VIDEO_DEVICE` | `auto` | TTS device (auto, cpu, mps, cuda) |
+| `VIDEO_MAX_WORKERS` | `12` | Parallel ffmpeg workers |
+| `GPU_SERVICE_URL` | (empty) | GPU Cloud Run URL for offloading (optional) |
+| `GCS_BUCKET` | `cr8-jobs` | GCS bucket for CPU↔GPU data transfer |
+
+When `GPU_SERVICE_URL` is set, video rendering is offloaded to a GPU service (NVIDIA L4). Otherwise, it runs locally.
+
 ## Frontend Development
 
-The current `frontend/` is a prototype FastAPI/HTML UI. A proper React frontend is planned.
+The current `frontend/` is a prototype FastAPI/HTML UI. A React frontend with glassmorphism design is planned for v0.5.
 Before starting frontend work, create `docs/research/frontend-framework.md` to document
 the chosen tech stack and check `docs/adr/` for prior decisions.

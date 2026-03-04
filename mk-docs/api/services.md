@@ -27,3 +27,25 @@
 ## Video Builder
 
 ::: backend.services.video_builder.build_videos
+
+## Script Parser
+
+::: backend.services.script_parser.parse_script
+
+## TTS Engine
+
+::: backend.services.tts_engine.TTSEngine
+
+## GPU Utils
+
+::: backend.services.gpu_utils.get_torch_device
+
+::: backend.services.gpu_utils.get_ffmpeg_encoder
+
+## GCS Client
+
+::: backend.services.gcs_client.GCSVideoClient
+
+## GPU Client
+
+::: backend.services.gpu_client.GPUVideoClient
