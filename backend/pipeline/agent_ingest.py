@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -17,6 +18,13 @@ from backend.prompts.ingest import (
     EXTRACT_TOPICS,
 )
 
+logger = logging.getLogger(__name__)
+
+# Map-reduce summarization thresholds (tuned empirically):
+#   - 15k chars fits within GPT-5-nano's context with room for the prompt template
+#   - 12k chunks don't need overlap because each chunk is independently summarized
+#     then reduced into a single summary
+#   - 500k hard cap prevents sending a 200-page PDF as a single mega-prompt (~$0.50+)
 _MAP_REDUCE_THRESHOLD = 15000   # chars — files longer than this use map-reduce
 _CHUNK_SIZE = 12000             # chars per map chunk
 _MAX_FILE_CHARS = 500_000       # hard cap: ~125k tokens — prevents runaway cost on huge PDFs
@@ -157,6 +165,10 @@ def ingest_node(state: PipelineState) -> dict:
     print(f"[Ingest] Extracted {len(topics)} topics")
 
     # 4. Chunk and embed into ChromaDB
+    # 1500-char chunks with 150-char overlap give good retrieval granularity:
+    # small enough for precise semantic matches, overlapping enough to avoid
+    # splitting mid-sentence.  These differ from the map-reduce chunks above
+    # because retrieval needs fine-grained passages, not coarse summaries.
     splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=150)
     chunks = splitter.split_text(raw_text)
 

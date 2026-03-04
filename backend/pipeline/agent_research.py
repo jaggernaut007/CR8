@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from backend.config import settings
@@ -8,6 +9,8 @@ from backend.services.llm import get_llm
 from backend.services.chromadb_store import ChromaStore
 from backend.services.web_search import search
 from backend.prompts.research import GAP_ANALYSIS
+
+logger = logging.getLogger(__name__)
 
 
 def _research_topic(i, topic, total, store, llm, curriculum_scope):
@@ -18,7 +21,10 @@ def _research_topic(i, topic, total, store, llm, curriculum_scope):
     domain_ctx = topic.get("domain_context", name)
     print(f"[Research] Topic {i + 1}/{total}: {name}")
 
-    # 1. Web search — run both queries in parallel
+    # 1. Web search — two parallel Tavily queries per topic:
+    #   - "skills/applications" query: surfaces job market relevance
+    #   - "developments/alternatives" query: surfaces industry trends
+    # Running in parallel halves the wall-clock time per topic.
     technique_str = ", ".join(techniques[:4]) if techniques else name
     with ThreadPoolExecutor(max_workers=2) as search_pool:
         job_future = search_pool.submit(
@@ -49,7 +55,8 @@ def _research_topic(i, topic, total, store, llm, curriculum_scope):
         f"- {r.get('title', '')}: {r.get('content', '')[:300]}" for r in trend_results
     )
 
-    # 2. Retrieve curriculum context
+    # 2. Retrieve curriculum context — 3 results is enough to ground the gap
+    #    analysis without flooding the prompt (each result is ~1500 chars)
     cur_results = store.query("curriculum", name, n_results=3)
     curriculum_text = "\n".join(cur_results["documents"][0]) if cur_results["documents"][0] else "No curriculum content found."
 
@@ -77,7 +84,10 @@ def _research_topic(i, topic, total, store, llm, curriculum_scope):
     gap_count = len(analysis.get("gaps", []))
     print(f"[Research]   {name}: found {gap_count} gaps")
 
-    # 4. Store research in ChromaDB (deduplicate by ID)
+    # 4. Store research in ChromaDB — deduplicate using MD5 hash prefix.
+    #    12-char hex prefix gives 48 bits of entropy (~2.8 × 10^14 possible IDs),
+    #    far exceeding our typical corpus size.  MD5 is fine here because this
+    #    is a dedup key, not a security hash.
     seen_ids = set()
     research_docs = []
     research_ids = []

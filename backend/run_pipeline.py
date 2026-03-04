@@ -7,12 +7,15 @@ Usage:
 """
 
 import argparse
+import logging
 import sys
 import time
 import uuid
 
 from backend.config import settings
 from backend.pipeline.graph import build_pipeline
+
+logger = logging.getLogger(__name__)
 
 VALID_FORMATS = {"pdf", "ppt", "script", "video"}
 

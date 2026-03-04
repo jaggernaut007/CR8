@@ -6,6 +6,7 @@ progress, and downloading generated artifacts (PDF, PPT, scripts, videos).
 """
 
 import asyncio
+import logging
 import os
 import re
 import secrets
@@ -15,6 +16,8 @@ import time
 import uuid
 import zipfile
 from contextlib import asynccontextmanager
+
+logger = logging.getLogger(__name__)
 
 import bcrypt
 from fastapi import FastAPI, Request, UploadFile, File
@@ -45,16 +48,18 @@ _PASSWORD_HASH: bytes = bcrypt.hashpw(_AUTH_PASSWORD.encode(), bcrypt.gensalt())
 
 _sessions: dict[str, float] = {}
 _sessions_lock = threading.Lock()
-SESSION_TTL = 8 * 3600  # 8 hours
+SESSION_TTL = 8 * 3600  # 8 hours — covers a full working day session
 
 # ---------------------------------------------------------------------------
 # Auth — rate limiter (IP -> list of failed-attempt timestamps)
+# Sliding window: only attempts within the last LOCKOUT_WINDOW seconds count.
+# After 5 failed attempts, the IP is locked out for the remainder of the window.
 # ---------------------------------------------------------------------------
 
 _failed_attempts: dict[str, list[float]] = {}
 _failed_attempts_lock = threading.Lock()
 MAX_ATTEMPTS = 5
-LOCKOUT_WINDOW = 900.0  # 15 minutes
+LOCKOUT_WINDOW = 900.0  # 15-minute sliding window
 
 # ---------------------------------------------------------------------------
 # Auth — constants
@@ -62,7 +67,7 @@ LOCKOUT_WINDOW = 900.0  # 15 minutes
 
 _PUBLIC_PATHS = frozenset({"/login", "/api/auth/login", "/health"})
 JOB_ID_RE = re.compile(r"^[a-f0-9]{8}$")
-MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB — sufficient for lecture PDFs/PPTXs
 # Set COOKIE_SECURE=false in .env for local HTTP development; defaults to True for production HTTPS.
 COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "true").lower() != "false"
 
@@ -178,14 +183,27 @@ from backend.pipeline.state import PipelineCancelledError  # noqa: E402
 
 
 class ProgressCapture:
-    """Captures stdout from the pipeline thread and parses progress."""
+    """Captures stdout from the pipeline thread and parses progress.
 
+    Works by replacing ``sys.stdout`` during pipeline execution.  The
+    pipeline agents print structured messages like ``[Research] Topic 3/8: ...``
+    which ``_parse_line()`` parses into stage + sub-progress.  This is why
+    pipeline agents use ``print()`` rather than ``logging`` — the progress
+    messages must flow through stdout to be captured here.
+
+    Cancellation: ``write()`` checks ``_cancel_at_boundary`` on every print
+    and raises ``PipelineCancelledError`` at stage transitions to ensure
+    graceful cleanup (no mid-LLM-call interruption).
+    """
+
+    # Approximate relative effort per stage (must sum to 100).
+    # Research dominates because each topic triggers 2 Tavily API calls + LLM.
     STAGE_WEIGHTS = {
         "Ingest": 10,
         "Research": 35,
         "Generate": 20,
         "Script": 10,
-        "Video": 25,  # Kokoro local TTS + MoviePy composition is CPU-intensive
+        "Video": 25,  # Kokoro local TTS + ffmpeg composition is CPU-intensive
     }
 
     # Expected wall-clock seconds per stage (video-enabled, 5-topic run).
@@ -471,6 +489,7 @@ async def login(request: Request, body: dict):
     password = body.get("password", "")
     if not password or not bcrypt.checkpw(password.encode(), _PASSWORD_HASH):
         _record_failed_attempt(ip)
+        logger.warning("Failed login attempt from %s", ip)
         return JSONResponse({"error": "Incorrect password. Please try again."}, status_code=401)
 
     token = _create_session()
@@ -546,6 +565,7 @@ async def upload(file: UploadFile = File(...)):
     with open(filepath, "wb") as f:
         f.write(content)
 
+    logger.info("Upload: job=%s file=%s size=%d", job_id, safe_filename, len(content))
     return {"job_id": job_id, "filename": safe_filename}
 
 
@@ -579,6 +599,7 @@ async def start(body: dict):
 
     capture = ProgressCapture()
     jobs[job_id] = capture
+    logger.info("Starting pipeline: job=%s formats=%s files=%d", job_id, formats, len(input_files))
 
     asyncio.get_running_loop().run_in_executor(
         None, _run_pipeline_sync, input_files, formats, capture

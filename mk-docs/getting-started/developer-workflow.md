@@ -60,7 +60,7 @@ Read PROGRESS.md and summarise where we left off.
 ./scripts/init.sh
 ```
 
-`init.sh` verifies that the environment is healthy: dependencies installed, lint clean, all 426 tests passing. If any check fails, **fix it before starting new work**.
+`init.sh` verifies that the environment is healthy: dependencies installed, lint clean, all 507 tests passing. If any check fails, **fix it before starting new work**.
 
 !!! warning "Never skip init.sh"
     Starting new work on top of a broken baseline compounds problems. If `init.sh` fails, treat fixing it as task zero.
@@ -449,7 +449,7 @@ Ruff will auto-fix most issues. Re-run `./scripts/init.sh` to confirm clean.
 
 ### `init.sh` fails at tests
 
-Read the test output carefully. Identify which test is failing and why. Fix the underlying code — do not modify test assertions to force a pass. Only start new work after all 426 tests are green.
+Read the test output carefully. Identify which test is failing and why. Fix the underlying code — do not modify test assertions to force a pass. Only start new work after all 507 tests are green.
 
 ### Claude Code ignores your instructions
 

@@ -11,6 +11,7 @@ inline.  Reference: https://py-pdf.github.io/fpdf2/Maths.html
 Design reference: Docs/CR8_Course_PPT_Template_Recommendation.md
 """
 
+import logging
 import os
 import re
 import struct
@@ -22,6 +23,8 @@ matplotlib.use("Agg")
 from matplotlib.figure import Figure
 
 from fpdf import FPDF
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # "Midnight Teal" palette — RGB tuples for fpdf2

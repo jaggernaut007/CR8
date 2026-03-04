@@ -1,5 +1,9 @@
+import logging
+
 import chromadb
 from chromadb.errors import NotFoundError
+
+logger = logging.getLogger(__name__)
 
 
 class ChromaStore:
@@ -52,6 +56,7 @@ class ChromaStore:
         if metadatas:
             metadatas = [m if m else None for m in metadatas]
         collection.add(documents=documents, metadatas=metadatas, ids=ids)
+        logger.debug("Added %d documents to '%s'", len(documents), collection_name)
 
     def query(self, collection_name: str, query_text: str, n_results: int = 5) -> dict:
         """Semantic similarity search against a named collection.

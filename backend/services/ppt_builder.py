@@ -22,6 +22,7 @@ Design reference: Docs/CR8_Course_PPT_Template_Recommendation.md
 """
 
 import io
+import logging
 import os
 from datetime import datetime
 
@@ -37,6 +38,8 @@ from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
 
 from backend.services.pdf_builder import _strip_latex
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Design tokens — "Midnight Teal" CR8 palette

@@ -26,7 +26,7 @@ pytest backend/tests/test_chromadb_store.py::test_two_collections -v
 
 ## Test Suite
 
-**426 tests — 0 real API calls.** All LLMs, web search, and ChromaDB are mocked.
+**507 tests — 0 real API calls.** All LLMs, web search, and ChromaDB are mocked.
 
 ### Backend Tests
 

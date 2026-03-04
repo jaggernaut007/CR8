@@ -114,11 +114,15 @@ def run_video_job(video_job_id: str, gcs_prefix: str) -> None:
             if not slide_images:
                 raise RuntimeError("No slide images downloaded from GCS")
 
-            # Pad scripts if needed
+            # Pad scripts if fewer scripts than topics: replay the last script.
+            # This handles edge cases where script generation partially failed.
             if len(scripts) < total:
                 scripts = list(scripts) + [scripts[-1]] * (total - len(scripts))
 
             # ---- Step 2: Sequential TTS (GPU) ----
+            # TTS runs sequentially (not parallel) because the Kokoro model
+            # shares a single GPU and peaks at ~3.4 GB VRAM.  Running multiple
+            # TTS calls concurrently would OOM on an L4 (24 GB) with >6 topics.
             tts_start = time.monotonic()
             elapsed_s = int(tts_start - job_start)
             _update_job(
@@ -171,6 +175,9 @@ def run_video_job(video_job_id: str, gcs_prefix: str) -> None:
             logger.info("TTS phase complete in %ds for %d topics", tts_elapsed, total)
 
             # ---- Step 3: Parallel composition (CPU-bound ffmpeg) ----
+            # Composition is CPU-bound (image scaling, audio muxing, H.264 encoding)
+            # so we parallelise across CPU cores.  Each ffmpeg process gets
+            # (cpu_count // max_workers) threads to avoid oversubscription.
             if _is_cancelled(video_job_id):
                 raise InterruptedError("Job cancelled before composition")
 

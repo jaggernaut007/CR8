@@ -6,6 +6,7 @@ three sequential nodes: **Ingest** -> **Research** -> **Generate**.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from langgraph.graph import StateGraph, START, END
@@ -14,6 +15,8 @@ from backend.pipeline.state import PipelineState
 from backend.pipeline.agent_ingest import ingest_node
 from backend.pipeline.agent_research import research_node
 from backend.pipeline.agent_generate import generate_node
+
+logger = logging.getLogger(__name__)
 
 
 def build_pipeline() -> Any:
@@ -39,4 +42,6 @@ def build_pipeline() -> Any:
     graph.add_edge("research", "generate")
     graph.add_edge("generate", END)
 
-    return graph.compile()
+    compiled = graph.compile()
+    logger.info("Pipeline compiled: START → ingest → research → generate → END")
+    return compiled

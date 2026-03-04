@@ -5,7 +5,7 @@
 > and AI avatar videos.
 
 ## Stack
-Python 3.11+, FastAPI, LangGraph, OpenAI (gpt-5.1/mini/nano), ChromaDB, Tavily, pytest (362 tests)
+Python 3.11+, FastAPI, LangGraph, OpenAI (gpt-5.1/mini/nano), ChromaDB, Tavily, Kokoro TTS, pytest (507 tests)
 
 ## Key Documentation
 

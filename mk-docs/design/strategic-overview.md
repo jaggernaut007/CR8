@@ -64,7 +64,7 @@ Dockerized on GCP Cloud Run (europe-west2). Single container with Gunicorn + Uvi
 
 ### Test Coverage
 
-426 tests passing. Covers file parsing, ChromaDB operations, PDF generation edge cases (Unicode, malformed markdown, special characters), run_job validation, all FastAPI endpoints, ProgressCapture thread safety (including stage-aware ETA), auth flows, upload edge cases, job ID validation, eval harness, structural checks, graph integration, and video builder two-phase pipeline.
+507 tests passing. Covers file parsing, ChromaDB operations, PDF generation edge cases (Unicode, malformed markdown, special characters), run_job validation, all FastAPI endpoints, ProgressCapture thread safety (including stage-aware ETA), auth flows, upload edge cases, job ID validation, eval harness, structural checks, graph integration, video builder two-phase pipeline, GPU service worker/endpoints, GCS client, and GPU client.
 
 ---
 

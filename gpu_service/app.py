@@ -33,33 +33,41 @@ _active_lock = threading.Lock()
 
 
 class VideoJobRequest(BaseModel):
-    job_id: str
-    gcs_prefix: str
+    """Incoming video generation request from the CPU service."""
+
+    job_id: str  # Pipeline job ID (from run_pipeline)
+    gcs_prefix: str  # GCS path prefix where slide PNGs + manifest are stored
 
 
 class VideoJobResponse(BaseModel):
-    video_job_id: str
-    status: str
+    """Returned immediately on job creation (HTTP 202)."""
+
+    video_job_id: str  # Unique ID for this video job (vj_{job_id}_{hex})
+    status: str  # Always "accepted" on creation
 
 
 class JobProgress(BaseModel):
-    phase: str
-    percent: int
-    current_topic: int | None = None
+    """Real-time progress update for a running video job."""
+
+    phase: str  # downloading | tts | composing | uploading | complete | error
+    percent: int  # 0-100 overall progress
+    current_topic: int | None = None  # TTS phase: which topic is being processed
     total_topics: int | None = None
-    elapsed_s: int | None = None
-    eta_s: int | None = None
-    completed_videos: int | None = None
+    elapsed_s: int | None = None  # Wall-clock seconds since job start
+    eta_s: int | None = None  # Estimated seconds remaining
+    completed_videos: int | None = None  # Compose phase: completed video count
     total_videos: int | None = None
 
 
 class JobStatusResponse(BaseModel):
+    """Full job status returned by the polling endpoint."""
+
     video_job_id: str
-    status: str
+    status: str  # accepted | downloading | tts | composing | uploading | complete | error | cancelled
     progress: JobProgress | None = None
-    output_paths: list[str] | None = None
+    output_paths: list[str] | None = None  # MP4 filenames on completion
     error: str | None = None
-    warnings: list[str] | None = None
+    warnings: list[str] | None = None  # Non-fatal errors (e.g. one topic failed)
     elapsed_s: int | None = None
 
 
@@ -150,6 +158,7 @@ async def debug_encoder():
 
 @app.post("/api/v1/video-jobs", status_code=202, response_model=VideoJobResponse)
 async def create_video_job(req: VideoJobRequest):
+    """Accept a video generation job and run it in a background thread."""
     global _active_count
 
     from gpu_service.config import gpu_settings
@@ -189,6 +198,7 @@ async def create_video_job(req: VideoJobRequest):
 
 @app.get("/api/v1/video-jobs/{video_job_id}", response_model=JobStatusResponse)
 async def get_video_job_status(video_job_id: str) -> JobStatusResponse:
+    """Poll the current status and progress of a video job."""
     job = get_job(video_job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")

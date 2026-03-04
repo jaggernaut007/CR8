@@ -26,7 +26,11 @@ from backend.prompts.video import MODULE_TO_SCRIPT, SCRIPT_FROM_SLIDES, HOOK_EXA
 
 logger = logging.getLogger(__name__)
 
-# Module validation thresholds
+# Module validation thresholds:
+#   - 2000 chars is the floor for a meaningful module (roughly 300 words).
+#     Below this, the LLM has likely produced a stub or truncated output.
+#   - Required sections match the GENERATE_MODULE prompt's output schema;
+#     if a section is missing, the module failed to follow the prompt structure.
 _MIN_MODULE_CHARS = 2000
 _REQUIRED_SECTIONS = ["## Module Overview", "## Learning Objectives", "## Core Content", "## Key Takeaways"]
 
@@ -194,9 +198,14 @@ def _get_slide_images(
 
     print("[Video] No slide source available — video will have no slide images")
     return []
+
+# Maximum retries for module generation when validation fails.
+# 2 retries (3 total attempts) balances quality vs. API cost.
 _MAX_MODULE_RETRIES = 2
 
-# Hook keywords for variety tracking
+# Hook keywords: video scripts open with a "hook" (first ~300 chars).
+# We track which hook types have been used across topics to encourage variety.
+# Each type maps to keywords that identify it in the opening text.
 _HOOK_KEYWORDS = {
     "curiosity": ["what if", "did you know", "ever wonder"],
     "scenario": ["imagine", "picture this", "you're on your first"],
@@ -271,7 +280,10 @@ def _generate_module(i, topic, total, chroma_cache, llm_premium, llm_mini, curri
     gap_text = json.dumps(gap_data, indent=2) if gap_data else "No gap analysis available."
     severity = gap_data.get("severity", "moderate")
 
-    # Severity-based model routing: critical → premium, moderate/minor → mini
+    # Severity-based model routing: critical gaps get the best model (GPT-5.1)
+    # because they represent the biggest curriculum-to-industry gaps and need
+    # the highest quality output.  Moderate/minor gaps use GPT-5-mini to save
+    # cost (~10x cheaper) while still producing good results.
     llm = llm_premium if severity == "critical" else llm_mini
     model_label = "premium" if severity == "critical" else "mini"
 
@@ -478,7 +490,11 @@ def _build_fallback_slide_data(gap_summary, curriculum_scope):
 
 
 def _detect_hook_type(script_text):
-    """Detect which hook type a script uses based on keyword heuristics."""
+    """Detect which hook type a script uses based on keyword heuristics.
+
+    Only checks the first 300 chars because hooks always appear at the top
+    of a video script (the opening line/paragraph).
+    """
     lower = script_text[:300].lower()
     for hook_type, keywords in _HOOK_KEYWORDS.items():
         if any(kw in lower for kw in keywords):
@@ -487,7 +503,11 @@ def _detect_hook_type(script_text):
 
 
 def _get_hook_guidance(used_hooks, lock):
-    """Generate hook guidance that emphasizes unused hook types."""
+    """Generate hook guidance that emphasizes unused hook types.
+
+    Thread-safe: uses a lock because multiple script-generation threads
+    read and append to the shared ``used_hooks`` list concurrently.
+    """
     with lock:
         used = set(used_hooks)
     all_types = set(_HOOK_KEYWORDS.keys())
@@ -618,6 +638,9 @@ def _generate_script_for_topic(idx, topic_slide, topic_module_md, gap_data, chro
     """Generate one video script aligned to one PPT topic slide.
 
     Receives ONLY its own topic's module content and gap data (filtered context).
+    This per-topic filtering prevents cross-topic contamination in scripts —
+    each script should only discuss its own topic, not reference other topics'
+    gaps or curriculum content.
 
     Args:
         prompt_template: Optional custom prompt template for eval variant testing.

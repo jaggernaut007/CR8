@@ -1,7 +1,13 @@
+import logging
+
 from langchain_openai import ChatOpenAI
 from backend.config import settings
 
-# Tier → (config attribute, default temperature)
+logger = logging.getLogger(__name__)
+
+# Tier → (config attribute for model name, config attribute for temperature)
+# Severity-based routing in agent_generate.py uses these tiers:
+#   critical gaps → premium (GPT-5.1), moderate/minor → mini (GPT-5-mini)
 _TIER_MAP = {
     "nano":    ("openai_model_nano",    "temp_analysis"),
     "mini":    ("openai_model_mini",    "temp_structured"),
@@ -22,6 +28,7 @@ def get_llm(model: str = "mini", temperature: float | None = None) -> ChatOpenAI
     model_attr, temp_attr = _TIER_MAP.get(model, _TIER_MAP["mini"])
     model_name = getattr(settings, model_attr)
     temp = temperature if temperature is not None else getattr(settings, temp_attr)
+    logger.debug("Creating LLM: tier=%s model=%s temp=%.2f", model, model_name, temp)
     return ChatOpenAI(
         model=model_name,
         api_key=settings.openai_api_key,
