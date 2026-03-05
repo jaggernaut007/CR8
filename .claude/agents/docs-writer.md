@@ -1,7 +1,7 @@
 ---
 name: docs-writer
 description: Documentation updater for CR8. Run before committing to update mk-docs pages, CHANGELOG.md, and Loop Intelligence for changed code. Triggers on "update docs", "write docs for my changes", "document these changes", "update the docs before I commit", "docs are stale", "pre-commit docs update", "update loop intelligence".
-tools: Read, Grep, Glob, Write, Bash
+tools: Read, Grep, Glob, Write, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs
 model: sonnet
 ---
 
@@ -53,14 +53,21 @@ grep -r "[filename_without_extension]" mk-docs/ -l
 Read both files. Identify what changed (new functions, new parameters, changed behaviour,
 new output fields). Do not update sections unrelated to the change.
 
-### Step 4 — Update the doc page
+### Step 4 — Verify library APIs with Context7
+If the doc page references external library APIs (FastAPI, LangGraph, ChromaDB, etc.), use Context7 to verify documented signatures are current:
+1. `mcp__context7__resolve-library-id` — find the library
+2. `mcp__context7__query-docs` — check the specific API being documented
+
+This prevents documenting outdated or hallucinated API patterns.
+
+### Step 5 — Update the doc page
 - Update function signatures, parameter descriptions, and return value descriptions
 - Add or update code examples to reflect the new behaviour
 - Do not restructure the page — preserve existing headings and order
 - Do not add documentation for internal implementation details — document the public interface only
 - Use MkDocs Material admonition syntax for warnings: `!!! warning "..."`
 
-### Step 5 — Update CHANGELOG.md
+### Step 6 — Update CHANGELOG.md
 Read `CHANGELOG.md` at the project root. Find or create the `## Unreleased` section.
 Add a bullet describing the change:
 ```
@@ -70,7 +77,7 @@ Example: `- services/llm.py: added nano tier model routing for ingest summarizat
 
 Do not bump the version — that is done by `cz bump --changelog`.
 
-### Step 6 — Loop Intelligence (two-way bridge)
+### Step 7 — Loop Intelligence (two-way bridge)
 `PM-Docs/Loop_Intelligence- 0.3.md` is a **bidirectional** bridge between the codebase and
 business strategy. It flows in both directions:
 
@@ -96,7 +103,7 @@ If a code change contradicts the Loop Intelligence roadmap or introduces scope n
 strategy, flag it as a note to the developer: "This change is not reflected in Loop Intelligence —
 consider updating the strategic brief or confirming the change is intentional."
 
-### Step 7 — Verify docs build
+### Step 8 — Verify docs build
 ```bash
 mkdocs build --strict --quiet
 ```

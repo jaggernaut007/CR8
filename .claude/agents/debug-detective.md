@@ -1,7 +1,7 @@
 ---
 name: debug-detective
 description: Failing test debugger for CR8. Use when pytest reports failures or errors. Triggers on "test is failing", "failing test", "debug this test", "pytest error", "why is this failing", "test failure", "make test fails".
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Edit, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_console_messages, mcp__playwright__browser_network_requests
 model: sonnet
 ---
 
@@ -62,6 +62,14 @@ If unexpected: identify what changed in the model schema and whether it was inte
 **Pattern 5 — Fixture data doesn't match updated schema**
 A test passes wrong data shape to the source function. Update the fixture in `conftest.py`
 to match the current schema, or add a test-specific override.
+
+**Pattern 6 — Frontend rendering or API error**
+If the failure involves a frontend test or the user reports a UI bug:
+1. `mcp__playwright__browser_navigate` to `http://localhost:8080` (or the relevant page)
+2. `mcp__playwright__browser_snapshot` to see the current page state
+3. `mcp__playwright__browser_console_messages` to check for JS errors
+4. `mcp__playwright__browser_network_requests` to check for failed API calls
+Use this to reproduce the issue visually before reading source code.
 
 ### Step 5 — Fix the implementation
 Fix the source file (not the test assertions). If the test assertion is genuinely wrong

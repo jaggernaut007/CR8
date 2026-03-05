@@ -157,6 +157,48 @@ Run `/clear` after every commit to reset the Claude Code context window. Long co
 
 ---
 
+## MCP Servers
+
+Claude Code connects to three MCP (Model Context Protocol) servers that extend agent capabilities beyond the codebase.
+
+### Available MCPs
+
+| MCP Server | What It Does | Used By |
+|------------|-------------|---------|
+| **Context7** | Version-specific library docs (LangGraph, FastAPI, ChromaDB, python-pptx, fpdf2, MoviePy, PyMuPDF, 1000+) | `research-assistant`, `docs-writer` |
+| **Playwright** | Browser automation — navigate, click, snapshot, console/network inspection | `code-reviewer`, `debug-detective` |
+| **Sequential Thinking** | Structured step-by-step reasoning with branching and revision | `adr-writer` |
+
+### When MCPs are used automatically
+
+You don't need to call MCPs manually — agents invoke them at the right step:
+
+- **Researching a library?** `research-assistant` calls Context7 in Step 0 before falling back to web search.
+- **Reviewing frontend changes?** `code-reviewer` uses Playwright to navigate `localhost:8080` and verify the UI renders correctly.
+- **Debugging a UI bug?** `debug-detective` uses Playwright to check console errors and failed network requests.
+- **Writing an ADR?** `adr-writer` uses Sequential Thinking to reason through alternatives before drafting.
+- **Updating docs?** `docs-writer` uses Context7 to verify library API signatures are current.
+
+### Verify MCPs are connected
+
+At session start, run `/mcp` to check all three servers show green. If any are disconnected, re-add them:
+
+```bash
+# Context7 (project-scoped)
+claude mcp add context7 -- npx -y @upstash/context7-mcp
+
+# Playwright (project-scoped)
+claude mcp add playwright -- npx -y @playwright/mcp@latest
+
+# Sequential Thinking (user-scoped)
+claude mcp add --scope user sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking
+```
+
+!!! tip "MCPs require Node.js >= v18"
+    All three MCP servers run via npx. Ensure Node.js v18+ is installed.
+
+---
+
 ## External Library Workflow
 
 Before using any external library or API in code, follow this protocol. Do not guess at an API — check the research notes first.

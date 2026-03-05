@@ -4,14 +4,32 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+import types
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+# Ensure google.cloud.storage is importable even without the real package.
+# GCSVideoClient does a lazy `from google.cloud import storage` in __init__,
+# so we need the module path to exist in sys.modules.
+if "google.cloud.storage" not in sys.modules:
+    _google = types.ModuleType("google")
+    _google.__path__ = []
+    _google_cloud = types.ModuleType("google.cloud")
+    _google_cloud.__path__ = []
+    _google.cloud = _google_cloud
+    _google_cloud_storage = types.ModuleType("google.cloud.storage")
+    _google_cloud_storage.Client = MagicMock()
+    _google_cloud.storage = _google_cloud_storage
+    sys.modules.setdefault("google", _google)
+    sys.modules.setdefault("google.cloud", _google_cloud)
+    sys.modules.setdefault("google.cloud.storage", _google_cloud_storage)
+
 
 @pytest.fixture()
 def mock_storage():
-    """Patch google.cloud.storage and return (mock_client, mock_bucket)."""
+    """Patch google.cloud.storage.Client and return (mock_client, mock_bucket)."""
     with patch("backend.services.gcs_client.settings") as mock_settings:
         mock_settings.gcs_bucket = "test-bucket"
         with patch("google.cloud.storage.Client") as MockClient:

@@ -25,7 +25,7 @@ CR8 already has a mature agentic setup (8 subagents, 4 skills, 2 rules, hooks), 
 | # | MCP Server | What It Does | Cost | API Key? | Verdict |
 |---|-----------|-------------|------|----------|---------|
 | 1 | **Context7** | Injects version-specific library docs into prompts | Free | Optional (higher rate limits) | **IMPLEMENT — Phase 1** |
-| 2 | **GitHub MCP** | PR management, issues, CI status, code search, Dependabot | Free | OAuth (browser login) | **IMPLEMENT — Phase 1** |
+| 2 | ~~GitHub MCP~~ | PR management, issues, CI status, code search, Dependabot | Free | OAuth (browser login) | **REMOVED — unreliable connection** |
 | 3 | **Playwright MCP** | Browser automation, E2E testing, screenshots | Free | None (local) | **IMPLEMENT — Phase 1** |
 | 4 | **Sequential Thinking** | Structured step-by-step reasoning with branching & revision | Free | None (local) | **IMPLEMENT — Phase 2** |
 | 5 | **FastAPI-MCP** | Expose CR8's own API endpoints as MCP tools | Free | None (local) | **IMPLEMENT — Phase 2** |
@@ -75,37 +75,11 @@ claude mcp add context7 -- npx -y @upstash/context7-mcp
 
 ---
 
-### 2. GitHub MCP — PR & Issue Workflow
+### ~~2. GitHub MCP — PR & Issue Workflow~~ (REMOVED)
 
-**Problem it solves:** Managing PRs, issues, and CI status requires switching to browser or running individual `gh` CLI commands. No way for Claude to proactively check CI status or search issues during coding.
+**Status:** Removed as of 2026-03-05. The GitHub MCP server had persistent connection reliability issues. The existing `gh` CLI commands (whitelisted in `settings.local.json`) provide sufficient GitHub workflow support.
 
-**What it does:** Full GitHub API access:
-- Browse repos, search code, analyse commits
-- Create/update/review issues and PRs
-- Monitor GitHub Actions workflow runs, analyse build failures
-- Check Dependabot security alerts
-- Manage releases
-
-**How it fits CR8:** The project is on GitHub. `settings.local.json` already whitelists `gh pr diff`, `gh pr checks`, etc. GitHub MCP gives deeper, more natural access.
-
-**Setup:**
-```bash
-claude mcp add --scope user --transport http github https://api.githubcopilot.com/mcp/
-```
-Then authenticate inside Claude Code:
-```
-/mcp → select GitHub → follow browser OAuth flow
-```
-- Scope: `user` (works across all your projects)
-- No PAT needed — uses OAuth
-
-**Alternative (Personal Access Token):**
-```bash
-claude mcp add --scope user --env GITHUB_PERSONAL_ACCESS_TOKEN=ghp_your_token github -- npx -y @github/mcp-server
-```
-Create token at `github.com/settings/tokens` with scopes: `repo`, `read:org`, `read:project`.
-
-**Test it:** "Show me open issues on this repo"
+**Alternative:** Use `gh pr`, `gh issue`, `gh run` CLI commands via Bash tool.
 
 ---
 
@@ -290,10 +264,9 @@ Then authenticate via `/mcp` OAuth flow. Free tier available.
 ### Phase 1 — Do Now ✅ (completed 2026-03-04)
 
 - [x] Run `claude mcp add context7 -- npx -y @upstash/context7-mcp`
-- [x] Run `claude mcp add --scope user --transport http github https://api.githubcopilot.com/mcp/`
+- [x] ~~Run `claude mcp add --scope user --transport http github https://api.githubcopilot.com/mcp/`~~ (REMOVED — unreliable)
 - [x] Run `claude mcp add playwright -- npx -y @playwright/mcp@latest`
-- [ ] Authenticate GitHub MCP via `/mcp` OAuth flow *(user action required)*
-- [ ] Verify all 3 show green in `/mcp` *(user action required)*
+- [x] Verify Context7, Playwright, Sequential Thinking show green in `/mcp`
 - [x] Update `CLAUDE.md` — add MCP section + update hallucination prevention
 - [x] Update `AGENTS.md` — add `/mcp` to session start + update routing table
 - [x] Update `.claude/agents/research-assistant.md` — add Context7 Step 0
@@ -369,13 +342,30 @@ Full research: `docs/research/mcp-pipeline-integration.md`
 
 ## How MCPs Integrate with Existing Ecosystem
 
+### Agent ↔ MCP Integration (completed 2026-03-05)
+
+MCP tools are now wired directly into agent `tools:` frontmatter and referenced in agent workflow steps:
+
+| Agent | MCP Server | Integration |
+|-------|-----------|-------------|
+| `research-assistant` | Context7 | Step 0: calls `resolve-library-id` + `query-docs` before web search |
+| `docs-writer` | Context7 | Step 4: verifies library API signatures before updating docs |
+| `adr-writer` | Sequential Thinking | Step 3: structured reasoning through decision alternatives |
+| `code-reviewer` | Playwright | UI Verification section: navigates localhost:8080, snapshots, clicks |
+| `debug-detective` | Playwright | Pattern 6: reproduces frontend bugs via navigate/snapshot/console/network |
+
+### Ecosystem Compatibility
+
 | Existing Feature | Impact | Conflict? |
 |-----------------|--------|-----------|
 | Hooks (ruff on Stop, per-file ruff on Edit/Write) | No impact — MCP tools don't trigger file-edit hooks | None |
 | Pre-commit docs check hook | No impact — MCP doesn't affect git commit flow | None |
 | `settings.local.json` permissions | No change needed — MCP servers run in their own process | None |
-| `research-assistant` agent | Enhanced — Context7 becomes fast path before web search | Complementary |
-| `code-reviewer` agent | Enhanced — can use GitHub MCP for PR context | Complementary |
+| `research-assistant` agent | Enhanced — Context7 tools in frontmatter, used in Step 0 | Complementary |
+| `docs-writer` agent | Enhanced — Context7 tools verify API docs before writing | Complementary |
+| `adr-writer` agent | Enhanced — Sequential Thinking for structured reasoning | Complementary |
+| `code-reviewer` agent | Enhanced — Playwright verifies UI when frontend files change | Complementary |
+| `debug-detective` agent | Enhanced — Playwright reproduces frontend bugs | Complementary |
 | `session-handoff` skill | No impact — MCP is session-level, not state-level | None |
 | `init.sh` smoke test | No change — MCP checked via `/mcp`, not init.sh | None |
 | `PROGRESS.md` memory | No impact — MCPs are tools, not memory | None |
@@ -398,20 +388,18 @@ Full research: `docs/research/mcp-pipeline-integration.md`
 | MCP | Time Saved Per Use | Frequency | Weekly Impact |
 |-----|-------------------|-----------|---------------|
 | Context7 | 5-10 min (vs. manual docs search + research note) | 5-10x/week | 25-100 min |
-| GitHub MCP | 2-5 min (vs. browser switch for PR/issue management) | 10-20x/week | 20-100 min |
 | Playwright | 3-8 min (vs. manual browser testing) | 3-5x/week | 9-40 min |
 | Sequential Thinking | 10-20 min (vs. unstructured architecture reasoning) | 1-2x/week | 10-40 min |
 | FastAPI-MCP | 2-5 min (vs. manual curl/browser API testing) | 5-10x/week | 10-50 min |
-| **Total estimated** | | | **~1.5-5.5 hours/week** |
+| **Total estimated** | | | **~1-4 hours/week** |
 
 ---
 
 ## Quick Reference Card
 
 ```
-# Phase 1 — Run these 3 commands now:
+# Phase 1 — Run these 2 commands now:
 claude mcp add context7 -- npx -y @upstash/context7-mcp
-claude mcp add --scope user --transport http github https://api.githubcopilot.com/mcp/
 claude mcp add playwright -- npx -y @playwright/mcp@latest
 
 # Phase 2 — Run this week:

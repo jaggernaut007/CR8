@@ -1,7 +1,7 @@
 ---
 name: adr-writer
 description: Architecture Decision Record writer for CR8. Use before making any structural change to the codebase. Triggers on "create an ADR", "write an ADR", "document this decision", "before I make a structural change", "add a new dependency", "change the pipeline structure", "new output format", "change model routing".
-tools: Read, Grep, Glob, Write
+tools: Read, Grep, Glob, Write, mcp__sequential-thinking__sequentialthinking
 model: opus
 ---
 
@@ -33,7 +33,10 @@ Read the files most relevant to the decision so your ADR reflects actual code, n
 - For model routing: read `backend/services/llm.py`
 - For new dependencies: read `pyproject.toml`
 
-### Step 3 — Ask 3 focused questions
+### Step 3 — Structured reasoning
+Use Sequential Thinking (`mcp__sequential-thinking__sequentialthinking`) to reason through the decision space. Walk through each alternative, its trade-offs, and long-term consequences as sequential thought steps. This produces a structured chain that feeds directly into the Options and Consequences sections.
+
+### Step 4 — Ask 3 focused questions
 Before writing, ask the developer:
 1. What is the exact decision? (state it as "We will use X for Y")
 2. What alternatives were considered? (need at least 2)
@@ -41,7 +44,7 @@ Before writing, ask the developer:
 
 Keep questions short. Do not ask for information you can already determine from the code.
 
-### Step 4 — Write the ADR
+### Step 5 — Write the ADR
 Copy the template structure and fill every section:
 
 ```
@@ -55,7 +58,7 @@ docs/adr/ADR-NNN-short-title.md
 - **Implementation Notes**: Files affected, patterns to follow, anti-patterns ruled out
 - **References**: Links to relevant code, issues, or prior art
 
-### Step 5 — Confirm commit order
+### Step 6 — Confirm commit order
 Remind the developer:
 > Commit this ADR file BEFORE implementing the change. The ADR is the permanent record that
 > explains why this decision was made. Future agents (including Claude) will read it before

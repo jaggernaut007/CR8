@@ -1,7 +1,7 @@
 ---
 name: code-reviewer
 description: Senior code reviewer for the CR8 pipeline. Use proactively after implementing features or fixing bugs. Reviews FastAPI patterns, LangGraph state safety, OpenAI/Tavily call placement, Pydantic model usage, test coverage, and Ruff compliance. Triggers on "review my changes", "check this code", "review before committing", "code review".
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click
 model: sonnet
 ---
 
@@ -52,3 +52,11 @@ Review all recent changes against these CR8-specific standards.
 make lint    # ruff check .
 make test    # pytest -v (426 tests)
 ```
+
+## UI Verification (when frontend files are changed)
+If `frontend/app.py` or templates are in the changed files, use Playwright to verify the UI:
+1. `mcp__playwright__browser_navigate` to `http://localhost:8080`
+2. `mcp__playwright__browser_snapshot` to check page renders correctly
+3. `mcp__playwright__browser_click` to test key interactions (upload, submit, navigation)
+
+Report UI issues as blocking if the page fails to render or key flows are broken.

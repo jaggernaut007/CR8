@@ -30,7 +30,6 @@
 
 ### MCP Servers
 - **Context7** — version-specific library docs. Use before web search for any library question.
-- **GitHub** — PR management, issues, CI status. Use for all GitHub operations.
 - **Playwright** — browser automation. Use to test web UI at localhost:8080.
 - **Sequential Thinking** — structured reasoning for architecture decisions.
 

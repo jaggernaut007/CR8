@@ -58,7 +58,7 @@ A task is complete only when ALL of the following are true:
 ## Session Start Protocol
 1. Read `PROGRESS.md` for current project state
 2. Run `./scripts/init.sh` to verify the app is healthy
-3. Verify MCP servers are connected (`/mcp`) — Context7, GitHub, Playwright, Sequential Thinking
+3. Verify MCP servers are connected (`/mcp`) — Context7, Playwright, Sequential Thinking
 4. Fix any failures BEFORE starting new work
 
 ## Key Directories
@@ -74,19 +74,33 @@ docs/research/      → Implementation research notes (read before using externa
 .claude/            → Agent skills, subagents, rules, and hooks
 ```
 
+## MCP Server Usage
+Agents have access to MCP tools for external capabilities:
+
+| MCP Server | Tools | Used By |
+|------------|-------|---------|
+| **Context7** | `resolve-library-id`, `query-docs` | `research-assistant`, `docs-writer` |
+| **Playwright** | `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_console_messages`, `browser_network_requests` | `code-reviewer`, `debug-detective` |
+| **Sequential Thinking** | `sequentialthinking` | `adr-writer` |
+
+**When to use each:**
+- **Context7** — before writing code that uses any external library; before documenting library APIs
+- **Playwright** — when reviewing or debugging frontend changes (localhost:8080)
+- **Sequential Thinking** — when reasoning through architectural trade-offs for ADRs
+
 ## Subagent Routing
 Claude Code routes to these agents automatically when the situation matches:
 
-| Situation | Agent | Model |
-|-----------|-------|-------|
-| Before structural change (new dep, pipeline node, output format, model routing) | `adr-writer` | opus |
-| After running `python -m backend.evals compare` | `eval-judge` | opus |
-| When iterating on any prompt in `backend/prompts/` | `prompt-optimizer` | opus |
-| When adding new service or pipeline files | `test-writer` | sonnet |
-| When `make test` produces failures | `debug-detective` | sonnet |
-| Before committing (update mk-docs pages for staged changes) | `docs-writer` | sonnet |
-| Before committing any changes (code quality check) | `code-reviewer` | sonnet |
-| Before using any external library or API | `research-assistant` | haiku |
+| Situation | Agent | Model | MCP |
+|-----------|-------|-------|-----|
+| Before structural change (new dep, pipeline node, output format, model routing) | `adr-writer` | opus | Sequential Thinking |
+| After running `python -m backend.evals compare` | `eval-judge` | opus | — |
+| When iterating on any prompt in `backend/prompts/` | `prompt-optimizer` | opus | — |
+| When adding new service or pipeline files | `test-writer` | sonnet | — |
+| When `make test` produces failures | `debug-detective` | sonnet | Playwright |
+| Before committing (update mk-docs pages for staged changes) | `docs-writer` | sonnet | Context7 |
+| Before committing any changes (code quality check) | `code-reviewer` | sonnet | Playwright |
+| Before using any external library or API | `research-assistant` | haiku | Context7 |
 
 ## Version Management
 - Use `cz commit` for all commits (conventional commit format, enforced by pre-commit hook)

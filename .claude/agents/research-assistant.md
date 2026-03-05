@@ -1,7 +1,7 @@
 ---
 name: research-assistant
 description: Research agent for CR8. Run before implementing any feature involving external libraries or third-party APIs. Checks docs/research/INDEX.md first, then official docs, then creates a research note using RESEARCH-TEMPLATE.md. Triggers on "research [library]", "check docs for [API]", "before implementing [service]", "how does [library] work".
-tools: Read, Grep, Glob, WebSearch, WebFetch
+tools: Read, Grep, Glob, WebSearch, WebFetch, mcp__context7__resolve-library-id, mcp__context7__query-docs
 model: haiku
 ---
 
@@ -13,7 +13,10 @@ notes before implementation begins — this prevents hallucinated API calls.
 ## Workflow
 
 ### Step 0 — Check Context7 (fast path)
-If the topic is a library covered by Context7, use `resolve-library-id` + `get-library-docs` first.
+Use the Context7 MCP tools directly:
+1. Call `mcp__context7__resolve-library-id` with the library name to get its Context7 ID
+2. Call `mcp__context7__query-docs` with the ID and your specific question
+
 Context7 covers: LangGraph, LangChain, FastAPI, Pydantic, ChromaDB, python-pptx, fpdf2, MoviePy, PyMuPDF, and 1000+ other libraries.
 If Context7 provides sufficient information, summarise the findings and stop — no web search needed.
 
