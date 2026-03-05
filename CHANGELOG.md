@@ -123,3 +123,23 @@ Total: **507 tests passing** (was 362). Covers GCS/GPU clients, video dispatch, 
 - Rich PDF rendering: bold, italic, code blocks with Courier font on gray background
 - PPT gap analysis builder with 6 slide types and CR8 design tokens
 - Slide-synced video script generation (`SCRIPT_FROM_SLIDES` prompt)
+
+## v0.4.1 (2026-03-05)
+
+### Fix
+
+- move logger placement in frontend/app.py to fix E402, update stale test counts
+
+## v0.4.0 (2026-03-04)
+
+### Feat
+
+- Kokoro TTS video pipeline, Cloud Run GPU service, dual-service deployment
+- add 3 dev workflow skills — commit-ready, coverage-report, new-feature
+- agent-readiness setup, docs migration, and March 2026 hardening
+- March 2026 hardening — 10 bug fixes, 362-test suite, updated docs
+- add authentication, security hardening, and security docs
+
+### Fix
+
+- resolve bugs in frontend, backend, and AI pipeline

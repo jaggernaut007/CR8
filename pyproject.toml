@@ -1,6 +1,6 @@
 [project]
 name = "cr8-prototype"
-version = "0.4.0"
+version = "0.4.1"
 requires-python = ">=3.11"
 dependencies = [
     "langchain>=0.3",
@@ -65,7 +65,7 @@ include = ["backend*", "frontend*", "gpu_service*"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.4.0"
+version = "0.4.1"
 tag_format = "v$version"
 version_files = ["pyproject.toml:version"]
 changelog_file = "CHANGELOG.md"
