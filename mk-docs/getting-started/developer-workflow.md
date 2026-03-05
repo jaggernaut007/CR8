@@ -423,7 +423,7 @@ Then start a fresh session with the session start prompt above.
 | Command | Description |
 |---------|-------------|
 | `make install` | Install package in editable mode with all dev dependencies |
-| `make test` | Run the full 426-test suite with verbose output |
+| `make test` | Run the full 507-test suite with verbose output |
 | `make lint` | Run `ruff check .` — must be clean before committing |
 | `make lint-fix` | Run `ruff check . --fix` — auto-fix lint issues |
 | `make dev` | Start FastAPI + Uvicorn at http://localhost:8080 (all interfaces, hot-reload) |
@@ -484,4 +484,4 @@ make install
 All LLMs, Tavily, and ChromaDB calls are mocked in tests. If a test is slow, it is likely making a real network call. Check that the test is using the shared fixtures from `conftest.py` and not bypassing mocks.
 
 !!! tip "Zero real API calls is a hard requirement"
-    The full 426-test suite runs in approximately 60 seconds with zero real API calls. Any test that hits a real endpoint is a bug in the test, not a valid slow test.
+    The full 507-test suite runs in approximately 60 seconds with zero real API calls. Any test that hits a real endpoint is a bug in the test, not a valid slow test.

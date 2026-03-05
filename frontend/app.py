@@ -17,8 +17,6 @@ import uuid
 import zipfile
 from contextlib import asynccontextmanager
 
-logger = logging.getLogger(__name__)
-
 import bcrypt
 from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +28,8 @@ PROJECT_ROOT = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, PROJECT_ROOT)
 
 from backend.run_pipeline import run_job  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 UPLOAD_DIR = os.path.join(PROJECT_ROOT, "uploads")
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
