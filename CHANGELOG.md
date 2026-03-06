@@ -7,6 +7,75 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.5.1] — 2026-03-06 — Foundation: DB + JWT Auth + Route Restructure + Test Optimization
+
+### Added — Database & Auth
+- `backend/db/` — asyncpg database layer with 8 tables (users, jobs, quizzes, quiz_attempts, quiz_answers, chat_sessions, chat_messages) + triggers
+- `backend/services/db_client.py` — 12 async CRUD functions for user, job, and quiz operations
+- `backend/services/auth_service.py` — JWT auth service (PyJWT + bcrypt): register, login, refresh, verify with type enforcement on token claims
+- `frontend/middleware.py` — AuthMiddleware, SecurityHeadersMiddleware, rate limiter, session store
+- `frontend/auth_routes.py` — JWT register/login/refresh/me/logout + legacy session auth
+- `frontend/job_routes.py` — upload, start, progress, cancel, download, jobs list
+- `frontend/quiz_routes.py` — 4 stub routes returning 501 (Phase 4)
+- `.claude/mcp.json` — Neon MCP config for dev-time database management
+
+### Changed — uv Migration & Route Restructure
+- Package manager migrated from pip/venv to `uv` (Astral, v0.10.8); `uv.lock` committed
+- `frontend/app.py` split from 693→320 lines (routes extracted to auth_routes, job_routes, quiz_routes)
+- SPA catch-all: detects `frontend/static/index.html` at import; serves React SPA or Jinja2 fallback
+- `MAX_UPLOAD_SIZE_MB=50` configurable in `backend/config.py` (was hardcoded 20MB)
+- Schema expanded: 6→8 tables (added `chat_sessions`, `chat_messages`), `display_name`, `blooms_level`, `correct_index`, `UNIQUE(quiz_id, user_id)`
+
+### Changed — Test Optimization
+- Test speed: 171s → 41.55s (4.1x) via pytest-xdist (`-n auto`) + autouse fixtures
+- gpu_client tests: 150s → 0.27s (555x) — mocked `time.sleep` and `_get_identity_token`
+- New Makefile targets: `test-fast`, `test-parallel`, `build-frontend`, `e2e`
+- All docs/agents updated from pip→uv commands
+
+### Added — Research & Agents
+- `docs/research/agent-lightning.md` — APO/RL research note
+- `docs/research/code-intelligence-tools.md` — code intelligence tools comparison
+- `docs/research/pytest-tdd-optimization.md` — pytest speed optimisation
+- `docs/research/gitlab-knowledge-graph.md` — GitLab knowledge graph research
+- .claude/agents: expanded docs-writer (6 layers), research-assistant (security assessment)
+- docs/research/RESEARCH-TEMPLATE.md: added Security Assessment section
+
+### Test Suite
+Total: **802 tests passing** (was 626). New: db_client (19), auth_service (12), middleware (80+), auth_routes (49), quiz_routes (12), job_helpers (43).
+
+---
+
+## [0.4.2] — 2026-03-06 — CPU Video Service, 3-Tier Fallback Chain
+
+**Summary**: Adds a CPU-only video microservice (`cpu_video_service/`) as a Tier 3 fallback, completing the 3-tier chain: GPU Primary (europe-west4) → GPU Fallback (europe-west1) → CPU Video (europe-west2). `VideoServiceClient` replaces `GPUVideoClient` (alias kept) and now routes across all three tiers automatically on infrastructure failures. Main container Dockerfile stripped of video dependencies. 626 tests.
+
+### Added
+- `cpu_video_service/` — NEW: standalone FastAPI microservice running Kokoro TTS + ffmpeg on CPU. Deployed to Cloud Run with 8 vCPU / 32 GiB. Same API contract as `gpu_service/` (`/health`, `POST /api/v1/video-jobs`, `GET /api/v1/video-jobs/{id}`, `POST /api/v1/video-jobs/{id}/cancel`)
+- `cpu_video_service/worker.py` — 4-phase pipeline: GCS download → sequential CPU TTS → parallel libx264 compose → GCS upload. Supports graceful cancellation at phase boundaries
+- `cpu_video_service/gcs_client.py` — `CPUGCSClient`: `download_manifest()`, `download_slides()`, `upload_videos()`, `upload_status()`
+- `cpu_video_service/config.py` — Pydantic settings: `gcs_bucket`, `kokoro_voice`, `kokoro_lang`, `video_fps`, `video_max_workers`, `max_concurrent_jobs`
+- `cpu_video_service/tests/` — 78 tests (19 app, 37 worker, 22 GCS client)
+- `Dockerfile.cpu-video` — 2-stage CPU build (no CUDA dependencies)
+- `docs/adr/ADR-001-three-tier-video-fallback.md` — Architecture decision record for the fallback design
+- `backend/config.py` — `cpu_video_service_url` setting; `should_use_video_service` property (returns `True` when any video service URL is configured)
+
+### Changed
+- `backend/services/gpu_client.py` — `GPUVideoClient` renamed to `VideoServiceClient` (backward-compatible alias retained). Now supports 3-tier fallback via `_build_tier_list()`. Updated timeouts: health check 10s, submit 60s. `_try_next_tier()` advances through tiers on `ConnectionError`, `Timeout`, or `HTTPError` (5xx)
+- `backend/pipeline/agent_generate.py` — uses `should_use_video_service` (was `should_use_gpu_service`)
+- `Dockerfile` — stripped `ffmpeg`, `espeak-ng`, `libreoffice-impress` (video deps moved to `Dockerfile.gpu` and `Dockerfile.cpu-video`; main container no longer runs video locally)
+
+### Test Suite
+Total: **626 tests passing** (was 507). New tests cover `cpu_video_service` app/worker/GCS client, and expanded `test_gpu_client.py` (37 tests, was 12) to cover 3-tier fallback and `_try_next_tier()`.
+
+---
+
+## [0.4.1] — 2026-03-05
+
+### Fixed
+- move logger placement in `frontend/app.py` to fix E402, update stale test counts
+
+---
+
 ## [0.4.0] — 2026-03-04 — Kokoro Video Pipeline, GPU Service, Dual-Service Deployment
 
 **Summary**: Open-source Kokoro TTS video pipeline replaces the HeyGen placeholder. Videos can run locally (CPU/MPS/CUDA) or be offloaded to an NVIDIA L4 GPU microservice on Cloud Run via GCS. Dual-service deployment script, hardware-accelerated encoding, stage-aware ETA, security hardening, and 507-test suite.
@@ -123,23 +192,3 @@ Total: **507 tests passing** (was 362). Covers GCS/GPU clients, video dispatch, 
 - Rich PDF rendering: bold, italic, code blocks with Courier font on gray background
 - PPT gap analysis builder with 6 slide types and CR8 design tokens
 - Slide-synced video script generation (`SCRIPT_FROM_SLIDES` prompt)
-
-## v0.4.1 (2026-03-05)
-
-### Fix
-
-- move logger placement in frontend/app.py to fix E402, update stale test counts
-
-## v0.4.0 (2026-03-04)
-
-### Feat
-
-- Kokoro TTS video pipeline, Cloud Run GPU service, dual-service deployment
-- add 3 dev workflow skills — commit-ready, coverage-report, new-feature
-- agent-readiness setup, docs migration, and March 2026 hardening
-- March 2026 hardening — 10 bug fixes, 362-test suite, updated docs
-- add authentication, security hardening, and security docs
-
-### Fix
-
-- resolve bugs in frontend, backend, and AI pipeline

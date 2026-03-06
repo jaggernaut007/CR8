@@ -1,7 +1,7 @@
 ---
 name: debug-detective
 description: Failing test debugger for CR8. Use when pytest reports failures or errors. Triggers on "test is failing", "failing test", "debug this test", "pytest error", "why is this failing", "test failure", "make test fails".
-tools: Read, Grep, Glob, Bash, Edit, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_console_messages, mcp__playwright__browser_network_requests
+tools: Read, Grep, Glob, Bash, Edit, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_console_messages, mcp__playwright__browser_network_requests, mcp__context7__resolve-library-id, mcp__context7__query-docs
 model: sonnet
 ---
 
@@ -26,6 +26,10 @@ Read the implementation file being exercised by the failing test.
 Also read `backend/tests/conftest.py` to understand shared fixtures.
 
 ### Step 4 — Diagnose the root cause
+If the error involves a library API (ChromaDB, LangGraph, FastAPI, python-pptx, etc.), use Context7 to verify the correct API usage before assuming the implementation is wrong:
+1. `mcp__context7__resolve-library-id` — find the library
+2. `mcp__context7__query-docs` — check method signatures, expected arguments, and breaking changes
+
 Check these CR8-specific failure patterns in order:
 
 **Pattern 1 — Mock patched at wrong import path**

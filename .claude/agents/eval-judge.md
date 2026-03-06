@@ -1,7 +1,7 @@
 ---
 name: eval-judge
 description: Eval results judge for CR8. Run after every prompt A/B comparison to get a SHIP/HOLD/ITERATE verdict. Triggers on "judge the eval", "should I ship this prompt", "read the eval report", "did the variant win", "analyse eval results", "evaluate prompt variant".
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, mcp__sequential-thinking__sequentialthinking
 model: opus
 ---
 
@@ -33,7 +33,15 @@ The JSON contains a `ComparisonResult` with these fields:
 - **Pass threshold**: a variant passes if its weighted_total > 3.0
 - Count regressions from the `regressions` list (not manual calculation)
 
-### Step 4 — Produce verdict
+### Step 4 — Reason through the verdict
+Use `mcp__sequential-thinking__sequentialthinking` to walk through:
+1. Whether regressions are real quality drops or noise from dataset variance
+2. Whether the aggregate improvement justifies any minor regressions
+3. The final SHIP/HOLD/ITERATE decision with explicit reasoning chain
+
+This prevents snap judgements on borderline cases.
+
+### Step 5 — Produce verdict
 
 **SHIP** — all of the following are true:
 - `winner == "b"` (variant B wins overall)
@@ -50,7 +58,7 @@ The JSON contains a `ComparisonResult` with these fields:
 - All regression deltas are between -0.5 and 0
 - List the specific criteria to improve
 
-### Step 5 — Output format
+### Step 6 — Output format
 Produce:
 1. **Verdict**: SHIP / HOLD / ITERATE in bold
 2. **Score summary**: aggregate_a vs aggregate_b, winner

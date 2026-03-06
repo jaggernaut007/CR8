@@ -60,7 +60,7 @@ Read PROGRESS.md and summarise where we left off.
 ./scripts/init.sh
 ```
 
-`init.sh` verifies that the environment is healthy: dependencies installed, lint clean, all 507 tests passing. If any check fails, **fix it before starting new work**.
+`init.sh` verifies that the environment is healthy: dependencies installed, lint clean, all 626 tests passing. If any check fails, **fix it before starting new work**.
 
 !!! warning "Never skip init.sh"
     Starting new work on top of a broken baseline compounds problems. If `init.sh` fails, treat fixing it as task zero.
@@ -105,6 +105,9 @@ make lint && make test
 ```
 
 Both must pass before you commit. This is the definition of done — see `AGENTS.md`.
+
+!!! info "Code quality standards"
+    All new code must follow the [Code Quality Guide](../contributing/code-quality.md): short functions (max 25 statements), structured logging in every module, Google-style docstrings, and lazy log formatting. These are enforced by Ruff rules and Claude Code agent rules — `make lint` will catch violations.
 
 ### Commit with conventional commits
 
@@ -166,18 +169,18 @@ Claude Code connects to three MCP (Model Context Protocol) servers that extend a
 | MCP Server | What It Does | Used By |
 |------------|-------------|---------|
 | **Context7** | Version-specific library docs (LangGraph, FastAPI, ChromaDB, python-pptx, fpdf2, MoviePy, PyMuPDF, 1000+) | `research-assistant`, `docs-writer` |
-| **Playwright** | Browser automation — navigate, click, snapshot, console/network inspection | `code-reviewer`, `debug-detective` |
-| **Sequential Thinking** | Structured step-by-step reasoning with branching and revision | `adr-writer` |
+| **Playwright** | Browser automation — navigate, click, snapshot, console/network inspection | `code-reviewer`, `debug-detective`, `docs-writer` |
+| **Sequential Thinking** | Structured step-by-step reasoning with branching and revision | `adr-writer`, `research-assistant`, `docs-writer` |
 
 ### When MCPs are used automatically
 
 You don't need to call MCPs manually — agents invoke them at the right step:
 
-- **Researching a library?** `research-assistant` calls Context7 in Step 0 before falling back to web search.
+- **Researching a library?** `research-assistant` calls Context7 in Step 0 before falling back to web search. It also runs a mandatory security assessment (CVE check, license audit, maintenance health, dependency tree) and uses Sequential Thinking to evaluate security trade-offs when adding new dependencies.
 - **Reviewing frontend changes?** `code-reviewer` uses Playwright to navigate `localhost:8080` and verify the UI renders correctly.
 - **Debugging a UI bug?** `debug-detective` uses Playwright to check console errors and failed network requests.
 - **Writing an ADR?** `adr-writer` uses Sequential Thinking to reason through alternatives before drafting.
-- **Updating docs?** `docs-writer` uses Context7 to verify library API signatures are current.
+- **Updating docs?** `docs-writer` uses Context7 to verify library API signatures are current. For new or significantly restructured pages, it uses Playwright to confirm the page renders correctly at localhost:8000. Sequential Thinking is available when a large change touches 5+ doc pages.
 
 ### Verify MCPs are connected
 
@@ -221,7 +224,7 @@ Check docs/research/INDEX.md for any existing notes on [library] before I implem
 Use the research-assistant agent to research [library] v[X] before I implement anything.
 ```
 
-The research assistant will search for current official documentation and pin the version in a note under `docs/research/`.
+The research assistant will search for current official documentation and pin the version in a note under `docs/research/`. For new dependencies, it also runs a mandatory security assessment: CVE scan, license compatibility check, maintenance health (last release date, maintainer count), and transitive dependency tree size. A note without a security section is considered incomplete.
 
 ### Step 3 — Implement only after the research note exists
 
@@ -230,7 +233,7 @@ Now that the research note is in docs/research/, implement [feature] using [libr
 ```
 
 !!! warning "Do not implement external integrations without a research note"
-    Library APIs change between versions. A research note pinned to the version in `pyproject.toml` prevents implementing against a stale API from training data.
+    Library APIs change between versions. A research note pinned to the version in `pyproject.toml` prevents implementing against a stale API from training data. For new dependencies, the note must include a security assessment — a missing security section blocks implementation.
 
 ---
 
@@ -464,8 +467,8 @@ Then start a fresh session with the session start prompt above.
 
 | Command | Description |
 |---------|-------------|
-| `make install` | Install package in editable mode with all dev dependencies |
-| `make test` | Run the full 507-test suite with verbose output |
+| `make install` | Install all dependencies via `uv sync --all-extras` |
+| `make test` | Run the full 626-test suite with verbose output |
 | `make lint` | Run `ruff check .` — must be clean before committing |
 | `make lint-fix` | Run `ruff check . --fix` — auto-fix lint issues |
 | `make dev` | Start FastAPI + Uvicorn at http://localhost:8080 (all interfaces, hot-reload) |
@@ -491,7 +494,7 @@ Ruff will auto-fix most issues. Re-run `./scripts/init.sh` to confirm clean.
 
 ### `init.sh` fails at tests
 
-Read the test output carefully. Identify which test is failing and why. Fix the underlying code — do not modify test assertions to force a pass. Only start new work after all 507 tests are green.
+Read the test output carefully. Identify which test is failing and why. Fix the underlying code — do not modify test assertions to force a pass. Only start new work after all 626 tests are green.
 
 ### Claude Code ignores your instructions
 
@@ -526,4 +529,4 @@ make install
 All LLMs, Tavily, and ChromaDB calls are mocked in tests. If a test is slow, it is likely making a real network call. Check that the test is using the shared fixtures from `conftest.py` and not bypassing mocks.
 
 !!! tip "Zero real API calls is a hard requirement"
-    The full 507-test suite runs in approximately 60 seconds with zero real API calls. Any test that hits a real endpoint is a bug in the test, not a valid slow test.
+    The full 626-test suite runs in approximately 60 seconds with zero real API calls. Any test that hits a real endpoint is a bug in the test, not a valid slow test.

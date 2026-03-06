@@ -87,10 +87,26 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
 
-    # GPU service (video offload to Cloud Run GPU)
-    gpu_service_url: str = ""         # e.g. "https://cr8-gpu-xxx.run.app"
-    gpu_fallback_url: str = ""        # fallback GPU service (europe-west1)
-    gcs_bucket: str = "cr8-jobs"      # shared GCS bucket for CPU↔GPU data transfer
+    # Database (Neon PostgreSQL)
+    database_url: str = ""
+
+    # Auth / JWT
+    jwt_secret: str = ""  # REQUIRED: set via JWT_SECRET env var (min 32 bytes)
+    jwt_algorithm: str = "HS256"
+    jwt_access_expiry_minutes: int = 480  # 8 hours
+    jwt_refresh_expiry_days: int = 7
+
+    # Upload limits
+    max_upload_size_mb: int = 50  # max file upload size in megabytes
+
+    # CORS
+    allowed_origins: str = "http://localhost:8080,http://localhost:5173"
+
+    # Video services (offload to Cloud Run GPU or CPU-video instances)
+    gpu_service_url: str = ""         # GPU primary (europe-west4)
+    gpu_fallback_url: str = ""        # GPU fallback (europe-west1)
+    cpu_video_service_url: str = ""   # CPU-only video service (europe-west2)
+    gcs_bucket: str = "cr8-jobs"      # shared GCS bucket for data transfer
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
@@ -105,6 +121,11 @@ class Settings(BaseSettings):
     def should_use_gpu_service(self) -> bool:
         """True when a remote GPU service URL is configured."""
         return bool(self.gpu_service_url)
+
+    @property
+    def should_use_video_service(self) -> bool:
+        """True when any remote video service URL is configured."""
+        return bool(self.gpu_service_url or self.cpu_video_service_url)
 
 
 settings = Settings()

@@ -43,25 +43,24 @@ def _build_videos_dispatch(
     slide_images: list[str],
     topic_slide_map: dict[str, list[int]] | None = None,
 ) -> None:
-    """Route video generation: primary GPU → fallback GPU → local CPU.
+    """Route video generation to remote services or local fallback.
+
+    When remote video services are configured (GPU or CPU-video), uses the
+    3-tier fallback chain: GPU primary → GPU fallback → CPU-video.
+    Local ``build_videos()`` is only used when no service URLs are set
+    (local development).
 
     User cancellation (``PipelineCancelledError``) is never caught — it
     propagates immediately so the frontend can mark the job cancelled.
-    Only GPU infrastructure errors trigger the CPU fallback.
     """
-    if settings.should_use_gpu_service:
-        try:
-            _build_videos_gpu(
-                state, video_topics, scripts, video_dir,
-                slide_images, topic_slide_map,
-            )
-            return
-        except PipelineCancelledError:
-            raise  # never swallow user cancellation
-        except Exception as exc:
-            print(f"[Video] GPU services failed: {exc}")
-            print("[Video] Falling back to local CPU video generation...")
+    if settings.should_use_video_service:
+        _build_videos_gpu(
+            state, video_topics, scripts, video_dir,
+            slide_images, topic_slide_map,
+        )
+        return
 
+    # Local fallback — only when no video service URLs are configured (dev mode)
     _check_cancelled()
     build_videos(
         topics=video_topics,
@@ -82,10 +81,10 @@ def _build_videos_gpu(
 ) -> None:
     """Try GPU services (primary then fallback). Raises on total failure."""
     from backend.services.gcs_client import GCSVideoClient
-    from backend.services.gpu_client import GPUVideoClient
+    from backend.services.gpu_client import VideoServiceClient
 
     gcs = GCSVideoClient()
-    gpu = GPUVideoClient()
+    gpu = VideoServiceClient()
     job_id = state["job_id"]
     completed = False
 
@@ -966,4 +965,5 @@ def generate_node(state: PipelineState) -> dict:
     except Exception as e:
         print(f"[Generate] WARNING: Failed to save raw outputs: {e}")
 
+    result["modules_md"] = modules_md
     return result

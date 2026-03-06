@@ -112,11 +112,5 @@ Most time is spent on API calls (OpenAI + Tavily). All agents run their work in 
 Make sure you installed in development mode:
 
 ```bash
-pip install -e ".[dev]"
-```
-
-Or equivalently:
-
-```bash
-make install
+make install  # runs: uv sync --all-extras
 ```

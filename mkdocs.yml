@@ -105,7 +105,8 @@ nav:
       - Script Parser: services/script-parser.md
       - GPU Utils: services/gpu-utils.md
       - GCS Client: services/gcs-client.md
-      - GPU Client: services/gpu-client.md
+      - Video Service Client: services/gpu-client.md
+      - CPU Video Service: services/cpu-video-service.md
   - Evaluation Framework:
       - evals/index.md
       - Architecture: evals/architecture.md
@@ -135,5 +136,6 @@ nav:
       - testing/index.md
   - Contributing:
       - contributing/index.md
+      - Code Quality Guide: contributing/code-quality.md
       - Updating Documentation: contributing/updating-docs.md
   - Changelog: changelog.md

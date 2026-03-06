@@ -14,18 +14,19 @@ AI voiceover videos). Stack: Python 3.11+, FastAPI, LangGraph, OpenAI, ChromaDB,
 - LLM: OpenAI (gpt-5.1 / gpt-5-mini / gpt-5-nano via model routing)
 - Vector store: ChromaDB (local, all-MiniLM-L6-v2 embeddings)
 - Web search: Tavily API
-- Testing: pytest — 507 tests, zero real API calls
+- Package manager: uv (Astral) — lockfile at `uv.lock`
+- Testing: pytest — 802 tests, zero real API calls (pytest-xdist parallel, ~42s)
 - Linting: Ruff (line-length = 100)
 - Docs: MkDocs Material — source in `mk-docs/`, config at `mkdocs.yml`
 - Deployment: Docker + GCP Cloud Run
 
 ## Build & Test Commands
 ```bash
-make install      # pip install -e ".[dev]"
+make install      # uv sync --all-extras
 make dev          # FastAPI dev server → http://localhost:8080
-make test         # pytest -v  (507 tests, ~60s)
-make lint         # ruff check .
-make lint-fix     # ruff check . --fix
+make test         # uv run pytest -v  (802 tests, ~42s with xdist)
+make lint         # uv run ruff check .
+make lint-fix     # uv run ruff check . --fix
 make docs-serve   # mkdocs preview → http://localhost:8000
 make docs-build   # mkdocs build --strict
 make run ARGS="path/to/file.pdf"  # CLI pipeline
@@ -37,7 +38,15 @@ make run ARGS="path/to/file.pdf"  # CLI pipeline
 - Use typed `TypedDict` for all LangGraph state schemas in `backend/pipeline/state.py`
 - Mock all external API calls in tests — the full test suite runs with zero real API calls
 - Run `ruff check .` and confirm clean before marking any task complete
-- Run `make test` and confirm all 507 tests (0 real API calls) pass before marking any task complete
+- Run `make test` and confirm all 802 tests (0 real API calls) pass before marking any task complete
+
+## Code Quality (Enforced by Ruff + Agent Rules)
+- **Short functions**: max 25 statements, max 5 args, max cyclomatic complexity 10 (see `.claude/rules/code-quality.md`)
+- **Logging**: every module needs `logger = logging.getLogger(__name__)`; log function entry/exit at INFO, exceptions at ERROR with `exc_info=True`; use lazy `%s` formatting — never f-strings in log calls
+- **Docstrings**: every module and public function needs a Google-style docstring
+- **No print()**: use `logger.info()` instead (enforced by ruff T20)
+- **No commented-out code**: delete dead code, git has history (enforced by ruff ERA001)
+- **Tool verification**: always use tool calls to verify your work — read lint output, read test output, grep for patterns. Never assume code passes; check it.
 
 ## Testing Requirements
 - All new features require tests before the task is marked complete
@@ -49,7 +58,7 @@ make run ARGS="path/to/file.pdf"  # CLI pipeline
 
 ## Definition of Done
 A task is complete only when ALL of the following are true:
-1. `make test` passes (all 507 tests (0 real API calls))
+1. `make test` passes (all 626 tests (0 real API calls))
 2. `make lint` passes (ruff clean)
 3. Docs updated if any public behaviour changed
 4. `PROGRESS.md` updated with what was done
@@ -79,14 +88,16 @@ Agents have access to MCP tools for external capabilities:
 
 | MCP Server | Tools | Used By |
 |------------|-------|---------|
-| **Context7** | `resolve-library-id`, `query-docs` | `research-assistant`, `docs-writer` |
-| **Playwright** | `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_console_messages`, `browser_network_requests` | `code-reviewer`, `debug-detective` |
-| **Sequential Thinking** | `sequentialthinking` | `adr-writer` |
+| **Context7** | `resolve-library-id`, `query-docs` | `research-assistant`, `docs-writer`, `test-writer`, `code-reviewer`, `debug-detective` |
+| **Playwright** | `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_console_messages`, `browser_network_requests` | `code-reviewer`, `debug-detective`, `docs-writer` |
+| **Sequential Thinking** | `sequentialthinking` | `adr-writer`, `prompt-optimizer`, `eval-judge`, `research-assistant`, `docs-writer` |
+| **Snyk** | `snyk_test`, `snyk_code_scan`, `snyk_package_health_check` | `research-assistant`, `code-reviewer` |
 
 **When to use each:**
 - **Context7** — before writing code that uses any external library; before documenting library APIs
 - **Playwright** — when reviewing or debugging frontend changes (localhost:8080)
 - **Sequential Thinking** — when reasoning through architectural trade-offs for ADRs
+- **Snyk** — when adding new dependencies (package health check), during code review (SAST scan), and when auditing dependency vulnerabilities
 
 ## Subagent Routing
 Claude Code routes to these agents automatically when the situation matches:
@@ -94,13 +105,26 @@ Claude Code routes to these agents automatically when the situation matches:
 | Situation | Agent | Model | MCP |
 |-----------|-------|-------|-----|
 | Before structural change (new dep, pipeline node, output format, model routing) | `adr-writer` | opus | Sequential Thinking |
-| After running `python -m backend.evals compare` | `eval-judge` | opus | — |
-| When iterating on any prompt in `backend/prompts/` | `prompt-optimizer` | opus | — |
-| When adding new service or pipeline files | `test-writer` | sonnet | — |
-| When `make test` produces failures | `debug-detective` | sonnet | Playwright |
-| Before committing (update mk-docs pages for staged changes) | `docs-writer` | sonnet | Context7 |
-| Before committing any changes (code quality check) | `code-reviewer` | sonnet | Playwright |
-| Before using any external library or API | `research-assistant` | haiku | Context7 |
+| After running `python -m backend.evals compare` | `eval-judge` | opus | Sequential Thinking |
+| When iterating on any prompt in `backend/prompts/` | `prompt-optimizer` | opus | Sequential Thinking |
+| After every wave of implementation (write + verify tests) | `test-writer` | sonnet | Context7 |
+| After every wave of implementation (quality + lint + architecture + Snyk scan) | `code-reviewer` | sonnet | Playwright, Context7, Snyk |
+| When `make test` produces failures | `debug-detective` | sonnet | Playwright, Context7 |
+| Before committing (update mk-docs, CHANGELOG, PM-Docs, AGENTS.md counts, PROGRESS.md, llms.txt) | `docs-writer` | sonnet | Context7, Playwright |
+| Before using any external library or API (includes security assessment) | `research-assistant` | haiku | Context7, Sequential Thinking, Snyk |
+
+### Wave Protocol
+A "wave" is any completed unit of work — a feature, fix, refactor, phase, or version milestone. After completing each wave, run agents in this order:
+1. **`test-writer`** — write/update tests for the changed code
+2. **`code-reviewer`** — review quality, lint, architecture (skip Snyk scan per-wave)
+3. Fix any blocking issues found by the reviewer
+4. **`docs-writer`** — update documentation (run once before commit, not per-wave unless docs-heavy)
+
+**Pre-commit** (after all waves are done):
+5. **`code-reviewer`** with Snyk enabled — `snyk_code_scan` + `snyk_test` (if deps changed)
+
+**Snyk budget**: ~100 free tests/month. Reserve for pre-commit scans and new dependency evaluations.
+Do NOT run Snyk on every wave — use ruff + manual security checklist for per-wave reviews.
 
 ## Version Management
 - Use `cz commit` for all commits (conventional commit format, enforced by pre-commit hook)

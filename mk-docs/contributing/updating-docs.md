@@ -5,7 +5,7 @@ This project uses [MkDocs](https://www.mkdocs.org/) with the [Material theme](ht
 ## Setup
 
 ```bash
-pip install -e ".[docs]"
+uv sync --all-extras
 ```
 
 ## Local Preview

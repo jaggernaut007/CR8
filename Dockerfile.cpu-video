@@ -1,0 +1,89 @@
+# Dockerfile.cpu-video — CR8 CPU Video Service
+# Deployed to Cloud Run with: --cpu=8 --memory=32Gi
+# No GPU, no CUDA, no custom ffmpeg — uses stock apt ffmpeg with libx264.
+#
+# Build:  docker buildx build --platform linux/amd64 -f Dockerfile.cpu-video -t cr8-cpu-video .
+# Run:    docker run -p 8081:8080 cr8-cpu-video
+
+# ---- Stage 1: Python builder ----
+FROM python:3.11-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libsndfile1-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    "kokoro>=0.9" \
+    "moviepy>=2.0" \
+    "soundfile>=0.12" \
+    "fastapi>=0.115" \
+    "uvicorn[standard]>=0.34" \
+    "gunicorn>=22.0" \
+    "pydantic-settings>=2.0" \
+    "google-cloud-storage>=2.14" \
+    "requests>=2.31" \
+    "langsmith>=0.2"
+
+# Pre-download Kokoro model + voice file so runtime needs no HuggingFace access.
+# Cloud Run blocks outbound connections to HuggingFace Hub at runtime.
+ENV HF_HOME=/opt/hf_cache
+RUN python -c "\
+from kokoro import KPipeline; \
+p = KPipeline(lang_code='a', device='cpu'); \
+p.load_voice('af_heart'); \
+print('Kokoro model + voice cached successfully')"
+
+
+# ---- Stage 2: Runtime ----
+FROM python:3.11-slim AS runtime
+
+# Stock ffmpeg (with libx264), espeak-ng for Kokoro, libsndfile for soundfile
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    espeak-ng \
+    libsndfile1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /opt/hf_cache /opt/hf_cache
+
+ENV PATH="/opt/venv/bin:$PATH" \
+    HF_HOME="/opt/hf_cache" \
+    IMAGEIO_FFMPEG_EXE="/usr/bin/ffmpeg" \
+    TOKENIZERS_PARALLELISM="false" \
+    VIDEO_DEVICE="cpu"
+
+WORKDIR /app
+
+# Copy backend service files needed by the worker
+COPY backend/__init__.py backend/__init__.py
+COPY backend/config.py backend/config.py
+COPY backend/services/__init__.py backend/services/__init__.py
+COPY backend/services/tts_engine.py backend/services/tts_engine.py
+COPY backend/services/video_builder.py backend/services/video_builder.py
+COPY backend/services/gpu_utils.py backend/services/gpu_utils.py
+COPY backend/services/script_parser.py backend/services/script_parser.py
+
+# Copy the CPU video service package
+COPY cpu_video_service/ ./cpu_video_service/
+
+RUN mkdir -p /app/workdir
+
+EXPOSE 8080
+
+# Single gunicorn worker — one concurrent video job at a time
+CMD ["gunicorn", "cpu_video_service.app:app", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--workers", "1", \
+     "--bind", "0.0.0.0:8080", \
+     "--timeout", "3600", \
+     "--keep-alive", "65", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-"]

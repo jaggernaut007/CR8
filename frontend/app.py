@@ -3,183 +3,49 @@
 Provides a single-page web UI for uploading curriculum PDFs, launching
 the 3-agent pipeline in a background thread, polling for real-time
 progress, and downloading generated artifacts (PDF, PPT, scripts, videos).
+
+Route handlers are organized into separate modules:
+- ``frontend.auth_routes`` — JWT + legacy session auth
+- ``frontend.job_routes`` — upload, start, progress, cancel, download
+- ``frontend.quiz_routes`` — quiz stubs (Phase 4)
 """
 
-import asyncio
+import glob
 import logging
+import typing
 import os
 import re
-import secrets
+import shutil
 import sys
 import threading
 import time
-import uuid
-import zipfile
 from contextlib import asynccontextmanager
 
-import bcrypt
-from fastapi import FastAPI, Request, UploadFile, File
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse
-from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi.responses import HTMLResponse
 
 # Add project root to path so backend imports work
 PROJECT_ROOT = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, PROJECT_ROOT)
 
+from backend.config import settings  # noqa: E402
+from backend.pipeline.state import PipelineCancelledError  # noqa: E402
 from backend.run_pipeline import run_job  # noqa: E402
+from frontend.auth_routes import router as auth_router  # noqa: E402
+from frontend.job_routes import router as job_router  # noqa: E402
+from frontend.middleware import AuthMiddleware, SecurityHeadersMiddleware  # noqa: E402
+from frontend.quiz_routes import router as quiz_router  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
 UPLOAD_DIR = os.path.join(PROJECT_ROOT, "uploads")
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
 
-# ---------------------------------------------------------------------------
-# Auth — password hashing
-# ---------------------------------------------------------------------------
-
-# bcrypt hash computed once at startup from AUTH_PASSWORD env var.
-_AUTH_PASSWORD = os.environ.get("AUTH_PASSWORD", "CR8-AI")
-_PASSWORD_HASH: bytes = bcrypt.hashpw(_AUTH_PASSWORD.encode(), bcrypt.gensalt())
-
-# ---------------------------------------------------------------------------
-# Auth — session store (token -> expiry Unix timestamp)
-# ---------------------------------------------------------------------------
-
-_sessions: dict[str, float] = {}
-_sessions_lock = threading.Lock()
-SESSION_TTL = 8 * 3600  # 8 hours — covers a full working day session
-
-# ---------------------------------------------------------------------------
-# Auth — rate limiter (IP -> list of failed-attempt timestamps)
-# Sliding window: only attempts within the last LOCKOUT_WINDOW seconds count.
-# After 5 failed attempts, the IP is locked out for the remainder of the window.
-# ---------------------------------------------------------------------------
-
-_failed_attempts: dict[str, list[float]] = {}
-_failed_attempts_lock = threading.Lock()
-MAX_ATTEMPTS = 5
-LOCKOUT_WINDOW = 900.0  # 15-minute sliding window
-
-# ---------------------------------------------------------------------------
-# Auth — constants
-# ---------------------------------------------------------------------------
-
-_PUBLIC_PATHS = frozenset({"/login", "/api/auth/login", "/health"})
-JOB_ID_RE = re.compile(r"^[a-f0-9]{8}$")
-MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20 MB — sufficient for lecture PDFs/PPTXs
-# Set COOKIE_SECURE=false in .env for local HTTP development; defaults to True for production HTTPS.
-COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "true").lower() != "false"
-
-
-# ---------------------------------------------------------------------------
-# Auth — session helpers
-# ---------------------------------------------------------------------------
-
-def _create_session() -> str:
-    """Create a 256-bit cryptographically random session token and store it."""
-    token = secrets.token_hex(32)
-    expiry = time.time() + SESSION_TTL
-    with _sessions_lock:
-        _sessions[token] = expiry
-        # Evict expired sessions to prevent unbounded memory growth
-        now = time.time()
-        for t in [k for k, exp in _sessions.items() if exp < now]:
-            del _sessions[t]
-    return token
-
-
-def _is_valid_session(token: str | None) -> bool:
-    """Return True only if the token exists server-side and has not expired."""
-    if not token:
-        return False
-    with _sessions_lock:
-        expiry = _sessions.get(token)
-        if expiry is None:
-            return False
-        if time.time() > expiry:
-            del _sessions[token]
-            return False
-        return True
-
-
-def _invalidate_session(token: str) -> None:
-    with _sessions_lock:
-        _sessions.pop(token, None)
-
-
-# ---------------------------------------------------------------------------
-# Auth — rate limiter helpers
-# ---------------------------------------------------------------------------
-
-def _check_rate_limit(ip: str) -> bool:
-    """Return True if this IP is still allowed to attempt login."""
-    now = time.time()
-    with _failed_attempts_lock:
-        attempts = [t for t in _failed_attempts.get(ip, []) if now - t < LOCKOUT_WINDOW]
-        _failed_attempts[ip] = attempts
-        return len(attempts) < MAX_ATTEMPTS
-
-
-def _record_failed_attempt(ip: str) -> None:
-    now = time.time()
-    with _failed_attempts_lock:
-        attempts = [t for t in _failed_attempts.get(ip, []) if now - t < LOCKOUT_WINDOW]
-        attempts.append(now)
-        _failed_attempts[ip] = attempts
-
-
-# ---------------------------------------------------------------------------
-# Auth — middleware (registered LAST = outermost = runs before all routing)
-# ---------------------------------------------------------------------------
-
-class _AuthMiddleware(BaseHTTPMiddleware):
-    """Block every request that lacks a valid session, except public paths."""
-
-    async def dispatch(self, request: Request, call_next):
-        if request.url.path in _PUBLIC_PATHS:
-            return await call_next(request)
-
-        if _is_valid_session(request.cookies.get("cr8_session")):
-            return await call_next(request)
-
-        # Not authenticated
-        if request.url.path.startswith("/api/"):
-            return JSONResponse({"error": "Authentication required"}, status_code=401)
-        return RedirectResponse(url="/login", status_code=302)
-
-
-# ---------------------------------------------------------------------------
-# App setup
-# ---------------------------------------------------------------------------
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    yield
-
-
-app = FastAPI(title="CR8 Learning Pipeline", lifespan=lifespan)
-
-# Middleware order: last added = outermost (runs first on every request).
-# _AuthMiddleware must be outermost so it intercepts before any routing occurs.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.add_middleware(_AuthMiddleware)
-
-# In-memory job registry: job_id -> ProgressCapture
-jobs: dict[str, "ProgressCapture"] = {}
-
 
 # ---------------------------------------------------------------------------
 # Progress capture
 # ---------------------------------------------------------------------------
-
-from backend.pipeline.state import PipelineCancelledError  # noqa: E402
 
 
 class ProgressCapture:
@@ -197,24 +63,21 @@ class ProgressCapture:
     """
 
     # Approximate relative effort per stage (must sum to 100).
-    # Research dominates because each topic triggers 2 Tavily API calls + LLM.
-    STAGE_WEIGHTS = {
+    STAGE_WEIGHTS: typing.ClassVar[dict[str, int]] = {
         "Ingest": 10,
         "Research": 35,
         "Generate": 20,
         "Script": 10,
-        "Video": 25,  # Kokoro local TTS + ffmpeg composition is CPU-intensive
+        "Video": 25,
     }
 
     # Expected wall-clock seconds per stage (video-enabled, 5-topic run).
-    # Used by the frontend for stage-aware ETA calculation.
-    # Benchmarked 2026-03-04: M&A PDF (33 slides, 5 topics) on Mac MPS GPU.
-    STAGE_TIME_BUDGETS = {
-        "Ingest": 51,       # PDF parse + summarize + embed (51s measured)
-        "Research": 150,    # Tavily web search per topic (2m 29s measured)
-        "Generate": 140,    # LLM content gen + PDF/PPT build (2m 19s measured)
-        "Script": 14,       # Slide export PPTX→PNG (14s measured, included in generate)
-        "Video": 1690,      # TTS 7m7s + ffmpeg 21m = ~28m (MPS GPU measured)
+    STAGE_TIME_BUDGETS: typing.ClassVar[dict[str, int]] = {
+        "Ingest": 51,
+        "Research": 150,
+        "Generate": 140,
+        "Script": 14,
+        "Video": 1690,
     }
 
     def __init__(self):
@@ -230,22 +93,23 @@ class ProgressCapture:
         self.formats: list[str] = []
         self._lock = threading.Lock()
         self._original_stdout = sys.stdout
-        # Cancellation support
         self.cancel_requested = False
         self._cancel_at_boundary = False
         self.video_job_id: str | None = None
         self.gpu_progress: dict | None = None
 
     def is_cancelled(self) -> bool:
+        """Check if cancellation has been requested."""
         with self._lock:
             return self.cancel_requested
 
     def request_cancel(self) -> None:
+        """Request cancellation of this pipeline run."""
         with self._lock:
             self.cancel_requested = True
 
-    # Called by print() when stdout is redirected
     def write(self, text: str):
+        """Intercept stdout writes from the pipeline thread."""
         self._original_stdout.write(text)  # tee to console
         should_cancel = False
         with self._lock:
@@ -259,55 +123,54 @@ class ProgressCapture:
             raise PipelineCancelledError("Pipeline cancelled by user")
 
     def flush(self):
+        """Flush the underlying stdout."""
         self._original_stdout.flush()
 
-    def _parse_line(self, line: str):
-        # Match "[Research] Topic 3/8: ..." or "[Generate] Module 3/8: ..."
+    def _cumulative_weight(self, target_stage: str, fraction: float = 0.0) -> int:
+        """Calculate cumulative progress weight up to (and partially through) a stage."""
+        cumulative = 0
+        for s, w in self.STAGE_WEIGHTS.items():
+            if s == target_stage:
+                cumulative += int(w * fraction)
+                break
+            cumulative += w
+        return min(cumulative, 99)
+
+    def _parse_topic_progress(self, line: str) -> bool:
+        """Parse "[Stage] Topic X/Y" or "[Stage] Module X/Y" lines."""
         topic_match = re.match(r"\[(\w+)\]\s+(?:Topic|Module)\s+(\d+)/(\d+)", line)
-        if topic_match:
-            stage = topic_match.group(1)
-            current = int(topic_match.group(2))
-            total = int(topic_match.group(3))
-            sub_progress = current / total
-            cumulative = 0
-            for s, w in self.STAGE_WEIGHTS.items():
-                if s == stage:
-                    cumulative += int(w * sub_progress)
-                    break
-                cumulative += w
-            self.percent = min(cumulative, 99)
-            self.current_stage = stage
-            return
+        if not topic_match:
+            return False
+        stage = topic_match.group(1)
+        current = int(topic_match.group(2))
+        total = int(topic_match.group(3))
+        self.percent = self._cumulative_weight(stage, current / total)
+        self.current_stage = stage
+        return True
 
-        # Capture video errors/warnings for UI display
-        if line.startswith("[Video] ERROR:") or line.startswith("[Video] WARNING:"):
-            self.warnings.append(line)
-
-        # Capture GPU video job ID for cancel forwarding
+    def _parse_gpu_line(self, line: str) -> bool:
+        """Parse GPU-related progress lines ([Video] GPU_*)."""
         gpu_id_match = re.match(r"\[Video\] GPU_JOB_ID: (.+)", line)
         if gpu_id_match:
             self.video_job_id = gpu_id_match.group(1).strip()
-            return
+            return True
 
-        # GPU compose progress: [Video] GPU_COMPOSE: 3/5
         compose_match = re.match(r"\[Video\] GPU_COMPOSE: (\d+)/(\d+)", line)
         if compose_match:
             if self.gpu_progress is None:
                 self.gpu_progress = {}
             self.gpu_progress["completed_videos"] = int(compose_match.group(1))
             self.gpu_progress["total_videos"] = int(compose_match.group(2))
-            return
+            return True
 
-        # GPU TTS progress: [Video] GPU_TTS: 2/5
         tts_match = re.match(r"\[Video\] GPU_TTS: (\d+)/(\d+)", line)
         if tts_match:
             if self.gpu_progress is None:
                 self.gpu_progress = {}
             self.gpu_progress["current_topic"] = int(tts_match.group(1))
             self.gpu_progress["total_topics"] = int(tts_match.group(2))
-            return
+            return True
 
-        # GPU time: [Video] GPU_TIME: elapsed=120 eta=300
         time_match = re.match(r"\[Video\] GPU_TIME: elapsed=(\d+) eta=(\d+|\?)", line)
         if time_match:
             if self.gpu_progress is None:
@@ -315,26 +178,35 @@ class ProgressCapture:
             self.gpu_progress["elapsed_s"] = int(time_match.group(1))
             eta_val = time_match.group(2)
             self.gpu_progress["eta_s"] = int(eta_val) if eta_val != "?" else None
+            return True
+
+        return False
+
+    def _parse_line(self, line: str):
+        """Parse a single log line for progress information."""
+        if self._parse_topic_progress(line):
             return
 
-        # Match generic "[Ingest] ..." lines for stage transitions
+        if line.startswith(("[Video] ERROR:", "[Video] WARNING:")):
+            self.warnings.append(line)
+
+        if self._parse_gpu_line(line):
+            return
+
         stage_match = re.match(r"\[(\w+)\]", line)
         if stage_match:
             stage = stage_match.group(1)
             if stage in self.STAGE_WEIGHTS and stage != self.current_stage:
-                # Check cancellation at stage boundaries
                 if self.cancel_requested:
                     self._cancel_at_boundary = True
                 self.current_stage = stage
                 self.stage_start_time = time.time()
-                cumulative = 0
-                for s, w in self.STAGE_WEIGHTS.items():
-                    if s == stage:
-                        break
-                    cumulative += w
-                self.percent = min(cumulative, 99)
+                self.percent = self._cumulative_weight(stage)
 
     def get_state(self) -> dict:
+        """Return the current progress state as a JSON-serializable dict."""
+        from frontend.job_routes import _collect_output_files
+
         with self._lock:
             effective_status = self.status
             if self.cancel_requested and self.status == "running":
@@ -368,88 +240,124 @@ class ProgressCapture:
 
 def _cleanup_partial_audio(result: dict) -> None:
     """Remove ``_audio_*`` temp directories left by cancelled video builds."""
-    import glob
-    import shutil
-
     video_dir = result.get("video_dir") if result else None
     if not video_dir or not os.path.isdir(video_dir):
         return
+    import contextlib
     for audio_dir in glob.glob(os.path.join(video_dir, "_audio_*")):
-        try:
+        with contextlib.suppress(OSError):
             shutil.rmtree(audio_dir)
-        except OSError:
-            pass
+
+
+def _handle_pipeline_result(capture: ProgressCapture, result: dict) -> None:
+    """Store a successful pipeline result in the capture."""
+    with capture._lock:
+        capture.result = result
+        capture.percent = 100
+        capture.status = "complete"
+
+
+def _handle_pipeline_error(capture: ProgressCapture, error: Exception, old_stdout) -> None:
+    """Store an error in the capture and print traceback."""
+    import traceback
+    with capture._lock:
+        capture.status = "error"
+        capture.error = str(error)
+    traceback.print_exc(file=old_stdout)
 
 
 def _run_pipeline_sync(file_paths: list[str], formats: list[str], capture: ProgressCapture):
-    """Runs the pipeline with stdout redirected to capture."""
+    """Run the pipeline with stdout redirected to capture."""
     capture.formats = formats
     old_stdout = sys.stdout
     sys.stdout = capture  # type: ignore[assignment]
     try:
         result = run_job(file_paths, formats)
-        with capture._lock:
-            capture.result = result
-            capture.percent = 100
-            capture.status = "complete"
+        _handle_pipeline_result(capture, result)
     except PipelineCancelledError:
         with capture._lock:
             capture.status = "cancelled"
             capture.error = "Cancelled by user"
-            # Preserve partial results if any outputs were already generated
             if capture.result is None:
                 capture.result = {}
         _cleanup_partial_audio(capture.result)
     except Exception as e:
-        import traceback
-        with capture._lock:
-            capture.status = "error"
-            capture.error = str(e)
-        traceback.print_exc(file=old_stdout)
+        _handle_pipeline_error(capture, e, old_stdout)
     finally:
         sys.stdout = old_stdout
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# App lifespan (DB pool init/teardown)
 # ---------------------------------------------------------------------------
 
-def _collect_output_files(result: dict) -> list[dict]:
-    files = []
-    pdf_path = result.get("pdf_path", "")
-    if pdf_path and os.path.exists(pdf_path):
-        files.append({
-            "name": os.path.basename(pdf_path),
-            "type": "pdf",
-            "size": os.path.getsize(pdf_path),
-        })
-    ppt_path = result.get("ppt_path", "")
-    if ppt_path and os.path.exists(ppt_path):
-        files.append({
-            "name": os.path.basename(ppt_path),
-            "type": "ppt",
-            "size": os.path.getsize(ppt_path),
-        })
-    video_dir = result.get("video_dir", "")
-    if video_dir:
-        scripts_dir = os.path.join(video_dir, "scripts")
-        if os.path.isdir(scripts_dir) and os.listdir(scripts_dir):
-            files.append({"name": "video_scripts.zip", "type": "scripts", "size": 0})
-        mp4s = [f for f in os.listdir(video_dir) if f.endswith(".mp4")] if os.path.isdir(video_dir) else []
-        if mp4s:
-            files.append({"name": "videos.zip", "type": "videos", "size": 0})
-    return files
+
+async def _init_db_pool():
+    """Initialize the database pool and run schema if DATABASE_URL is set."""
+    if not settings.database_url:
+        logger.info("No DATABASE_URL — running without database")
+        return None
+    try:
+        from backend.db.connection import init_pool, run_schema
+
+        pool = await init_pool(settings.database_url)
+        await run_schema(pool)
+        logger.info("Database pool initialized")
+
+        from backend.services import db_client
+
+        stale_count = await db_client.mark_stale_jobs_as_error(pool)
+        if stale_count:
+            logger.warning("Marked %d stale jobs as error on startup", stale_count)
+        return pool
+    except Exception:
+        logger.warning("Database connection failed — running without DB", exc_info=True)
+        return None
 
 
-def _zip_directory(dir_path: str, zip_path: str, extension: str | None = None):
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for root, _dirs, files in os.walk(dir_path):
-            for f in files:
-                if extension and not f.endswith(extension):
-                    continue
-                filepath = os.path.join(root, f)
-                arcname = os.path.relpath(filepath, dir_path)
-                zf.write(filepath, arcname)
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    """Initialize resources on startup, clean up on shutdown."""
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+    pool = await _init_db_pool()
+    application.state.db_pool = pool
+
+    yield
+
+    if pool is not None:
+        from backend.db.connection import close_pool
+
+        await close_pool(pool)
+        logger.info("Database pool closed")
+
+
+# ---------------------------------------------------------------------------
+# App creation
+# ---------------------------------------------------------------------------
+
+app = FastAPI(title="CR8 Learning Pipeline", lifespan=lifespan)
+
+# In-memory job registry: job_id -> ProgressCapture
+app.state.jobs = {}
+
+# Parse allowed origins from config
+_allowed_origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
+
+# Middleware order: last added = outermost (runs first).
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allowed_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(AuthMiddleware)
+
+# Mount route modules
+app.include_router(auth_router)
+app.include_router(job_router)
+app.include_router(quiz_router)
 
 
 # ---------------------------------------------------------------------------
@@ -459,231 +367,50 @@ def _zip_directory(dir_path: str, zip_path: str, extension: str | None = None):
 @app.get("/health")
 async def health():
     """Health check endpoint for Cloud Run readiness probes."""
+    jobs = app.state.jobs
     active_jobs = sum(1 for j in jobs.values() if j.status == "running")
     return {"status": "ok", "active_jobs": active_jobs}
 
 
 # ---------------------------------------------------------------------------
-# Auth routes (public)
+# Static files + SPA catch-all (React) or legacy Jinja2 fallback
 # ---------------------------------------------------------------------------
 
-@app.get("/login", response_class=HTMLResponse)
-async def login_page():
-    """Serve the login page."""
-    html_path = os.path.join(TEMPLATE_DIR, "login.html")
-    with open(html_path) as f:
-        return HTMLResponse(content=f.read())
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+_HAS_REACT_BUILD = os.path.isfile(os.path.join(STATIC_DIR, "index.html"))
 
+if _HAS_REACT_BUILD:
+    from fastapi.staticfiles import StaticFiles
 
-@app.post("/api/auth/login")
-async def login(request: Request, body: dict):
-    """Validate password and issue a session cookie."""
-    ip = request.client.host if request.client else "unknown"
+    # Serve React static assets (JS, CSS, images)
+    app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
 
-    if not _check_rate_limit(ip):
-        return JSONResponse(
-            {"error": "Too many failed attempts. Try again in 15 minutes."},
-            status_code=429,
-        )
+    @app.get("/{full_path:path}", response_class=HTMLResponse)
+    async def spa_catch_all(full_path: str):
+        """Serve React SPA for all non-API routes."""
+        index_path = os.path.join(STATIC_DIR, "index.html")
+        with open(index_path) as f:
+            return HTMLResponse(content=f.read())
+else:
+    # Legacy Jinja2 templates (kept during transition to React)
+    @app.get("/login", response_class=HTMLResponse)
+    async def login_page():
+        """Serve the login page."""
+        html_path = os.path.join(TEMPLATE_DIR, "login.html")
+        with open(html_path) as f:
+            return HTMLResponse(content=f.read())
 
-    password = body.get("password", "")
-    if not password or not bcrypt.checkpw(password.encode(), _PASSWORD_HASH):
-        _record_failed_attempt(ip)
-        logger.warning("Failed login attempt from %s", ip)
-        return JSONResponse({"error": "Incorrect password. Please try again."}, status_code=401)
-
-    token = _create_session()
-    response = JSONResponse({"status": "ok"})
-    response.set_cookie(
-        key="cr8_session",
-        value=token,
-        httponly=True,
-        samesite="lax",
-        secure=COOKIE_SECURE,
-        max_age=SESSION_TTL,
-    )
-    return response
-
-
-@app.post("/api/auth/logout")
-async def logout(request: Request):
-    """Invalidate the current session and clear the cookie."""
-    token = request.cookies.get("cr8_session")
-    if token:
-        _invalidate_session(token)
-    response = RedirectResponse(url="/login", status_code=302)
-    response.delete_cookie("cr8_session")
-    return response
+    @app.get("/", response_class=HTMLResponse)
+    async def index():
+        """Serve the single-page HTML frontend."""
+        html_path = os.path.join(TEMPLATE_DIR, "index.html")
+        with open(html_path) as f:
+            return HTMLResponse(content=f.read())
 
 
 # ---------------------------------------------------------------------------
-# Protected routes
+# Entry point
 # ---------------------------------------------------------------------------
-
-@app.get("/", response_class=HTMLResponse)
-async def index():
-    """Serve the single-page HTML frontend."""
-    html_path = os.path.join(TEMPLATE_DIR, "index.html")
-    with open(html_path) as f:
-        return HTMLResponse(content=f.read())
-
-
-@app.post("/api/upload")
-async def upload(file: UploadFile = File(...)):
-    """Upload a curriculum file (PDF or PPTX) and receive a job ID.
-
-    Validates file extension, magic bytes, and size before saving.
-    """
-    # Extension check
-    if not file.filename:
-        return JSONResponse({"error": "Please upload a PDF or PPTX file"}, status_code=400)
-    ext = file.filename.lower().rsplit(".", 1)[-1] if "." in file.filename else ""
-    if ext not in ("pdf", "pptx"):
-        return JSONResponse({"error": "Please upload a PDF or PPTX file"}, status_code=400)
-
-    content = await file.read()
-
-    # File size limit
-    if len(content) > MAX_UPLOAD_BYTES:
-        return JSONResponse({"error": "File too large (max 20 MB)"}, status_code=413)
-
-    # Magic bytes — verify file content matches its extension
-    if ext == "pdf" and not content.startswith(b"%PDF-"):
-        return JSONResponse({"error": "File is not a valid PDF"}, status_code=400)
-    if ext == "pptx" and not content.startswith(b"PK\x03\x04"):
-        return JSONResponse({"error": "File is not a valid PPTX"}, status_code=400)
-
-    # Sanitize filename to prevent path traversal
-    safe_filename = os.path.basename(file.filename)
-    safe_filename = re.sub(r"[^\w\-.]", "_", safe_filename) or "upload.pdf"
-
-    job_id = uuid.uuid4().hex[:8]
-    job_dir = os.path.join(UPLOAD_DIR, job_id)
-    os.makedirs(job_dir, exist_ok=True)
-
-    filepath = os.path.join(job_dir, safe_filename)
-    with open(filepath, "wb") as f:
-        f.write(content)
-
-    logger.info("Upload: job=%s file=%s size=%d", job_id, safe_filename, len(content))
-    return {"job_id": job_id, "filename": safe_filename}
-
-
-@app.post("/api/start")
-async def start(body: dict):
-    """Start the pipeline for a previously uploaded job."""
-    job_id = body.get("job_id")
-    formats = body.get("formats", ["pdf"])
-
-    if not job_id or not JOB_ID_RE.match(str(job_id)):
-        return JSONResponse({"error": "Invalid job_id"}, status_code=400)
-
-    # Reject if a job is already running
-    for jid, cap in jobs.items():
-        if cap.status == "running":
-            return JSONResponse(
-                {"error": f"A job is already running (job {jid}). Please wait."},
-                status_code=409,
-            )
-
-    job_dir = os.path.join(UPLOAD_DIR, job_id)
-    if not os.path.exists(job_dir):
-        return JSONResponse({"error": "Job not found. Upload a file first."}, status_code=404)
-
-    input_files = [
-        os.path.join(job_dir, f) for f in os.listdir(job_dir)
-        if f.lower().endswith((".pdf", ".pptx"))
-    ]
-    if not input_files:
-        return JSONResponse({"error": "No PDF or PPTX found for this job"}, status_code=404)
-
-    capture = ProgressCapture()
-    jobs[job_id] = capture
-    logger.info("Starting pipeline: job=%s formats=%s files=%d", job_id, formats, len(input_files))
-
-    asyncio.get_running_loop().run_in_executor(
-        None, _run_pipeline_sync, input_files, formats, capture
-    )
-
-    return {"status": "running"}
-
-
-@app.get("/api/progress/{job_id}")
-async def progress(job_id: str):
-    """Poll the current progress of a running pipeline job."""
-    if not JOB_ID_RE.match(job_id):
-        return JSONResponse({"error": "Invalid job_id"}, status_code=400)
-
-    capture = jobs.get(job_id)
-    if not capture:
-        return JSONResponse({"error": "Job not found"}, status_code=404)
-    return capture.get_state()
-
-
-@app.post("/api/cancel/{job_id}")
-async def cancel(job_id: str):
-    """Cancel a running pipeline job."""
-    if not JOB_ID_RE.match(job_id):
-        return JSONResponse({"error": "Invalid job_id"}, status_code=400)
-
-    capture = jobs.get(job_id)
-    if not capture:
-        return JSONResponse({"error": "Job not found"}, status_code=404)
-
-    if capture.status in ("complete", "error", "cancelled"):
-        return JSONResponse(
-            {"error": f"Job already {capture.status}"},
-            status_code=409,
-        )
-
-    capture.request_cancel()
-
-    # The pipeline thread's poll loop (GPU) or build loop (local CPU) checks
-    # capture.is_cancelled() every iteration and will cancel the active GPU
-    # job on the correct region before re-raising PipelineCancelledError.
-
-    return {"status": "cancelling"}
-
-
-@app.get("/api/download/{job_id}/{file_type}")
-async def download(job_id: str, file_type: str):
-    """Download a generated artifact from a completed job."""
-    if not JOB_ID_RE.match(job_id):
-        return JSONResponse({"error": "Invalid job_id"}, status_code=400)
-
-    capture = jobs.get(job_id)
-    if not capture or not capture.result:
-        return JSONResponse({"error": "Job not found or not complete"}, status_code=404)
-
-    result = capture.result
-
-    if file_type == "pdf":
-        pdf_path = result.get("pdf_path", "")
-        if pdf_path and os.path.exists(pdf_path):
-            return FileResponse(pdf_path, filename=os.path.basename(pdf_path))
-
-    elif file_type == "ppt":
-        ppt_path = result.get("ppt_path", "")
-        if ppt_path and os.path.exists(ppt_path):
-            return FileResponse(ppt_path, filename=os.path.basename(ppt_path))
-
-    elif file_type == "scripts":
-        video_dir = result.get("video_dir", "")
-        scripts_dir = os.path.join(video_dir, "scripts")
-        if os.path.isdir(scripts_dir):
-            zip_path = scripts_dir.rstrip("/") + ".zip"
-            _zip_directory(scripts_dir, zip_path)
-            return FileResponse(zip_path, filename="video_scripts.zip")
-
-    elif file_type == "videos":
-        video_dir = result.get("video_dir", "")
-        if os.path.isdir(video_dir):
-            zip_path = video_dir.rstrip("/") + "_videos.zip"
-            _zip_directory(video_dir, zip_path, extension=".mp4")
-            return FileResponse(zip_path, filename="videos.zip")
-
-    return JSONResponse({"error": "File not found"}, status_code=404)
-
 
 if __name__ == "__main__":
     import uvicorn

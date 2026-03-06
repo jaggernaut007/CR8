@@ -2,6 +2,85 @@
 
 > **See also**: [Services Reference](services/index.md) and [Prompt Templates](agents/prompts.md) — Complete technical reference for all builders, prompts, and eval checks.
 
+## v0.5.1 — Foundation: DB + JWT Auth + Route Restructure + Test Optimization
+
+**Summary**: Migrated to uv package manager. Added asyncpg database layer (8 tables), JWT auth service (PyJWT + bcrypt), refactored frontend/app.py from 693→320 lines into 4 route modules + middleware. Added SPA catch-all, configurable upload size, and pytest-xdist parallel testing (802 tests in ~42s, 4.1x speedup). Grew test suite from 626 → 802 tests (+176).
+
+---
+
+### Added — Route Modules (Wave 3)
+
+| Module | Purpose |
+|--------|---------|
+| `frontend/middleware.py` | `AuthMiddleware`, `SecurityHeadersMiddleware`, `get_current_user()` dependency, in-memory rate limiter (5 failures / 15 min per IP), session store |
+| `frontend/auth_routes.py` | `/api/auth/*` — JWT register/login/refresh/me/logout + legacy session login |
+| `frontend/job_routes.py` | `/api/upload`, `/api/start`, `/api/progress/{job_id}`, `/api/cancel/{job_id}`, `/api/download/{job_id}/{type}`, `/api/jobs`, `/api/jobs/{job_id}` |
+| `frontend/quiz_routes.py` | `/api/quiz/*` — stubs returning 501 (reserved for Phase 4) |
+
+`frontend/app.py` is now responsible for app creation, lifespan, CORS/middleware wiring, and health check only. All route logic has moved to the modules above.
+
+### Added — Security (Wave 3)
+
+- **`SecurityHeadersMiddleware`** — Injects `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, and a `Content-Security-Policy` header on every response.
+- **`AuthMiddleware`** — Enforces authentication on all paths except `/login`, `/api/auth/login`, `/api/auth/register`, `/health`, and `/static/`. Unauthenticated requests to protected paths receive HTTP 401.
+- **CORS scoped** — `allowed_origins` is now read from `settings.allowed_origins` (env var `ALLOWED_ORIGINS`, comma-separated). The wildcard `["*"]` origin has been removed.
+- **DB pool lifecycle** — `app.lifespan` initialises an asyncpg connection pool on startup when `DATABASE_URL` is set and closes it cleanly on shutdown. Auth routes that require a DB return `503 Database not available` when the pool is absent (local dev without Neon).
+
+### Added — Auth Routes (Wave 3)
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/auth/register` | Create account (email + password, min 6 chars); requires `DATABASE_URL`. Returns 201 with `access_token` + sets `cr8_refresh` httponly cookie. |
+| `POST /api/auth/login` | JWT mode (email + password): returns access token + refresh cookie. Legacy mode (password only): sets `cr8_session` cookie for Jinja2 UI. |
+| `POST /api/auth/refresh` | Issues new access token from `cr8_refresh` cookie. |
+| `GET /api/auth/me` | Returns `{user_id, email, role}` for the authenticated caller. |
+| `POST /api/auth/logout` | Invalidates session and clears cookies; returns 204. |
+
+Dual auth: `get_current_user()` tries JWT Bearer first, then falls back to the `cr8_session` legacy cookie. JWT access tokens are short-lived; refresh tokens are httponly, path-scoped to `/api/auth/refresh`.
+
+### Added — Playwright E2E Testing (Wave 4)
+
+17 end-to-end scenarios validated via Playwright MCP against the running dev server:
+
+| Scenario group | What was verified |
+|----------------|-------------------|
+| Health check | `GET /health` returns 200 with `{"status": "ok"}` |
+| Security headers | All four security headers present on every response |
+| Auth redirect | Unauthenticated requests to `/` redirect to `/login` |
+| Login / logout | Correct password issues session; wrong password returns 401; logout clears cookie |
+| Upload — valid PDF | PDF accepted; `job_id` returned |
+| Upload — invalid file | Non-PDF rejected with HTTP 400 |
+| Rate limiting | Six rapid failed login attempts triggers HTTP 429 |
+| Quiz stubs | All quiz endpoints return HTTP 501 |
+| Job validation | `/api/start` with missing `job_id` returns 422 |
+| DB-less mode | Auth routes return 503 when `DATABASE_URL` is absent |
+
+### Changed (Wave 3)
+
+- `frontend/app.py`: reduced from ~693 lines to ~320 lines
+- CORS origins: `["*"]` replaced by `settings.allowed_origins` (env-configurable)
+
+### Test Suite — 626 → 687 Tests
+
+| New file | Tests | What it covers |
+|----------|-------|----------------|
+| `frontend/tests/test_auth_routes.py` | 49 | Register (201, 409, 400, 503, email normalisation), JWT login (200, 401, 429), legacy login, refresh (happy path, invalid token, no cookie), `/me` (JWT Bearer, legacy session, expired), logout (204, session invalidation), `get_current_user` (expired JWT, malformed header) |
+| `frontend/tests/test_quiz_routes.py` | 12 | All quiz stub endpoints return 501 with `error` key and "not yet implemented" message |
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `frontend/app.py` | Refactored: ~693 → ~320 lines; routes moved to sub-modules; middleware and CORS wired from new modules |
+| `frontend/middleware.py` | New — `AuthMiddleware`, `SecurityHeadersMiddleware`, `get_current_user()`, rate limiter, session store |
+| `frontend/auth_routes.py` | New — JWT + legacy auth routes |
+| `frontend/job_routes.py` | New — upload/start/progress/cancel/download/jobs routes |
+| `frontend/quiz_routes.py` | New — quiz stubs (501) |
+| `frontend/tests/test_auth_routes.py` | New — 49 auth tests |
+| `frontend/tests/test_quiz_routes.py` | New — 12 quiz stub tests |
+
+---
+
 ## [0.4.0] — 2026-03-04 — Kokoro Video Pipeline, GPU Service, Dual-Service Deployment
 
 **Summary**: Open-source Kokoro TTS video pipeline replaces the HeyGen placeholder. Videos can run locally (CPU/MPS/CUDA) or be offloaded to an NVIDIA L4 GPU microservice on Cloud Run via GCS. Dual-service deployment script, hardware-accelerated encoding, stage-aware ETA, security hardening, and 507-test suite.
@@ -45,7 +124,7 @@ Download MP4s from GCS <─────────────────  Upl
 - `_get_slide_images()` — videos now use generated PPT slides (was falling back to original PDF)
 
 ### Test Suite
-Total: **507 tests passing** (was 362). Covers GCS/GPU clients, video dispatch, GPU service worker/endpoints, script parser, TTS engine, file parser slide export, PPTX upload, video UI, stage-aware ETA, and video provider validation.
+Total: **626 tests passing** (was 362). Covers GCS/GPU clients, video dispatch, GPU service worker/endpoints, script parser, TTS engine, file parser slide export, PPTX upload, video UI, stage-aware ETA, and video provider validation.
 
 ---
 

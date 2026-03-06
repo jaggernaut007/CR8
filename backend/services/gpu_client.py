@@ -1,17 +1,23 @@
-"""HTTP client for the CR8 GPU video generation service.
+"""HTTP client for CR8 video generation services (GPU and CPU-video).
+
+Supports a 3-tier fallback chain:
+    Tier 1: GPU primary (europe-west4)
+    Tier 2: GPU fallback (europe-west1)
+    Tier 3: CPU-video (europe-west2)
 
 Usage:
-    from backend.services.gpu_client import GPUVideoClient
+    from backend.services.gpu_client import VideoServiceClient
 
-    gpu = GPUVideoClient()
-    video_job_id = gpu.submit_job("job123", "gs://cr8-jobs/job123")
-    result = gpu.poll_until_complete(video_job_id)
+    client = VideoServiceClient()
+    video_job_id = client.submit_job("job123", "gs://cr8-jobs/job123")
+    result = client.poll_until_complete(video_job_id)
 """
 
 from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 
 import requests
 
@@ -22,6 +28,13 @@ logger = logging.getLogger(__name__)
 # Polling defaults
 _DEFAULT_POLL_INTERVAL = 10  # seconds
 _DEFAULT_POLL_TIMEOUT = 3600  # 1 hour
+
+# Timeouts tuned for Cloud Run cold starts
+_HEALTH_TIMEOUT = 10  # Cloud Run cold start (2-5s) + app startup (3-5s)
+_SUBMIT_TIMEOUT = 60  # cold start + request processing
+_POLL_TIMEOUT = 15  # service is already warm during polling
+_CANCEL_TIMEOUT = 10
+_HTTP_OK = 200
 
 
 def _get_identity_token(audience: str) -> str | None:
@@ -40,17 +53,23 @@ def _get_identity_token(audience: str) -> str | None:
         return None
 
 
-class GPUVideoClient:
-    """Talks to the CR8 GPU video service over HTTP.
+class VideoServiceClient:
+    """Talks to CR8 video services (GPU or CPU-video) over HTTP.
 
-    Supports automatic failover to a fallback GPU service (e.g. europe-west1)
-    when the primary (e.g. europe-west4) is unavailable.
+    Iterates through an ordered list of service tiers on infrastructure
+    failures. Once a tier accepts a job, all subsequent polling stays
+    on that tier.
     """
 
-    def __init__(self, base_url: str | None = None, fallback_url: str | None = None):
-        self._primary_url = (base_url or settings.gpu_service_url).rstrip("/")
-        self._fallback_url = (fallback_url or settings.gpu_fallback_url).rstrip("/") or ""
-        self.base_url = self._primary_url
+    def __init__(
+        self,
+        base_url: str | None = None,
+        fallback_url: str | None = None,
+        cpu_video_url: str | None = None,
+    ):
+        self._tiers = _build_tier_list(base_url, fallback_url, cpu_video_url)
+        self._current_tier_idx = 0
+        self.base_url = self._tiers[0] if self._tiers else ""
 
     def _headers(self) -> dict[str, str]:
         """Build request headers, including auth token when available."""
@@ -60,88 +79,83 @@ class GPUVideoClient:
             headers["Authorization"] = f"Bearer {token}"
         return headers
 
-    def _try_fallback(self) -> bool:
-        """Switch to the fallback URL if available. Returns True if switched."""
-        if self._fallback_url and self.base_url != self._fallback_url:
-            logger.warning(
-                "Primary GPU service unavailable, trying fallback: %s",
-                self._fallback_url,
-            )
-            self.base_url = self._fallback_url
+    def _try_next_tier(self) -> bool:
+        """Advance to the next tier. Returns True if a new tier is available."""
+        next_idx = self._current_tier_idx + 1
+        if next_idx < len(self._tiers):
+            self._current_tier_idx = next_idx
+            self.base_url = self._tiers[next_idx]
+            logger.warning("Falling back to tier %d: %s", next_idx + 1, self.base_url)
             return True
         return False
 
     def is_available(self) -> bool:
-        """Return True if the GPU service healthcheck responds 200.
+        """Return True if any video service healthcheck responds 200.
 
-        Tries the primary first, then the fallback.
+        Tries each tier in order.
         """
-        try:
-            resp = requests.get(
-                f"{self.base_url}/health",
-                headers=self._headers(),
-                timeout=5,
-            )
-            if resp.status_code == 200:
-                return True
-        except Exception:
-            pass
-
-        # Try fallback
-        if self._try_fallback():
+        for idx, url in enumerate(self._tiers):
             try:
                 resp = requests.get(
-                    f"{self.base_url}/health",
-                    headers=self._headers(),
-                    timeout=5,
+                    f"{url}/health",
+                    headers=self._headers_for(url),
+                    timeout=_HEALTH_TIMEOUT,
                 )
-                return resp.status_code == 200
+                if resp.status_code == _HTTP_OK:
+                    self._current_tier_idx = idx
+                    self.base_url = url
+                    return True
             except Exception:
-                pass
-
+                continue
         return False
 
     def submit_job(self, job_id: str, gcs_prefix: str) -> str:
         """Submit a video generation job. Returns the ``video_job_id``.
 
-        Falls back to the secondary GPU region on connection/server errors.
+        Tries each tier on infrastructure errors (ConnectionError, Timeout, 5xx).
         """
-        try:
-            return self._do_submit(job_id, gcs_prefix)
-        except (requests.ConnectionError, requests.Timeout, requests.HTTPError) as exc:
-            if self._try_fallback():
-                logger.info("Retrying submit on fallback after: %s", exc)
+        last_exc = None
+        for idx in range(self._current_tier_idx, len(self._tiers)):
+            url = self._tiers[idx]
+            try:
+                self._current_tier_idx = idx
+                self.base_url = url
                 return self._do_submit(job_id, gcs_prefix)
-            raise
+            except (requests.ConnectionError, requests.Timeout, requests.HTTPError) as exc:
+                last_exc = exc
+                logger.warning("Tier %d (%s) failed: %s", idx + 1, url, exc)
+                continue
+        raise last_exc or RuntimeError("No video service tiers configured")
 
     def _do_submit(self, job_id: str, gcs_prefix: str) -> str:
+        """POST to the current tier's video-jobs endpoint."""
         resp = requests.post(
             f"{self.base_url}/api/v1/video-jobs",
             json={"job_id": job_id, "gcs_prefix": gcs_prefix},
             headers=self._headers(),
-            timeout=30,
+            timeout=_SUBMIT_TIMEOUT,
         )
         resp.raise_for_status()
         data = resp.json()
         video_job_id = data["video_job_id"]
-        logger.info("GPU job submitted to %s: %s", self.base_url, video_job_id)
+        logger.info("Video job submitted to %s: %s", self.base_url, video_job_id)
         return video_job_id
 
     def cancel_job(self, video_job_id: str) -> bool:
-        """Cancel a running GPU video job. Best-effort — returns True on success."""
+        """Cancel a running video job. Best-effort — returns True on success."""
         try:
             resp = requests.post(
                 f"{self.base_url}/api/v1/video-jobs/{video_job_id}/cancel",
                 headers=self._headers(),
-                timeout=10,
+                timeout=_CANCEL_TIMEOUT,
             )
             if resp.status_code in (200, 409):
-                logger.info("GPU job cancel sent: %s (status=%s)", video_job_id, resp.status_code)
+                logger.info("Video job cancel sent: %s (status=%s)", video_job_id, resp.status_code)
                 return True
             resp.raise_for_status()
             return True
         except Exception:
-            logger.warning("Failed to cancel GPU job %s", video_job_id, exc_info=True)
+            logger.warning("Failed to cancel video job %s", video_job_id, exc_info=True)
             return False
 
     def poll_until_complete(
@@ -149,9 +163,9 @@ class GPUVideoClient:
         video_job_id: str,
         interval: int = _DEFAULT_POLL_INTERVAL,
         timeout: int = _DEFAULT_POLL_TIMEOUT,
-        cancel_check: "callable | None" = None,
+        cancel_check: Callable[[], None] | None = None,
     ) -> dict:
-        """Poll the GPU service until the job completes or fails.
+        """Poll the video service until the job completes or fails.
 
         Prints structured ``[Video] GPU_*`` lines so the CPU-side
         ProgressCapture can track video-stage progress.
@@ -164,12 +178,11 @@ class GPUVideoClient:
             The final job status dict on success.
 
         Raises:
-            RuntimeError: If the GPU service reports an error or is cancelled.
+            RuntimeError: If the service reports an error or is cancelled.
             TimeoutError: If the job does not complete within *timeout* seconds.
         """
         elapsed = 0
         while elapsed < timeout:
-            # Check for user cancellation — cancel the GPU job before re-raising
             if cancel_check:
                 try:
                     cancel_check()
@@ -180,49 +193,76 @@ class GPUVideoClient:
             resp = requests.get(
                 f"{self.base_url}/api/v1/video-jobs/{video_job_id}",
                 headers=self._headers(),
-                timeout=15,
+                timeout=_POLL_TIMEOUT,
             )
             resp.raise_for_status()
             status = resp.json()
 
             job_status = status.get("status")
             if job_status == "complete":
-                logger.info("GPU job %s complete", video_job_id)
+                logger.info("Video job %s complete", video_job_id)
                 return status
             if job_status == "error":
                 error_msg = status.get("error", "unknown error")
-                raise RuntimeError(f"GPU video job failed: {error_msg}")
+                raise RuntimeError(f"Video job failed: {error_msg}")
             if job_status == "cancelled":
-                raise RuntimeError("GPU video job was cancelled")
+                raise RuntimeError("Video job was cancelled")
 
-            # Emit structured progress lines for ProgressCapture
-            progress = status.get("progress", {})
-            phase = progress.get("phase", "unknown")
-            pct = progress.get("percent", 0)
-            print(f"[Video] GPU: {phase} ({pct}%)")
-
-            # Per-video compose progress
-            completed = progress.get("completed_videos")
-            total_v = progress.get("total_videos")
-            if completed is not None and total_v is not None:
-                print(f"[Video] GPU_COMPOSE: {completed}/{total_v}")
-
-            # TTS topic progress
-            current_topic = progress.get("current_topic")
-            total_topics = progress.get("total_topics")
-            if current_topic is not None and total_topics is not None:
-                print(f"[Video] GPU_TTS: {current_topic}/{total_topics}")
-
-            # Elapsed/ETA
-            elapsed_s = progress.get("elapsed_s") or status.get("elapsed_s")
-            eta_s = progress.get("eta_s")
-            if elapsed_s is not None:
-                eta_str = str(eta_s) if eta_s is not None else "?"
-                print(f"[Video] GPU_TIME: elapsed={elapsed_s} eta={eta_str}")
+            _emit_progress(status)
 
             time.sleep(interval)
             elapsed += interval
 
         raise TimeoutError(
-            f"GPU video job {video_job_id} not complete after {timeout}s"
+            f"Video job {video_job_id} not complete after {timeout}s"
         )
+
+    def _headers_for(self, url: str) -> dict[str, str]:
+        """Build headers with an identity token scoped to a specific URL."""
+        headers: dict[str, str] = {"Content-Type": "application/json"}
+        token = _get_identity_token(url)
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        return headers
+
+
+# Backward-compatible alias
+GPUVideoClient = VideoServiceClient
+
+
+def _build_tier_list(
+    base_url: str | None,
+    fallback_url: str | None,
+    cpu_video_url: str | None,
+) -> list[str]:
+    """Build an ordered list of service URLs, skipping empty values."""
+    candidates = [
+        (base_url or settings.gpu_service_url).rstrip("/"),
+        (fallback_url or settings.gpu_fallback_url).rstrip("/"),
+        (cpu_video_url or settings.cpu_video_service_url).rstrip("/"),
+    ]
+    return [url for url in candidates if url]
+
+
+def _emit_progress(status: dict) -> None:
+    """Print structured progress lines for ProgressCapture."""
+    progress = status.get("progress", {})
+    phase = progress.get("phase", "unknown")
+    pct = progress.get("percent", 0)
+    print(f"[Video] GPU: {phase} ({pct}%)")  # noqa: T201
+
+    completed = progress.get("completed_videos")
+    total_v = progress.get("total_videos")
+    if completed is not None and total_v is not None:
+        print(f"[Video] GPU_COMPOSE: {completed}/{total_v}")  # noqa: T201
+
+    current_topic = progress.get("current_topic")
+    total_topics = progress.get("total_topics")
+    if current_topic is not None and total_topics is not None:
+        print(f"[Video] GPU_TTS: {current_topic}/{total_topics}")  # noqa: T201
+
+    elapsed_s = progress.get("elapsed_s") or status.get("elapsed_s")
+    eta_s = progress.get("eta_s")
+    if elapsed_s is not None:
+        eta_str = str(eta_s) if eta_s is not None else "?"
+        print(f"[Video] GPU_TIME: elapsed={elapsed_s} eta={eta_str}")  # noqa: T201

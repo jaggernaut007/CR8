@@ -19,8 +19,8 @@ L1: Structural Checks (free)     L2: LLM Judge (~$0.02/run)
 ## Quick Start
 
 ```bash
-# Install eval dependencies
-pip install -e ".[eval]"
+# Install all dependencies (includes eval extras)
+uv sync --all-extras
 
 # L1 structural checks only (free)
 python -m backend.evals.cli check --dataset cs224n

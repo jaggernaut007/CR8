@@ -44,6 +44,7 @@ class PipelineState(TypedDict):
         pdf_path: Path to the generated PDF learning guide.
         ppt_path: Path to the generated Gap Analysis PowerPoint.
         video_dir: Directory containing per-topic video files.
+        modules_md: Raw markdown strings for each generated learning module.
         current_stage: Label tracking which pipeline stage last completed.
     """
 
@@ -64,6 +65,7 @@ class PipelineState(TypedDict):
     ppt_path: str  # path to generated Gap Analysis PowerPoint
     video_dir: str  # directory containing per-topic video files (when --format video/both)
     slide_images: NotRequired[list[str]]  # slide PNGs for Kokoro video composition
+    modules_md: NotRequired[list[str]]  # raw markdown for each generated module
 
     # Runtime config (passed via state to avoid mutating global settings)
     output_formats: str  # comma-separated, e.g. "pdf,ppt,script"

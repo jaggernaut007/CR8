@@ -12,15 +12,14 @@
 # Clone the repository and navigate to the project root
 cd CR8-edtech
 
-# Create a virtual environment
-python -m venv .venv
-source .venv/bin/activate
+# Install uv (Astral package manager) if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install the package in editable mode with dev dependencies
+# Install all dependencies (creates .venv automatically)
 make install
 ```
 
-`make install` runs `pip install -e ".[dev]"`, which installs the package and all core + dev dependencies.
+`make install` runs `uv sync --all-extras`, which installs the package and all core + dev + eval + docs dependencies.
 
 ## Dependencies
 
@@ -61,11 +60,7 @@ Installed automatically with `make install` (via the `[dev]` extra):
 
 ### Eval (optional)
 
-Only needed if you plan to run the evaluation framework. Install with:
-
-```bash
-pip install -e ".[eval]"
-```
+Included automatically with `make install` (`uv sync --all-extras`).
 
 | Package | Version | Purpose |
 |---------|---------|---------|
@@ -75,11 +70,7 @@ pip install -e ".[eval]"
 
 ### Docs (optional)
 
-Only needed if you plan to build the documentation site locally. Install with:
-
-```bash
-pip install -e ".[docs]"
-```
+Included automatically with `make install` (`uv sync --all-extras`).
 
 | Package | Purpose |
 |---------|---------|

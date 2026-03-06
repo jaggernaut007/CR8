@@ -81,7 +81,7 @@ Full documentation lives in [`docs/`](docs/index.md):
 ### Preview docs locally
 
 ```bash
-pip install -e ".[docs]"
+make install      # uv sync --all-extras (includes docs deps)
 make docs-serve   # http://localhost:8000
 ```
 

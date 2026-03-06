@@ -23,6 +23,7 @@
 5. ~~We must be able to create a video of the slides created by the agent, a voice based video with the slides should be created. Use opensource technologies to create this video.~~
    - **Implemented (v0.4.0)**: Kokoro TTS local video pipeline — open-source, zero-cost. `VIDEO_PROVIDER=kokoro` chains: script parsing → Kokoro TTS (82M model, GPU-aware) → slide export (PyMuPDF/LibreOffice) → ffmpeg composition → MP4. Two-phase pipeline: sequential TTS → parallel ffmpeg. Hardware H.264 encoding (VideoToolbox/NVENC/QSV/AMF). GPU service offload via Cloud Run NVIDIA L4 + GCS data transfer. Videos are embeddable and downloadable. 507 tests passing.
 
+
 ## Upcoming
 
 6. Create a quiz-based website for the content created by the agent (→ v0.5)
@@ -32,3 +33,6 @@
 10. Improve image/graphic generation for PPT slides (AI-generated diagrams, charts from data)
 11. Add template support for PPT (custom .pptx templates for branding)
 12. Multi-file batch processing with combined gap analysis across all documents
+13. Citation/references for ppt in the same slide, pdf in the end.
+14. ruff upgrade and codebase linting
+15. github actions

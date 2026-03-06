@@ -62,9 +62,11 @@ HEYGEN_VOICE_ID=
 SYNTHESIA_API_KEY=
 SYNTHESIA_AVATAR_ID=
 
-# GPU video service — leave empty to run video locally
-GPU_SERVICE_URL=           # e.g. https://cr8-gpu-xxx-ew.a.run.app
-GCS_BUCKET=cr8-jobs        # shared GCS bucket for CPU↔GPU data transfer
+# Video services — 3-tier fallback chain (leave empty to run locally)
+GPU_SERVICE_URL=           # Tier 1: GPU primary  (europe-west4, NVIDIA L4)
+GPU_FALLBACK_URL=          # Tier 2: GPU fallback (europe-west1, NVIDIA L4)
+CPU_VIDEO_SERVICE_URL=     # Tier 3: CPU-only     (europe-west2, 8 vCPU / 32 GiB)
+GCS_BUCKET=cr8-jobs        # shared GCS bucket for data transfer
 
 # Output formats — comma-separated: pdf, ppt, script, video
 OUTPUT_FORMATS=pdf
@@ -138,25 +140,32 @@ The vector database persists at this path between runs. Run `make clean` to wipe
 | `VIDEO_AVATAR_SPEED` | No | `1.05` | HeyGen avatar speech rate multiplier |
 | `VIDEO_TOPIC_LIMIT` | No | `5` | Max topics to generate scripts/videos for |
 
-### GPU Video Service
+### Video Service (3-Tier Fallback)
 
-Set these variables to offload TTS and video encoding to a dedicated NVIDIA L4 Cloud Run service instead of running locally. When `GPU_SERVICE_URL` is empty, video runs locally using the Kokoro pipeline.
+Set these variables to offload TTS and video encoding to remote Cloud Run services instead of running locally. The pipeline tries each tier in order on infrastructure failures. When all three URLs are empty, video runs locally using the Kokoro pipeline.
+
+**Tier chain:** GPU Primary (europe-west4) → GPU Fallback (europe-west1) → CPU Video (europe-west2)
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `GPU_SERVICE_URL` | No | *(empty)* | URL of the GPU Cloud Run service (e.g. `https://cr8-gpu-xxx-ew.a.run.app`). When set, video jobs are routed to the GPU service via GCS. When empty, video runs locally. |
-| `GCS_BUCKET` | No | `cr8-jobs` | GCS bucket used to transfer slide images (CPU → GPU) and completed MP4s (GPU → CPU). Must be accessible from both services. |
+| `GPU_SERVICE_URL` | No | *(empty)* | GPU primary Cloud Run service URL (europe-west4, NVIDIA L4) |
+| `GPU_FALLBACK_URL` | No | *(empty)* | GPU fallback Cloud Run service URL (europe-west1, NVIDIA L4) |
+| `CPU_VIDEO_SERVICE_URL` | No | *(empty)* | CPU-only video service URL (europe-west2, 8 vCPU / 32 GiB). Tier 3 fallback. |
+| `GCS_BUCKET` | No | `cr8-jobs` | GCS bucket used to transfer slide images and completed MP4s. Must be accessible from all services. |
 
-When `GPU_SERVICE_URL` is set:
+When any video service URL is set:
+
 1. The generate agent uploads slide PNGs and a job manifest to `gs://{GCS_BUCKET}/{job_id}/input/`.
-2. It submits the job to `GPU_SERVICE_URL/api/v1/video-jobs`.
-3. It polls the GPU service for completion, emitting `[Video] GPU:` progress lines.
+2. It submits the job to the first reachable tier via `POST /api/v1/video-jobs`.
+3. It polls for completion, emitting `[Video] GPU:` progress lines.
 4. It downloads finished MP4s from `gs://{GCS_BUCKET}/{job_id}/output/`.
+
+Fallback to the next tier is triggered only by infrastructure failures (connection refused, timeout, 5xx response). Job-level errors reported by the service do not trigger fallback.
 
 Identity token authentication is handled automatically on Cloud Run (service-to-service). When running locally, auth tokens are skipped.
 
 !!! tip "GPU service is ~10x faster for video"
-    A 5-topic video job takes ~2-3 min on an NVIDIA L4 vs ~28 min on a Mac M-series (MPS) or ~55 min on CPU. Cost: ~$0.06 per job (GPU 3 min) vs ~$0.13 (CPU 20 min on Cloud Run).
+    A 5-topic video job takes ~2-3 min on an NVIDIA L4 vs ~20-30 min on the CPU video service. The CPU tier is a reliability fallback, not a performance alternative. Cost: ~$0.06 per job (GPU 3 min) vs ~$0.13 (CPU 20 min on Cloud Run).
 
 ### Kokoro TTS
 
@@ -168,7 +177,7 @@ Used when `VIDEO_PROVIDER=kokoro`. Kokoro is an open-source TTS engine with near
 | `KOKORO_LANG` | No | `a` | Kokoro language code (`a` = American English) |
 
 !!! warning "System dependencies for Kokoro"
-    Kokoro requires `espeak-ng`, `ffmpeg`, and `libreoffice-impress` (for PPTX→PNG slide export) to be installed. These are included in the project `Dockerfile`. For local development: `brew install espeak ffmpeg libreoffice` (macOS) or `apt-get install espeak-ng ffmpeg libreoffice-impress` (Debian/Ubuntu). Kokoro also peaks at approximately 3.4 GB RAM — Cloud Run must be configured with at least 4 GiB memory when running video locally. When `GPU_SERVICE_URL` is set, the CPU service does not run Kokoro and can stay at 4 GiB.
+    Kokoro requires `espeak-ng`, `ffmpeg`, and `libreoffice-impress` (for PPTX→PNG slide export) to be installed. These are included in the project `Dockerfile`. For local development: `brew install espeak ffmpeg libreoffice` (macOS) or `apt-get install espeak-ng ffmpeg libreoffice-impress` (Debian/Ubuntu). Kokoro also peaks at approximately 3.4 GB RAM — Cloud Run must be configured with at least 4 GiB memory when running video locally. When any video service URL is set, the main service does not run Kokoro and can stay at 4 GiB.
 
 ### HeyGen / Synthesia
 

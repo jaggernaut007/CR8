@@ -1,6 +1,8 @@
 # ---- Stage 1: Builder ----
 FROM python:3.11-slim AS builder
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libsndfile1-dev \
@@ -8,32 +10,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy dependency manifest first for layer caching
-COPY pyproject.toml ./
-# Minimal source layout so `pip install .` can resolve the package
+# Copy dependency manifest + lockfile first for layer caching
+COPY pyproject.toml uv.lock ./
+# Minimal source layout so uv can resolve the package
 COPY backend/__init__.py backend/__init__.py
 
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir .
+RUN uv sync --frozen --no-dev --no-editable
 
 
 # ---- Stage 2: Runtime ----
 FROM python:3.11-slim AS runtime
 
-# Runtime deps: pymupdf, Kokoro TTS (espeak-ng), MoviePy (ffmpeg), PDF tools
+# Runtime deps: pymupdf (libglib), PDF tools (poppler).
+# Video deps (ffmpeg, espeak-ng, libreoffice) are NOT included — video
+# processing is offloaded to dedicated GPU/CPU-video Cloud Run services.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libsndfile1 \
-    ffmpeg \
-    espeak-ng \
     poppler-utils \
-    libreoffice-impress \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH" \
+COPY --from=builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH" \
     TOKENIZERS_PARALLELISM="false"
 
 WORKDIR /app

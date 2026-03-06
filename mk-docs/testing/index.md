@@ -1,6 +1,6 @@
 # Testing Guide
 
-CR8 has a comprehensive automated test suite of **507 tests** covering the full stack: pipeline agents, eval harness, structural checks, services, LangGraph graph integration, all FastAPI endpoints, GCS/GPU service clients, and the GPU microservice worker. All tests run with **zero real API calls** — all LLMs, web search, ChromaDB, GCS, and the GPU service are mocked where needed.
+CR8 has a comprehensive automated test suite of **802 tests** covering the full stack: pipeline agents, eval harness, structural checks, services, LangGraph graph integration, all FastAPI endpoints, GCS/GPU/CPU-video service clients, both video microservice workers, and all frontend auth and quiz routes. All tests run with **zero real API calls** — all LLMs, web search, ChromaDB, GCS, and the video services are mocked where needed.
 
 ---
 
@@ -8,7 +8,7 @@ CR8 has a comprehensive automated test suite of **507 tests** covering the full 
 
 ```bash
 # Full suite (recommended)
-python3 -m pytest backend/tests/ frontend/tests/ --tb=short -q
+python3 -m pytest backend/tests/ frontend/tests/ gpu_service/tests/ cpu_video_service/tests/ --tb=short -q
 
 # Backend only
 python3 -m pytest backend/tests/ -v
@@ -47,7 +47,7 @@ python3 -m pytest backend/tests/test_eval_harness.py::TestEvalResultSnapshot \
 | `test_run_pipeline.py` | 9 | `run_job()` validation (invalid format, missing video provider keys, unknown provider), pipeline invocation, state shape, unique job IDs |
 | `test_video_builder.py` | 11 | URL guard, download helpers, Kokoro two-phase pipeline (TTS + parallel compose), shared engine, empty `slide_images` guard |
 | `test_gcs_client.py` | 12 | `upload_job_inputs()`, `download_videos()`, `cleanup_job()` with mocked `google.cloud.storage` |
-| `test_gpu_client.py` | 12 | `submit_job()`, `poll_until_complete()` (complete/error/timeout paths), identity token fetch, `is_available()` |
+| `test_gpu_client.py` | 37 | `VideoServiceClient` 3-tier fallback, `submit_job()`, `poll_until_complete()` (complete/error/timeout paths), `_try_next_tier()`, identity token fetch, `is_available()` |
 | `test_agent_generate_dispatch.py` | 8 | `_build_videos_dispatch()`: GPU path (GCS upload → submit → poll → download), local fallback path |
 
 ### Frontend Tests
@@ -56,6 +56,8 @@ python3 -m pytest backend/tests/test_eval_harness.py::TestEvalResultSnapshot \
 |------|-------|----------------|
 | `frontend/tests/test_api.py` | 90 | All FastAPI endpoints: auth, upload (PDF + PPTX), start, progress (including `warnings` field), download; PPTX magic byte validation; video UI (Kokoro TTS checkbox enabled, warning box) |
 | `frontend/tests/test_progress_capture.py` | 39 | Stage parsing, progress %age (updated STAGE_WEIGHTS), thread safety, stage time budgets |
+| `frontend/tests/test_auth_routes.py` | 49 | Register (201, 409, 400, 503, email normalisation), JWT login (200, 401, 429), legacy login, refresh (happy/invalid/no-cookie), `/me` (JWT Bearer, legacy session, expired), logout (204, session invalidation), `get_current_user` (expired JWT, malformed header) |
+| `frontend/tests/test_quiz_routes.py` | 12 | All quiz stub endpoints (`GET /api/quiz/`, `GET /api/quiz/{id}`, `POST /api/quiz/{id}/start`, `POST /api/quiz/{id}/submit`) return 501 with `error` key |
 
 ### GPU Service Tests
 
@@ -64,7 +66,15 @@ python3 -m pytest backend/tests/test_eval_harness.py::TestEvalResultSnapshot \
 | `gpu_service/tests/test_worker.py` | 15 | Worker job lifecycle: GCS download, Kokoro TTS, ffmpeg encode, GCS upload, error handling |
 | `gpu_service/tests/test_app.py` | 10 | FastAPI endpoints: `/health`, `POST /api/v1/video-jobs`, `GET /api/v1/video-jobs/{id}` |
 
-**Total: 507 tests — 0 real API calls**
+### CPU Video Service Tests
+
+| File | Tests | What it covers |
+|------|-------|----------------|
+| `cpu_video_service/tests/test_app.py` | 19 | FastAPI endpoints: `/health`, `POST /api/v1/video-jobs` (accept, concurrency limit, 422 validation), `GET /api/v1/video-jobs/{id}`, cancel endpoint |
+| `cpu_video_service/tests/test_worker.py` | 37 | Full job lifecycle, cancellation flow (during TTS and compose), ETA estimation, error handling, GCS status upload |
+| `cpu_video_service/tests/test_gcs_client.py` | 22 | `download_manifest()`, `download_slides()`, `upload_videos()`, `upload_status()` with mocked `google.cloud.storage` |
+
+**Total: 802 tests — 0 real API calls**
 
 ---
 
@@ -208,6 +218,11 @@ All test files share a common fixture set:
 | `get_llm()` tier routing and silent fallback | Yes |
 | Tavily `search()` happy path, empty results, errors | Yes |
 | All FastAPI endpoints | Yes — Including auth flows |
+| JWT register/login/refresh/me/logout (happy path + error paths) | Yes — 49 tests in `test_auth_routes.py` |
+| Legacy session auth (login, session TTL, logout, invalidation) | Yes — `test_auth_routes.py` |
+| `get_current_user()` — JWT Bearer, legacy cookie, expired, malformed | Yes — `test_auth_routes.py` |
+| Rate limiting (5 failures / 15 min per IP) | Yes — `test_auth_routes.py` |
+| Quiz route stubs (all return 501) | Yes — 12 tests in `test_quiz_routes.py` |
 | `[SLIDE N]` script parsing edge cases | Yes — 10 tests in `test_script_parser.py` |
 | Kokoro TTS wrapper (`synthesize`, `synthesize_segments`) | Yes — 10 tests with stubbed soundfile |
 | Kokoro two-phase video pipeline (TTS + parallel compose), shared engine, empty slide guard | Yes — 11 tests in `test_video_builder.py` |
@@ -218,10 +233,13 @@ All test files share a common fixture set:
 | Stage-aware ETA with time budgets | Yes — 7 tests in `test_progress_capture.py` |
 | Video provider validation: missing HeyGen/Synthesia keys, unknown provider | Yes — `test_run_pipeline.py` |
 | GCS upload/download/cleanup with mocked `google.cloud.storage` | Yes — 12 tests in `test_gcs_client.py` |
-| GPU client submit, poll (complete/error/timeout), identity token, health check | Yes — 12 tests in `test_gpu_client.py` |
+| `VideoServiceClient` 3-tier fallback, tier advancement, health check | Yes — 37 tests in `test_gpu_client.py` |
 | `_build_videos_dispatch()` GPU path and local fallback | Yes — 8 tests in `test_agent_generate_dispatch.py` |
 | GPU service worker lifecycle (download, TTS, encode, upload) | Yes — 15 tests in `gpu_service/tests/test_worker.py` |
 | GPU service FastAPI endpoints | Yes — 10 tests in `gpu_service/tests/test_app.py` |
+| CPU video service FastAPI endpoints (accept, concurrency limit, cancel) | Yes — 19 tests in `cpu_video_service/tests/test_app.py` |
+| CPU video worker lifecycle, cancellation, ETA, error handling | Yes — 37 tests in `cpu_video_service/tests/test_worker.py` |
+| CPU video GCS client (manifest, slides, upload, status) | Yes — 22 tests in `cpu_video_service/tests/test_gcs_client.py` |
 
 ## Known Gaps
 
@@ -250,6 +268,10 @@ Add to `test_pipeline_agents.py`. Mock any external calls (`ChromaStore`, `get_l
 ### For a new API endpoint
 
 Add to `frontend/tests/test_api.py`. Use the existing `client` fixture (FastAPI `TestClient`).
+
+### For a new auth route
+
+Add to `frontend/tests/test_auth_routes.py`. Use the `authed_client` fixture (pre-seeded session cookie) for protected routes and `client` for unauthenticated requests.
 
 ### For a new schema field
 

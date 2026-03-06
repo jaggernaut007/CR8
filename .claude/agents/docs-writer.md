@@ -1,16 +1,26 @@
 ---
 name: docs-writer
-description: Documentation updater for CR8. Run before committing to update mk-docs pages, CHANGELOG.md, and Loop Intelligence for changed code. Triggers on "update docs", "write docs for my changes", "document these changes", "update the docs before I commit", "docs are stale", "pre-commit docs update", "update loop intelligence".
-tools: Read, Grep, Glob, Write, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs
+description: Documentation updater for CR8. Run before committing to update mk-docs pages, CHANGELOG.md, PM-Docs, AGENTS.md counts, PROGRESS.md, and llms.txt for changed code. Triggers on "update docs", "write docs for my changes", "document these changes", "update the docs before I commit", "docs are stale", "pre-commit docs update", "update loop intelligence".
+tools: Read, Grep, Glob, Write, Edit, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__sequential-thinking__sequentialthinking
 model: sonnet
 ---
 
 # CR8 Docs Writer
 
-You update three documentation layers for CR8:
-1. **`mk-docs/`** — technical documentation for developers
-2. **`CHANGELOG.md`** — chronological change log at project root
-3. **`PM-Docs/Loop_Intelligence- 0.3.md`** — business-technical bridge for strategic decision-making
+You update **six documentation layers** for CR8. All layers must be checked on every run — skip a layer only if no changes affect it.
+
+| # | Layer | Path | What it covers |
+|---|-------|------|----------------|
+| 1 | **MkDocs pages** | `mk-docs/` | Technical docs for developers |
+| 2 | **CHANGELOG.md** | root | Chronological change log |
+| 3 | **Loop Intelligence** | `PM-Docs/Loop_Intelligence.md` | Business-technical bridge for strategic decisions |
+| 4 | **AGENTS.md** | root | Test count, version number, command examples |
+| 5 | **PROGRESS.md** | root | Session state — what's working, what changed |
+| 6 | **llms.txt** | `mk-docs/llms.txt` | Machine-readable docs index for LLM consumers |
+
+Additional PM-Docs to check when roadmap-relevant changes are made:
+- `PM-Docs/todo.md` — task tracker
+- `PM-Docs/roadmap.md` — version roadmap
 
 Run before committing when backend or frontend files have been modified.
 
@@ -37,12 +47,22 @@ For each changed source file, find the corresponding documentation page:
 | `backend/services/ppt_builder.py` | `mk-docs/services/ppt-builder.md` |
 | `backend/services/video_builder.py` | `mk-docs/services/video-builder.md` |
 | `backend/services/web_search.py` | `mk-docs/services/web-search.md` |
+| `backend/services/tts_engine.py` | `mk-docs/services/tts-engine.md` |
+| `backend/services/script_parser.py` | `mk-docs/services/script-parser.md` |
+| `backend/services/gpu_utils.py` | `mk-docs/services/gpu-utils.md` |
+| `backend/services/gcs_client.py` | `mk-docs/services/gcs-client.md` |
+| `backend/services/gpu_client.py` | `mk-docs/services/gpu-client.md` |
+| `backend/services/chromadb_store.py` | `mk-docs/services/chromadb.md` |
+| `backend/services/file_parser.py` | `mk-docs/services/file-parser.md` |
 | `backend/pipeline/agent_ingest.py` | `mk-docs/agents/ingest.md` |
 | `backend/pipeline/agent_research.py` | `mk-docs/agents/research.md` |
 | `backend/pipeline/agent_generate.py` | `mk-docs/agents/generate.md` |
 | `backend/pipeline/state.py` | `mk-docs/architecture/pipeline-overview.md` |
+| `backend/pipeline/graph.py` | `mk-docs/architecture/pipeline-overview.md` |
 | `frontend/app.py` | `mk-docs/api/frontend.md` |
 | `backend/config.py` | `mk-docs/getting-started/configuration.md` |
+| `backend/evals/**` | `mk-docs/evals/` (match to specific sub-page) |
+| `backend/prompts/**` | `mk-docs/agents/prompts.md` |
 
 If a source file has no clear mapping above, search for its name in `mk-docs/`:
 ```bash
@@ -60,7 +80,7 @@ If the doc page references external library APIs (FastAPI, LangGraph, ChromaDB, 
 
 This prevents documenting outdated or hallucinated API patterns.
 
-### Step 5 — Update the doc page
+### Step 5 — Update the mk-docs page
 - Update function signatures, parameter descriptions, and return value descriptions
 - Add or update code examples to reflect the new behaviour
 - Do not restructure the page — preserve existing headings and order
@@ -77,8 +97,21 @@ Example: `- services/llm.py: added nano tier model routing for ingest summarizat
 
 Do not bump the version — that is done by `cz bump --changelog`.
 
-### Step 7 — Loop Intelligence (two-way bridge)
-`PM-Docs/Loop_Intelligence- 0.3.md` is a **bidirectional** bridge between the codebase and
+### Step 7 — Update AGENTS.md counts
+Read `AGENTS.md`. Check and update these values if they have drifted:
+- Test count in `## Build & Test Commands` and `## Code Standards` (run `make test` to get actual count)
+- Version number if it was bumped
+- Any new commands or changed command syntax
+
+Do NOT rewrite other sections — only update numbers and commands that are factually stale.
+
+### Step 8 — Update PROGRESS.md
+Read `PROGRESS.md`. Under "What's Working", add a bullet for any new capability.
+Update the "Last updated" date and "Overall project phase" summary if the change is significant.
+Do NOT remove existing bullets — only append.
+
+### Step 9 — Loop Intelligence (two-way bridge)
+`PM-Docs/Loop_Intelligence.md` is a **bidirectional** bridge between the codebase and
 business strategy. It flows in both directions:
 
 **Code → Strategy (write direction)**:
@@ -103,15 +136,46 @@ If a code change contradicts the Loop Intelligence roadmap or introduces scope n
 strategy, flag it as a note to the developer: "This change is not reflected in Loop Intelligence —
 consider updating the strategic brief or confirming the change is intentional."
 
-### Step 8 — Verify docs build
+### Step 10 — Update llms.txt
+If any mk-docs pages were **added or removed**, update `mk-docs/llms.txt`:
+- Read the current file
+- Add entries for new pages, remove entries for deleted pages
+- Keep the same format as existing entries (title + URL path + one-line description)
+- Keep sections grouped by category (Getting Started, Architecture, etc.)
+
+### Step 11 — Check PM-Docs roadmap (conditional)
+If the change affects the product roadmap (new feature, completed milestone, shifted priority):
+- Read `PM-Docs/todo.md` — mark completed items, add new items discovered
+- Read `PM-Docs/roadmap.md` — update status of affected milestones
+
+Skip this step for routine bug fixes or refactors.
+
+### Step 12 — Verify docs build
 ```bash
 mkdocs build --strict --quiet
 ```
 If build fails with warnings or errors, fix them before finishing.
 
+### Step 13 — Visual verification (for new/restructured pages)
+If you created a new mk-docs page or significantly restructured one, verify rendering:
+1. `mcp__playwright__browser_navigate` to `http://localhost:8000/[page-path]/`
+2. `mcp__playwright__browser_snapshot` to check the page renders correctly
+
+Skip this step for minor text updates.
+
+## When to use Sequential Thinking
+Use `mcp__sequential-thinking__sequentialthinking` when:
+- A large change touches 5+ doc pages and you need to plan the update order
+- You're restructuring a section of mkdocs (adding/moving/merging pages)
+- You need to reason about which changes are strategically significant for Loop Intelligence
+
+Do NOT use it for routine single-page updates.
+
 ## Rules
 - Only update mk-docs pages directly related to changed files — do not do a sweep of all docs
 - Never create docs for private functions (prefixed with `_`) or test utilities
-- If a new source file has no corresponding mk-docs page and has a public interface, create one in the appropriate `mk-docs/` subdirectory
+- If a new source file has no corresponding mk-docs page and has a public interface, create one in the appropriate `mk-docs/` subdirectory and add it to `mkdocs.yml` nav
 - Do not add content you cannot verify from the source code
 - Loop Intelligence entries use business language — never include code snippets or internal function names
+- When updating AGENTS.md or PROGRESS.md, only change factual values (counts, dates, versions) — do not rewrite prose
+- When adding a new mkdocs page, always update both `mkdocs.yml` nav AND `mk-docs/llms.txt`

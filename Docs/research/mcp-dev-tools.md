@@ -132,7 +132,7 @@ Based on this research, we will:
 - `.claude/agents/research-assistant.md` — add Context7 as Step 0 (fast path)
 - `CLAUDE.local.md` — add MCP status reference
 - `PM-Docs/MCP_Integration_Plan.md` — check off completed items, add research findings
-- `PM-Docs/v0.4-v0.6-detailed-plan.md` — note MCP Phase 1+2 complete
+- `PM-Docs/roadmap.md` — note MCP Phase 1+2 complete
 
 ---
 *If this research is more than 6 months old or any MCP server has had a major version bump, re-verify before implementing.*

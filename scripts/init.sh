@@ -25,21 +25,27 @@ else
   echo "  ✓ .env file present"
 fi
 
-# ── 2. Dependency check ──────────────────────────────────────────────────────
+# ── 2. Dependency check (uv) ─────────────────────────────────────────────────
 echo ""
-echo "▶ Checking dependencies..."
-if python3 -c "import fastapi, langgraph, chromadb" 2>/dev/null; then
-  echo "  ✓ Core dependencies installed"
-else
-  echo "  ✗ Missing dependencies — run: make install"
+echo "▶ Checking dependencies (uv)..."
+if ! command -v uv &>/dev/null; then
+  echo "  ✗ uv not found — install: curl -LsSf https://astral.sh/uv/install.sh | sh"
   exit 1
+fi
+echo "  ✓ uv $(uv --version | awk '{print $2}')"
+if uv sync --check 2>/dev/null; then
+  echo "  ✓ Dependencies in sync with uv.lock"
+else
+  echo "  ⚠ Dependencies out of sync — running: uv sync --all-extras"
+  uv sync --all-extras
+  echo "  ✓ Dependencies synced"
 fi
 
 # ── 2b. Commitizen check ─────────────────────────────────────────────────────
 echo ""
 echo "▶ Checking commitizen..."
-if command -v cz &>/dev/null; then
-  echo "  ✓ Commitizen installed ($(cz version 2>/dev/null | head -1))"
+if uv run cz version &>/dev/null; then
+  echo "  ✓ Commitizen installed ($(uv run cz version 2>/dev/null | head -1))"
 else
   echo "  ⚠ Commitizen not found — run: make install"
 fi
@@ -47,7 +53,7 @@ fi
 # ── 3. Linter check ─────────────────────────────────────────────────────────
 echo ""
 echo "▶ Running Ruff linter..."
-if ruff check . --quiet; then
+if uv run ruff check . --quiet; then
   echo "  ✓ Ruff: no issues"
 else
   echo "  ✗ Ruff found issues — run: make lint-fix"
@@ -56,14 +62,14 @@ fi
 
 # ── 4. Test suite ────────────────────────────────────────────────────────────
 echo ""
-echo "▶ Running test suite (507 tests)..."
-pytest -q --tb=short
+echo "▶ Running test suite..."
+uv run pytest -q --tb=short
 echo "  ✓ All tests passing"
 
 # ── 5. Docs build check ──────────────────────────────────────────────────────
 echo ""
 echo "▶ Checking MkDocs build..."
-if python3 -m mkdocs build --strict --quiet 2>/dev/null; then
+if uv run mkdocs build --strict --quiet 2>/dev/null; then
   echo "  ✓ Docs build clean"
 else
   echo "  ⚠ Docs build has warnings (non-blocking — fix when convenient)"

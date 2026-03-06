@@ -60,20 +60,32 @@
     "files": ["backend/services/chromadb_store.py"]
   },
   "docker_deployment": {
-    "description": "Docker containerisation (CPU + GPU images)",
+    "description": "Docker containerisation (main CPU image + GPU image + CPU-video image)",
     "status": "complete",
-    "files": ["Dockerfile", "Dockerfile.gpu"]
+    "files": ["Dockerfile", "Dockerfile.gpu", "Dockerfile.cpu-video"]
   },
   "gcp_cloud_run": {
-    "description": "GCP Cloud Run dual-service deployment (CPU + GPU)",
+    "description": "GCP Cloud Run 3-service deployment (CPU pipeline + GPU video primary + CPU video fallback)",
     "status": "complete",
     "files": ["deploy.sh", "mk-docs/deployment/gcp-cloud-run.md"]
   },
   "gpu_service": {
-    "description": "GPU microservice for video rendering — Kokoro TTS + ffmpeg on NVIDIA L4, GCS data transfer, identity token auth, region fallback",
+    "description": "GPU microservice for video rendering — Kokoro TTS + ffmpeg on NVIDIA L4, GCS data transfer, identity token auth. Tier 1 and Tier 2 in the 3-tier fallback chain.",
     "status": "complete",
     "tests": "passing",
     "files": ["gpu_service/", "backend/services/gcs_client.py", "backend/services/gpu_client.py", "backend/services/gpu_utils.py"]
+  },
+  "cpu_video_service": {
+    "description": "CPU-only video microservice — Kokoro TTS + ffmpeg libx264 on 8 vCPU / 32 GiB Cloud Run (europe-west2). Tier 3 fallback when both GPU tiers are unreachable. Same API contract as gpu_service. Supports graceful cancellation at phase boundaries.",
+    "status": "complete",
+    "tests": "passing",
+    "files": ["cpu_video_service/", "Dockerfile.cpu-video"]
+  },
+  "three_tier_video_fallback": {
+    "description": "VideoServiceClient (backend/services/gpu_client.py) routes video jobs across 3 tiers: GPU Primary (europe-west4) → GPU Fallback (europe-west1) → CPU Video (europe-west2). Fallback triggers on infrastructure failures only (ConnectionError, Timeout, 5xx). See docs/adr/ADR-001-three-tier-video-fallback.md.",
+    "status": "complete",
+    "tests": "passing",
+    "files": ["backend/services/gpu_client.py", "backend/config.py", "backend/pipeline/agent_generate.py", "docs/adr/ADR-001-three-tier-video-fallback.md"]
   },
   "agent_readiness_setup": {
     "description": "Claude Code agentic scaffolding (AGENTS.md, skills, hooks, rules)",

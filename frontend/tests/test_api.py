@@ -12,7 +12,11 @@ from fastapi.testclient import TestClient
 # Ensure AUTH_PASSWORD is set before importing app (which hashes at import time)
 os.environ.setdefault("AUTH_PASSWORD", "CR8-AI")
 
-from frontend.app import app, jobs, _sessions, _failed_attempts, ProgressCapture, UPLOAD_DIR
+from frontend.app import app, ProgressCapture, UPLOAD_DIR
+from frontend.middleware import _sessions, _failed_attempts
+
+# Alias for job registry (now on app.state)
+jobs = app.state.jobs
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +207,7 @@ class TestIndexRoute:
 
     def test_video_checkbox_enabled(self, authed_client):
         resp = authed_client.get("/")
-        video_line = [line for line in resp.text.split("\n") if "chk-video" in line][0]
+        video_line = next(line for line in resp.text.split("\n") if "chk-video" in line)
         assert "disabled" not in video_line
 
     def test_video_label_mentions_kokoro(self, authed_client):
@@ -216,7 +220,7 @@ class TestIndexRoute:
 
 
 # ---------------------------------------------------------------------------
-# POST /api/upload (authenticated)
+# Upload endpoint tests (authenticated)
 # ---------------------------------------------------------------------------
 
 class TestUploadEndpoint:
@@ -261,8 +265,9 @@ class TestUploadEndpoint:
         assert "valid PDF" in resp.json()["error"]
 
     def test_upload_rejects_oversized_file(self, authed_client):
-        """Files over 20 MB should be rejected."""
-        big = io.BytesIO(b"%PDF-" + b"x" * (21 * 1024 * 1024))
+        """Files over MAX_UPLOAD_SIZE_MB should be rejected."""
+        from frontend.middleware import MAX_UPLOAD_BYTES
+        big = io.BytesIO(b"%PDF-" + b"x" * (MAX_UPLOAD_BYTES + 1))
         resp = authed_client.post("/api/upload", files={"file": ("big.pdf", big, "application/pdf")})
         assert resp.status_code == 413
         assert "too large" in resp.json()["error"]
@@ -326,7 +331,7 @@ class TestUploadEndpoint:
 
 
 # ---------------------------------------------------------------------------
-# POST /api/start (authenticated)
+# Start endpoint tests (authenticated)
 # ---------------------------------------------------------------------------
 
 class TestStartEndpoint:
@@ -364,7 +369,7 @@ class TestStartEndpoint:
     def test_start_rejects_concurrent_job(self, authed_client, sample_pdf):
         cap = ProgressCapture()
         cap.status = "running"
-        jobs["existing_job"] = cap
+        jobs["existing_"] = cap
 
         with open(sample_pdf, "rb") as f:
             upload_resp = authed_client.post("/api/upload", files={"file": ("test.pdf", f, "application/pdf")})
@@ -382,7 +387,7 @@ class TestStartEndpoint:
     def test_start_allows_new_job_after_completion(self, authed_client, sample_pdf):
         cap = ProgressCapture()
         cap.status = "complete"
-        jobs["old_job"] = cap
+        jobs["old_job_"] = cap
 
         with open(sample_pdf, "rb") as f:
             upload_resp = authed_client.post("/api/upload", files={"file": ("test.pdf", f, "application/pdf")})

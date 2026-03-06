@@ -57,6 +57,19 @@ What specific implementation question motivated this research?
 - [Version-specific quirk]
 - [Error that's easy to hit and how to avoid it]
 
+## Security Assessment
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| Open CVEs (critical/high) | [None / List] | [Details or "clean as of YYYY-MM-DD"] |
+| License | [MIT / Apache 2.0 / etc.] | [Compatible / BLOCK: reason] |
+| Last release | [YYYY-MM-DD] | [Active / WARNING: stale] |
+| Maintainer count | [N] | [Healthy / WARNING: single maintainer] |
+| Transitive dependencies | [N packages] | [Acceptable / WARNING: heavy tree] |
+| Known security incidents | [None / List] | [Details] |
+
+**Verdict:** [SAFE to add / WARNING: proceed with caution / BLOCK: do not add — reason]
+
 ## Decision Made
 
 Based on this research, we will:

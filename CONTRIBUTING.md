@@ -10,7 +10,10 @@
 | New pipeline step / agent | `backend/pipeline/` |
 | New external API integration | `backend/services/` (one file per integration) |
 | New output format | `backend/services/[format]_builder.py` + `backend/prompts/[format].py` |
-| New FastAPI route | `frontend/app.py` |
+| New auth or auth-adjacent route | `frontend/auth_routes.py` |
+| New job management route | `frontend/job_routes.py` |
+| New quiz route | `frontend/quiz_routes.py` |
+| New middleware (auth, security headers, rate limiting) | `frontend/middleware.py` |
 | New UI template | `frontend/templates/` |
 | New prompt string | `backend/prompts/` (never inline) |
 | New config value | `backend/config.py` via Pydantic Settings |
@@ -29,12 +32,76 @@
 - Line length: 100 chars (enforced by Ruff)
 - Run `make lint` before every commit — Ruff must pass cleanly
 
+### Code Quality (Enforced by Ruff + Agent Rules)
+
+**Short functions:**
+
+| Constraint | Limit | Ruff Rule |
+|------------|-------|-----------|
+| Max statements per function | 25 | PLR0915 |
+| Max arguments per function | 5 | PLR0913 |
+| Max cyclomatic complexity | 10 | C901 |
+| Max branches per function | 12 | PLR0912 |
+| Max return statements | 6 | PLR0911 |
+
+If a function exceeds any limit, refactor into smaller helpers. Use early returns to flatten nesting.
+
+**Logging (mandatory in all modules):**
+
+```python
+import logging
+logger = logging.getLogger(__name__)
+```
+
+- Log function entry/exit at INFO with key params
+- Log exceptions at ERROR with `exc_info=True`
+- Log external API calls before (INFO) and after (INFO/ERROR)
+- Use lazy formatting: `logger.info("Built %d slides", count)` — never f-strings in log calls
+- Never use `print()` in production code — use the logger (enforced by T20)
+
+**Comments and docstrings:**
+
+- Every module needs a module-level docstring
+- Every public function needs a Google-style docstring (Args, Returns)
+- Inline comments for non-obvious logic only — don't restate the code
+- Never leave commented-out code (enforced by ERA001)
+
+**Code cleanliness:**
+
+- No mutable default arguments (B006)
+- No builtin shadowing — never name variables `list`, `dict`, `type`, `id` (A)
+- Use modern Python syntax — `dict` not `typing.Dict`, `X | None` not `Optional[X]` (UP)
+- Clean return patterns — no superfluous `else` after `return` (RET)
+- Simplify where possible — merge `isinstance()`, use `contextlib.suppress()` (SIM)
+
+### Ruff Rule Categories
+
+The full set of enabled Ruff rules (see `pyproject.toml`):
+
+| Code | Category | What It Catches |
+|------|----------|----------------|
+| E/W/F | Defaults | Syntax errors, whitespace, unused imports |
+| UP | pyupgrade | Outdated Python syntax |
+| B | bugbear | Common bugs (mutable defaults, bad except) |
+| A | builtins | Shadowing builtin names |
+| T20 | print | `print()` in production code |
+| RET | return | Messy return patterns |
+| SIM | simplify | Code that could be simplified |
+| PIE | pie | Misc Python anti-patterns |
+| C90 | McCabe | Cyclomatic complexity > 10 |
+| G | logging-format | f-strings in log calls |
+| ERA | eradicate | Commented-out dead code |
+| PLR | pylint | Function size/complexity limits |
+| RUF | ruff | Ruff-specific cleanup rules |
+
+Auto-fix safe violations: `ruff check . --fix`
+
 ### Testing
 - Every new feature requires corresponding tests in `backend/tests/` or `frontend/tests/`
 - All external API calls mocked — zero real API calls in the test suite
 - Test naming: `test_[function]_[scenario]`
 - Use `hypothesis` for property-based testing, `syrupy` for snapshot regression
-- Run `make test` and read the output — all 507 tests must pass
+- Run `make test` and read the output — all 687 tests must pass
 
 ## Workflow Before Committing
 
@@ -65,7 +132,7 @@ docs: update services/llm.md with new model routing table
 chore: bump langgraph to 0.2.x
 ```
 
-Include test counts in feat commits: `feat: add video script streaming (507 → 520 tests)`
+Include test counts in feat commits: `feat: add video script streaming (626 → 687 tests)`
 
 ## Pull Request Checklist
 - [ ] `make lint` passes (ruff clean)
@@ -94,3 +161,15 @@ When `GPU_SERVICE_URL` is set, video rendering is offloaded to a GPU service (NV
 The current `frontend/` is a prototype FastAPI/HTML UI. A React frontend with glassmorphism design is planned for v0.5.
 Before starting frontend work, create `docs/research/frontend-framework.md` to document
 the chosen tech stack and check `docs/adr/` for prior decisions.
+
+The frontend package is split into focused modules (Wave 3 restructure):
+
+| Module | Responsibility |
+|--------|---------------|
+| `frontend/app.py` | App factory, lifespan, CORS/middleware wiring — no route logic |
+| `frontend/middleware.py` | Auth enforcement, security headers, rate limiting, session store |
+| `frontend/auth_routes.py` | All `/api/auth/*` routes |
+| `frontend/job_routes.py` | All job management routes (`/api/upload`, `/api/start`, etc.) |
+| `frontend/quiz_routes.py` | Quiz stubs (501) — implement Phase 4 content here |
+
+When adding a new route, choose the appropriate sub-module rather than adding to `app.py`.

@@ -1,5 +1,11 @@
 .env
+# Claude Code — local/personal files only (shared config in .claude/ IS tracked)
 CLAUDE.local.md
+*.local.md
+.claude/settings.local.json
+.claude/statsig/
+.claude/todos.json
+.claude/credentials.json
 chroma_db/
 __pycache__/
 *.pyc
@@ -18,4 +24,3 @@ build/
 site/
 .DS_Store
 .hypothesis/
-.claude/settings.local.json
