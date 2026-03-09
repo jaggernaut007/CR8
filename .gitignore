@@ -24,3 +24,6 @@ build/
 site/
 .DS_Store
 .hypothesis/
+frontend/static/
+frontend/react-app/dist/
+frontend/react-app/node_modules/

@@ -26,6 +26,9 @@ Read the relevant note before implementing any feature that uses an external lib
 | MCP Pipeline Integration | [mcp-pipeline-integration.md](mcp-pipeline-integration.md) | MCP Spec 2025-11-25 | 2026-03-04 | Current |
 | Agent Lightning (APO/RL) | [agent-lightning.md](agent-lightning.md) | >=0.3.0 | 2026-03-06 | Current |
 | pytest Test Optimization | [pytest-tdd-optimization.md](pytest-tdd-optimization.md) | pytest-xdist>=3.5, pytest-randomly>=0.15, pytest-timeout>=2.2 | 2026-03-06 | Current |
+| React 19 + Vite 6 + FastAPI Integration | [react-vite-fastapi.md](react-vite-fastapi.md) | React 19.2.4, Vite 6.2.6, React Router 7.13.1, TanStack Query 5.90.21 | 2026-03-09 | Current |
+| Tailwind CSS v4 Custom Styles & Glassmorphism | [tailwind-css-v4.md](tailwind-css-v4.md) | tailwindcss >= 4.0.1 | 2026-03-09 | Current |
+| shadcn/ui Components & TanStack Query | [shadcn-ui-tanstack-query.md](shadcn-ui-tanstack-query.md) | shadcn/ui (CLI-based), @tanstack/react-query >= 5.90.21 | 2026-03-09 | Current |
 
 ## Priority Research Needed
 
