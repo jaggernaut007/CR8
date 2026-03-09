@@ -5,6 +5,11 @@ import ResultsPage from "./ResultsPage";
 vi.mock("@/api/jobs", () => ({
   fetchJob: vi.fn(),
   downloadUrl: vi.fn((jobId: string, type: string) => `/api/download/${jobId}/${type}`),
+  fetchSlides: vi.fn().mockResolvedValue({ slides: [], total: 0 }),
+  fetchVideos: vi.fn().mockResolvedValue({ videos: [] }),
+  viewPdfUrl: vi.fn((jobId: string) => `/api/view/${jobId}/pdf`),
+  viewSlideUrl: vi.fn((jobId: string, i: number) => `/api/view/${jobId}/slide/${i}`),
+  viewVideoUrl: vi.fn((jobId: string, i: number) => `/api/view/${jobId}/video/${i}`),
 }));
 
 import { fetchJob } from "@/api/jobs";
@@ -156,5 +161,65 @@ describe("ResultsPage", () => {
     await waitFor(() => {
       expect(screen.getByText(/PDF, Slides, Video/)).toBeInTheDocument();
     });
+  });
+
+  it("shows content tabs for complete job", async () => {
+    mockFetchJob.mockResolvedValue({
+      id: "job-456",
+      filename: "lecture.pdf",
+      status: "complete",
+      stage: null,
+      percent: 100,
+      created_at: "2026-03-01T00:00:00Z",
+      formats: ["pdf", "ppt", "video"],
+    });
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("content-tabs")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("PDF Guide")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Slides" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Video" })).toBeInTheDocument();
+  });
+
+  it("renders PDF viewer by default", async () => {
+    mockFetchJob.mockResolvedValue({
+      id: "job-456",
+      filename: "lecture.pdf",
+      status: "complete",
+      stage: null,
+      percent: 100,
+      created_at: "2026-03-01T00:00:00Z",
+      formats: ["pdf"],
+    });
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("pdf-viewer")).toBeInTheDocument();
+    });
+  });
+
+  it("hides content tabs for non-complete jobs", async () => {
+    mockFetchJob.mockResolvedValue({
+      id: "job-456",
+      filename: "lecture.pdf",
+      status: "running",
+      stage: "Research",
+      percent: 40,
+      created_at: "2026-03-01T00:00:00Z",
+      formats: ["pdf", "ppt"],
+    });
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Job running")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTestId("content-tabs")).not.toBeInTheDocument();
   });
 });

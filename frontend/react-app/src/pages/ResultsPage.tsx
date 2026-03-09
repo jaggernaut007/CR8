@@ -1,14 +1,18 @@
 /**
- * Results page — shows completion status, artifact download buttons, and job metadata.
+ * Results page — shows completion status, content viewers, and download buttons.
  *
- * Fetches job details from /api/jobs/:jobId. Download buttons link to
- * /api/download/:jobId/:type (browser handles file download natively).
- * Content viewers (PDF, PPT carousel, video player) are planned for v0.5.3.
+ * Content viewers: PDF (iframe), Slides (image carousel), Video (HTML5 player).
+ * Download buttons link to /api/download/:jobId/:type.
  */
 
+import { useState } from "react";
 import { useParams, Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fetchJob, downloadUrl, type Job } from "@/api/jobs";
+import ContentTabs from "@/components/ContentTabs";
+import PdfViewer from "@/components/viewers/PdfViewer";
+import PptCarousel from "@/components/viewers/PptCarousel";
+import VideoPlayer from "@/components/viewers/VideoPlayer";
 
 const DOWNLOAD_TYPES: { key: string; label: string; icon: string }[] = [
   { key: "pdf", label: "Learning Guide", icon: "PDF" },
@@ -38,6 +42,7 @@ function triggerDownload(url: string): void {
 
 export default function ResultsPage() {
   const { jobId } = useParams<{ jobId: string }>();
+  const [activeTab, setActiveTab] = useState("pdf");
 
   const { data: job, isLoading, error } = useQuery({
     queryKey: ["job", jobId],
@@ -46,7 +51,7 @@ export default function ResultsPage() {
   });
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
+    <div className="mx-auto max-w-4xl px-4 py-8">
       {isLoading && (
         <div className="glass p-12 text-center text-text-secondary">
           Loading results...
@@ -77,6 +82,23 @@ export default function ResultsPage() {
               {job.formats.map(formatLabel).join(", ")}
             </p>
           </div>
+
+          {/* Content viewers (only for complete jobs) */}
+          {job.status === "complete" && (
+            <div className="mt-6 space-y-4">
+              <ContentTabs
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                formats={job.formats}
+              />
+
+              <div className="glass glass-shadow rounded-lg p-4">
+                {activeTab === "pdf" && <PdfViewer jobId={jobId!} />}
+                {activeTab === "ppt" && <PptCarousel jobId={jobId!} />}
+                {activeTab === "video" && <VideoPlayer jobId={jobId!} />}
+              </div>
+            </div>
+          )}
 
           {/* Download buttons */}
           {job.status === "complete" && (

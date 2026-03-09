@@ -85,3 +85,41 @@ export function cancelJob(jobId: string): Promise<{ status: string }> {
 export function downloadUrl(jobId: string, fileType: string): string {
   return `/api/download/${jobId}/${fileType}`;
 }
+
+// ── Content Viewer Types ──────────────────────────────────────────────
+
+export interface SlideList {
+  slides: string[];
+  total: number;
+}
+
+export interface VideoInfo {
+  name: string;
+  url: string;
+}
+
+export interface VideoList {
+  videos: VideoInfo[];
+}
+
+// ── Content Viewer Functions ──────────────────────────────────────────
+
+export function fetchSlides(jobId: string): Promise<SlideList> {
+  return apiFetch<SlideList>(`/api/view/${jobId}/slides`);
+}
+
+export function fetchVideos(jobId: string): Promise<VideoList> {
+  return apiFetch<VideoList>(`/api/view/${jobId}/videos`);
+}
+
+export function viewPdfUrl(jobId: string): string {
+  return `/api/view/${jobId}/pdf`;
+}
+
+export function viewSlideUrl(jobId: string, index: number): string {
+  return `/api/view/${jobId}/slide/${index}`;
+}
+
+export function viewVideoUrl(jobId: string, index: number): string {
+  return `/api/view/${jobId}/video/${index}`;
+}
