@@ -37,7 +37,8 @@
       "Bash(grep -E \"\\\\.py$\")",
       "Read(//private/tmp/**)",
       "Bash(bash scripts/e2e_full_test.sh)",
-      "Bash(uv run pytest frontend/tests/test_validate_job_for_quiz.py::TestValidateJobForQuizIncompleteStatus::test_returns_400_when_job_is_error -v --tb=long)"
+      "Bash(uv run pytest frontend/tests/test_validate_job_for_quiz.py::TestValidateJobForQuizIncompleteStatus::test_returns_400_when_job_is_error -v --tb=long)",
+      "mcp__playwright__browser_wait_for"
     ],
     "additionalDirectories": [
       "/Users/shreyasjagannath/Library/Caches/ms-playwright/mcp-chrome-b4eaf59"
