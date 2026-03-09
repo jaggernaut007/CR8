@@ -15,6 +15,19 @@ make dev
 
 Without `make build-frontend`, the server serves the legacy Jinja2 UI.
 
+## Prerequisites
+
+The React SPA requires a database connection for user accounts. See [Configuration > Database](configuration.md#database-neon-postgresql) for setup.
+
+Without a database, the server falls back to the legacy Jinja2 UI with shared-password auth.
+
+## Creating an Account
+
+1. Navigate to `http://localhost:8080` — you'll be redirected to `/login`
+2. Click "Create account" to switch to the registration form
+3. Enter a display name, email, and password
+4. After registration, you're automatically logged in and redirected to the dashboard
+
 ## React SPA (v0.5.2+)
 
 **Stack**: React 19 + Vite 7 + Tailwind v4 + Tanstack Query + React Router v7.
@@ -23,11 +36,13 @@ Without `make build-frontend`, the server serves the legacy Jinja2 UI.
 
 | Route | Page | Description |
 |-------|------|-------------|
-| `/login` | `LoginPage` | JWT login form; redirects to `/dashboard` on success |
+| `/login` | `LoginPage` | JWT login/register form; redirects to `/dashboard` on success |
 | `/dashboard` | `DashboardPage` | Recent jobs list; protected route |
 | `/upload` | `UploadPage` | Drag-and-drop PDF/PPTX upload with format selector |
 | `/progress/:jobId` | `ProgressPage` | Real-time progress polling (2 s interval via Tanstack Query) |
-| `/results/:jobId` | `ResultsPage` | Download buttons for PDF, PPT, scripts, video ZIP |
+| `/results/:jobId` | `ResultsPage` | Download buttons + quiz generation for completed jobs |
+| `/quiz/:quizId` | `QuizPage` | One-question-at-a-time quiz view with navigation |
+| `/quiz/:quizId/results` | `QuizResultsPage` | Score summary + per-question feedback in review mode |
 
 **Features**:
 - Glassmorphism design system (backdrop-blur, semi-transparent cards)
@@ -35,6 +50,7 @@ Without `make build-frontend`, the server serves the legacy Jinja2 UI.
 - `AuthContext` — provides `user`, `login`, `logout`, and `isLoading` throughout the tree
 - `ProtectedRoute` guard — unauthenticated users are redirected to `/login`
 - Responsive `Navbar` with user display and logout
+- On-demand quiz generation from completed pipeline output (v0.5.4)
 
 ## Building the React App
 

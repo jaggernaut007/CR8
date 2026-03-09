@@ -80,12 +80,23 @@ LANGCHAIN_PROJECT=cr8-prototype
 # Auth — password for the web UI login (default: CR8-AI)
 AUTH_PASSWORD=CR8-AI
 
+# Upload limits
+MAX_UPLOAD_SIZE_MB=50
+
+# Database (Neon PostgreSQL) — leave empty to skip DB features
+DATABASE_URL=
+JWT_SECRET=
+ALLOWED_ORIGINS=http://localhost:8080,http://localhost:5173
+
 # DeepSeek (eval judge) — only needed for running evals
 DEEPSEEK_API_KEY=
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 
 # HuggingFace — speeds up Kokoro model downloads (get token at huggingface.co/settings/tokens)
 HF_TOKEN=
+
+# Neon — serverless Postgres (used by Neon MCP dev tool)
+NEON_API_KEY=
 ```
 
 ## Configuration Reference
@@ -191,23 +202,87 @@ Used when `VIDEO_PROVIDER=kokoro`. Kokoro is an open-source TTS engine with near
 
 HeyGen keys are only needed when `VIDEO_PROVIDER=heygen`. All three variables must be set — the pipeline validates this at startup if video output is requested. The same validation applies to Synthesia (`SYNTHESIA_API_KEY` and `SYNTHESIA_AVATAR_ID`). Both paths use the shared `_validate_video_provider()` function in `backend/run_pipeline.py`.
 
+### Database (Neon PostgreSQL)
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATABASE_URL` | No | *(empty)* | PostgreSQL connection string. Leave empty to run without DB features. |
+| `ALLOWED_ORIGINS` | No | `http://localhost:8080,http://localhost:5173` | CORS allowed origins (comma-separated) |
+| `NEON_API_KEY` | No | *(empty)* | Neon API key for the Neon MCP dev tool (not used at runtime) |
+
+CR8 uses [Neon](https://neon.tech/) serverless PostgreSQL for persistent storage of users, jobs, quizzes, and chat history. The database is **optional** — when `DATABASE_URL` is empty, the app runs without DB features (no user accounts, no job history, no quizzes).
+
+#### Setting up the database
+
+1. Create a free Neon project at [console.neon.tech](https://console.neon.tech/)
+2. Copy the connection string from the Neon dashboard
+3. Add it to your `.env`:
+
+```bash
+DATABASE_URL=postgresql://user:password@ep-xxx.neon.tech/neondb?sslmode=require
+```
+
+4. Apply the schema (8 tables: users, jobs, quizzes, quiz_questions, quiz_attempts, quiz_responses, chat_sessions, chat_messages):
+
+```bash
+uv run python -c "
+import asyncio, asyncpg, pathlib
+
+async def apply():
+    pool = await asyncpg.create_pool('YOUR_DATABASE_URL')
+    sql = pathlib.Path('backend/db/schema.sql').read_text()
+    await pool.execute(sql)
+    tables = await pool.fetch(\"SELECT tablename FROM pg_tables WHERE schemaname = 'public'\")
+    print('Tables created:', [t['tablename'] for t in tables])
+    await pool.close()
+
+asyncio.run(apply())
+"
+```
+
+5. Generate a JWT secret:
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+6. Add it to your `.env`:
+
+```bash
+JWT_SECRET=your-generated-64-char-hex-string
+```
+
+7. Restart the server — you should see `DB pool created` in the startup logs instead of `No DATABASE_URL — running without database`.
+
+!!! tip "Schema is idempotent"
+    The schema uses `CREATE TABLE IF NOT EXISTS`, so you can safely re-run it without data loss.
+
 ### Authentication
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `AUTH_PASSWORD` | No | `CR8-AI` | Password for the web UI login form |
-| `JWT_SECRET` | Yes (production) | *(empty)* | HMAC secret for signing JWT tokens. Must be at least 32 characters. |
+| `AUTH_PASSWORD` | No | `CR8-AI` | Password for the legacy Jinja2 login form |
+| `JWT_SECRET` | Yes (when DB enabled) | *(empty)* | HMAC secret for signing JWT tokens. Must be at least 32 characters. |
 | `JWT_ALGORITHM` | No | `HS256` | JWT signing algorithm |
 | `JWT_ACCESS_EXPIRY_MINUTES` | No | `480` | Access token lifetime in minutes (default 8 hours) |
 | `JWT_REFRESH_EXPIRY_DAYS` | No | `7` | Refresh token lifetime in days |
 
-The web UI uses bcrypt session authentication. The password is read from `AUTH_PASSWORD` at startup and hashed with bcrypt. For local development the default `CR8-AI` is sufficient. For production deployments, set a strong unique password in your secrets manager.
+CR8 supports two authentication modes:
+
+- **JWT auth** (React SPA, v0.5+) — user accounts with registration, login, and token refresh. Requires `DATABASE_URL` and `JWT_SECRET` to be set.
+- **Legacy session auth** (Jinja2 fallback) — single shared password via `AUTH_PASSWORD`. Works without a database.
 
 !!! warning "Change the default password in production"
     The default password `CR8-AI` is publicly documented. Always set `AUTH_PASSWORD` to a strong secret value before deploying to any environment reachable from the internet.
 
 !!! warning "JWT_SECRET must be at least 32 characters"
     The settings validator in `backend/config.py` will raise a `ValueError` at startup if `JWT_SECRET` is set but shorter than 32 characters. Likewise, `OPENAI_API_KEY` is rejected if it is present but shorter than 8 characters. Both checks use a `@model_validator(mode="after")` on the `Settings` class — the application will refuse to start rather than run with a weak secret.
+
+### Upload
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `MAX_UPLOAD_SIZE_MB` | No | `50` | Maximum file upload size in megabytes |
 
 ### Output
 
