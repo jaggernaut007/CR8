@@ -4,6 +4,7 @@ All endpoints require JWT authentication. Quiz generation invokes the
 standalone quiz LangGraph workflow on completed pipeline job data.
 """
 
+import asyncio
 import json
 import logging
 
@@ -53,6 +54,24 @@ def _strip_answers(questions: list[dict]) -> list[dict]:
     return [{k: v for k, v in q.items() if k not in hidden} for q in questions]
 
 
+def _serialize_questions(questions: list[dict]) -> list[dict]:
+    """Convert DB question rows to JSON-safe dicts.
+
+    Args:
+        questions: Raw question dicts from asyncpg with UUID ids.
+
+    Returns:
+        Questions with string ids and parsed options.
+    """
+    result = []
+    for q in questions:
+        sq = {k: (str(v) if hasattr(v, "hex") else v) for k, v in q.items()}
+        if isinstance(sq.get("options"), str):
+            sq["options"] = json.loads(sq["options"])
+        result.append(sq)
+    return result
+
+
 # --- Generate quiz endpoint ------------------------------------------------
 
 
@@ -88,10 +107,10 @@ async def _validate_job_for_quiz(pool, job_id: str, user: dict):
     Returns:
         Tuple of (job_dict, None) on success or (None, JSONResponse) on error.
     """
-    from backend.services.db_client import get_job
+    from backend.services.db_client import get_job_by_short_id
 
-    job = await get_job(pool, job_id)
-    if not job or str(job.get("user_id", "")) != str(user.get("id", "")):
+    job = await get_job_by_short_id(pool, job_id)
+    if not job or str(job.get("user_id", "")) != str(user.get("user_id", "")):
         return None, JSONResponse({"error": "Job not found"}, status_code=404)
 
     if job.get("status") != "complete":
@@ -101,6 +120,9 @@ async def _validate_job_for_quiz(pool, job_id: str, user: dict):
         )
 
     topics = job.get("topics") or []
+    if isinstance(topics, str):
+        topics = json.loads(topics)
+        job["topics"] = topics
     if not topics:
         return None, JSONResponse(
             {"error": "Job has no topic data for quiz generation"},
@@ -123,8 +145,13 @@ async def _run_quiz_generation(req, user, pool, job, topics):
     Returns:
         JSONResponse with quiz_id and question_count.
     """
+    # DB JSONB columns may come back as strings if stored via json.dumps()
     gap_summary = job.get("gap_summary") or []
+    if isinstance(gap_summary, str):
+        gap_summary = json.loads(gap_summary)
     modules_md = job.get("modules_md") or []
+    if isinstance(modules_md, str):
+        modules_md = json.loads(modules_md)
     curriculum_scope = job.get("curriculum_scope", "General")
 
     logger.info("Generating quiz: job_id=%s, questions=%d", req.job_id, req.question_count)
@@ -132,22 +159,28 @@ async def _run_quiz_generation(req, user, pool, job, topics):
     from backend.pipeline.quiz_graph import build_quiz_graph
 
     graph = build_quiz_graph()
-    result = graph.invoke({
+    graph_input = {
         "job_id": req.job_id,
-        "user_id": str(user["id"]),
+        "user_id": str(user["user_id"]),
         "topics": topics,
         "modules_md": modules_md,
         "gap_summary": gap_summary,
         "curriculum_scope": curriculum_scope,
         "question_count": req.question_count,
-    })
+    }
+    # Run synchronous LLM graph in a thread to avoid blocking the event loop
+    # and causing DB connection timeouts on Neon serverless
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, graph.invoke, graph_input)
 
     questions = result.get("questions", [])
 
     from backend.services.db_client import create_quiz_with_user, create_quiz_questions
 
     title = f"Quiz: {job.get('file_names', ['Untitled'])[0]}"
-    quiz = await create_quiz_with_user(pool, req.job_id, str(user["id"]), title)
+    # Use the full UUID from the job row, not the short_id from the request
+    full_job_id = str(job["id"])
+    quiz = await create_quiz_with_user(pool, full_job_id, str(user["user_id"]), title)
     quiz_id = str(quiz["id"])
 
     await create_quiz_questions(pool, quiz_id, questions)
@@ -174,15 +207,11 @@ async def get_quiz(quiz_id: str, request: Request):
     )
 
     quiz = await get_quiz_by_id(pool, quiz_id)
-    if not quiz or str(quiz.get("user_id", "")) != str(user.get("id", "")):
+    if not quiz or str(quiz.get("user_id", "")) != str(user.get("user_id", "")):
         return JSONResponse({"error": "Quiz not found"}, status_code=404)
 
-    questions = await get_quiz_questions(pool, quiz_id)
-    attempt = await get_quiz_attempt(pool, quiz_id, str(user["id"]))
-
-    for q in questions:
-        if isinstance(q.get("options"), str):
-            q["options"] = json.loads(q["options"])  # legacy: pre-JSONB string storage
+    questions = _serialize_questions(await get_quiz_questions(pool, quiz_id))
+    attempt = await get_quiz_attempt(pool, quiz_id, str(user["user_id"]))
 
     has_completed = attempt and attempt.get("completed_at") is not None
     if not has_completed:
@@ -219,16 +248,16 @@ async def submit_quiz(quiz_id: str, request: Request):
     )
 
     quiz = await get_quiz_by_id(pool, quiz_id)
-    if not quiz or str(quiz.get("user_id", "")) != str(user.get("id", "")):
+    if not quiz or str(quiz.get("user_id", "")) != str(user.get("user_id", "")):
         return JSONResponse({"error": "Quiz not found"}, status_code=404)
 
-    user_id = str(user["id"])
+    user_id = str(user["user_id"])
     existing = await get_quiz_attempt(pool, quiz_id, user_id)
     if existing and existing.get("completed_at"):
         return JSONResponse({"error": "Quiz already submitted"}, status_code=409)
 
-    questions = await get_quiz_questions(pool, quiz_id)
-    q_map = {str(q["id"]): q for q in questions}
+    questions = _serialize_questions(await get_quiz_questions(pool, quiz_id))
+    q_map = {q["id"]: q for q in questions}
 
     responses, correct_count = _score_responses(req.responses, q_map)
 
@@ -267,18 +296,14 @@ async def get_quiz_results(quiz_id: str, request: Request):
     )
 
     quiz = await get_quiz_by_id(pool, quiz_id)
-    if not quiz or str(quiz.get("user_id", "")) != str(user.get("id", "")):
+    if not quiz or str(quiz.get("user_id", "")) != str(user.get("user_id", "")):
         return JSONResponse({"error": "Quiz not found"}, status_code=404)
 
-    attempt = await get_quiz_attempt(pool, quiz_id, str(user["id"]))
+    attempt = await get_quiz_attempt(pool, quiz_id, str(user["user_id"]))
     if not attempt or not attempt.get("completed_at"):
         return JSONResponse({"error": "No completed attempt found"}, status_code=404)
 
-    questions = await get_quiz_questions(pool, quiz_id)
-
-    for q in questions:
-        if isinstance(q.get("options"), str):
-            q["options"] = json.loads(q["options"])  # legacy: pre-JSONB string storage
+    questions = _serialize_questions(await get_quiz_questions(pool, quiz_id))
 
     return JSONResponse({
         "score": float(attempt.get("score", 0)),
@@ -299,13 +324,13 @@ async def quizzes_by_job(job_id: str, request: Request):
         return err
     user, pool = auth
 
-    from backend.services.db_client import get_job, get_quizzes_for_job
+    from backend.services.db_client import get_job_by_short_id, get_quizzes_for_job
 
-    job = await get_job(pool, job_id)
-    if not job or str(job.get("user_id", "")) != str(user.get("id", "")):
+    job = await get_job_by_short_id(pool, job_id)
+    if not job or str(job.get("user_id", "")) != str(user.get("user_id", "")):
         return JSONResponse({"error": "Job not found"}, status_code=404)
 
-    quizzes = await get_quizzes_for_job(pool, job_id)
+    quizzes = await get_quizzes_for_job(pool, str(job["id"]))
 
     return JSONResponse({
         "quizzes": [

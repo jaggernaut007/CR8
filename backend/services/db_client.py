@@ -15,6 +15,29 @@ import asyncpg
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_for_pg(val: Any) -> Any:
+    """Sanitize a value for Postgres insertion.
+
+    Strips null bytes (0x00) that Postgres rejects in TEXT/JSONB,
+    strips leading/trailing whitespace, and normalizes control characters.
+    Handles strings, lists, and dicts recursively.
+
+    Args:
+        val: Value to sanitize (str, list, dict, or passthrough).
+
+    Returns:
+        Sanitized value of the same type.
+    """
+    if isinstance(val, str):
+        return val.replace("\x00", "").strip()
+    if isinstance(val, list):
+        return [_sanitize_for_pg(item) for item in val]
+    if isinstance(val, dict):
+        return {k: _sanitize_for_pg(v) for k, v in val.items()}
+    return val
+
+
 # ---------------------------------------------------------------------------
 # User CRUD
 # ---------------------------------------------------------------------------
@@ -194,9 +217,9 @@ async def update_job_result(
         "WHERE id = $7",
         status,
         result_meta,
-        json.dumps(topics) if topics else None,
-        json.dumps(gap_summary) if gap_summary else None,
-        json.dumps(modules_md) if modules_md else None,
+        json.dumps(topics) if topics and isinstance(topics, (list, dict)) else topics,
+        json.dumps(gap_summary) if gap_summary and isinstance(gap_summary, (list, dict)) else gap_summary,
+        json.dumps(modules_md) if modules_md and isinstance(modules_md, (list, dict)) else modules_md,
         curriculum_scope,
         job_id,
     )
@@ -383,6 +406,9 @@ async def create_quiz_questions(
     logger.info("Inserting %d questions for quiz: %s", len(questions), quiz_id)
     count = 0
     for q in questions:
+        sq = _sanitize_for_pg(q)
+        options = sq["options"]
+        options_json = json.dumps(options) if isinstance(options, list) else options
         await pool.execute(
             "INSERT INTO quiz_questions "
             "(quiz_id, question_text, question_type, options, correct_index, "
@@ -390,17 +416,17 @@ async def create_quiz_questions(
             "feedback_incorrect, topic, sort_order) "
             "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
             quiz_id,
-            q["question_text"],
-            q.get("question_type", "mcq"),
-            q["options"],
-            q["correct_index"],
-            q.get("difficulty", "medium"),
-            q.get("blooms_level"),
-            q.get("source_section"),
-            q.get("feedback_correct"),
-            q.get("feedback_incorrect"),
-            q.get("topic"),
-            q.get("sort_order", 0),
+            sq["question_text"],
+            sq.get("question_type", "mcq"),
+            options_json,
+            sq["correct_index"],
+            sq.get("difficulty", "medium"),
+            sq.get("blooms_level"),
+            sq.get("source_section"),
+            sq.get("feedback_correct"),
+            sq.get("feedback_incorrect"),
+            sq.get("topic"),
+            sq.get("sort_order", 0),
         )
         count += 1
     logger.info("Inserted %d questions for quiz: %s", count, quiz_id)

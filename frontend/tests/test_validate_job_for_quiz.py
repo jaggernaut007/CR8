@@ -8,7 +8,7 @@ Covers the four validation cases:
 5. Valid job returns (job_dict, None)
 
 The function uses a lazy import inside its body:
-    from backend.services.db_client import get_job
+    from backend.services.db_client import get_job_by_short_id
 
 So we patch at the source module: ``backend.services.db_client``.
 """
@@ -27,7 +27,7 @@ _JOB_ID = str(uuid.uuid4())
 
 
 def _make_user(user_id: str = _USER_ID) -> dict:
-    return {"id": user_id, "email": "test@test.com", "role": "user"}
+    return {"user_id": user_id, "email": "test@test.com", "role": "user"}
 
 
 def _make_complete_job(user_id: str = _USER_ID, topics: list | None = None) -> dict:
@@ -57,7 +57,7 @@ class TestValidateJobForQuizNotFound:
         pool = AsyncMock()
         user = _make_user()
 
-        with patch("backend.services.db_client.get_job", new_callable=AsyncMock) as mock_get:
+        with patch("backend.services.db_client.get_job_by_short_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = None
 
             job, err = await _validate_job_for_quiz(pool, _JOB_ID, user)
@@ -73,7 +73,7 @@ class TestValidateJobForQuizNotFound:
         pool = AsyncMock()
         user = _make_user()
 
-        with patch("backend.services.db_client.get_job", new_callable=AsyncMock) as mock_get:
+        with patch("backend.services.db_client.get_job_by_short_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = None
 
             _, err = await _validate_job_for_quiz(pool, _JOB_ID, user)
@@ -88,7 +88,7 @@ class TestValidateJobForQuizNotFound:
         pool = AsyncMock()
         user = _make_user()
 
-        with patch("backend.services.db_client.get_job", new_callable=AsyncMock) as mock_get:
+        with patch("backend.services.db_client.get_job_by_short_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = None
 
             _, err = await _validate_job_for_quiz(pool, _JOB_ID, user)
@@ -113,7 +113,7 @@ class TestValidateJobForQuizOwnershipMismatch:
         user = _make_user(_USER_ID)
         job = _make_complete_job(user_id=_OTHER_USER_ID)
 
-        with patch("backend.services.db_client.get_job", new_callable=AsyncMock) as mock_get:
+        with patch("backend.services.db_client.get_job_by_short_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = job
 
             result_job, err = await _validate_job_for_quiz(pool, _JOB_ID, user)
@@ -130,7 +130,7 @@ class TestValidateJobForQuizOwnershipMismatch:
         user = _make_user(_USER_ID)
         job = _make_complete_job(user_id=_OTHER_USER_ID)
 
-        with patch("backend.services.db_client.get_job", new_callable=AsyncMock) as mock_get:
+        with patch("backend.services.db_client.get_job_by_short_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = job
 
             _, err = await _validate_job_for_quiz(pool, _JOB_ID, user)
@@ -156,7 +156,7 @@ class TestValidateJobForQuizIncompleteStatus:
         job = _make_complete_job()
         job["status"] = "running"
 
-        with patch("backend.services.db_client.get_job", new_callable=AsyncMock) as mock_get:
+        with patch("backend.services.db_client.get_job_by_short_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = job
 
             result_job, err = await _validate_job_for_quiz(pool, _JOB_ID, user)
@@ -175,7 +175,7 @@ class TestValidateJobForQuizIncompleteStatus:
         job = _make_complete_job()
         job["status"] = "error"
 
-        with patch("backend.services.db_client.get_job", new_callable=AsyncMock) as mock_get:
+        with patch("backend.services.db_client.get_job_by_short_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = job
 
             _, err = await _validate_job_for_quiz(pool, _JOB_ID, user)
@@ -192,7 +192,7 @@ class TestValidateJobForQuizIncompleteStatus:
         job = _make_complete_job()
         job["status"] = "pending"
 
-        with patch("backend.services.db_client.get_job", new_callable=AsyncMock) as mock_get:
+        with patch("backend.services.db_client.get_job_by_short_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = job
 
             _, err = await _validate_job_for_quiz(pool, _JOB_ID, user)
@@ -209,7 +209,7 @@ class TestValidateJobForQuizIncompleteStatus:
         job = _make_complete_job()
         job["status"] = "running"
 
-        with patch("backend.services.db_client.get_job", new_callable=AsyncMock) as mock_get:
+        with patch("backend.services.db_client.get_job_by_short_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = job
 
             _, err = await _validate_job_for_quiz(pool, _JOB_ID, user)
@@ -234,7 +234,7 @@ class TestValidateJobForQuizNoTopics:
         user = _make_user()
         job = _make_complete_job(topics=[])
 
-        with patch("backend.services.db_client.get_job", new_callable=AsyncMock) as mock_get:
+        with patch("backend.services.db_client.get_job_by_short_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = job
 
             result_job, err = await _validate_job_for_quiz(pool, _JOB_ID, user)
@@ -253,7 +253,7 @@ class TestValidateJobForQuizNoTopics:
         job = _make_complete_job()
         job["topics"] = None
 
-        with patch("backend.services.db_client.get_job", new_callable=AsyncMock) as mock_get:
+        with patch("backend.services.db_client.get_job_by_short_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = job
 
             _, err = await _validate_job_for_quiz(pool, _JOB_ID, user)
@@ -269,7 +269,7 @@ class TestValidateJobForQuizNoTopics:
         user = _make_user()
         job = _make_complete_job(topics=[])
 
-        with patch("backend.services.db_client.get_job", new_callable=AsyncMock) as mock_get:
+        with patch("backend.services.db_client.get_job_by_short_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = job
 
             _, err = await _validate_job_for_quiz(pool, _JOB_ID, user)
@@ -294,7 +294,7 @@ class TestValidateJobForQuizHappyPath:
         user = _make_user()
         job = _make_complete_job()
 
-        with patch("backend.services.db_client.get_job", new_callable=AsyncMock) as mock_get:
+        with patch("backend.services.db_client.get_job_by_short_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = job
 
             result_job, err = await _validate_job_for_quiz(pool, _JOB_ID, user)
@@ -313,7 +313,7 @@ class TestValidateJobForQuizHappyPath:
         topics = [{"name": "Transformers"}, {"name": "BERT"}]
         job = _make_complete_job(topics=topics)
 
-        with patch("backend.services.db_client.get_job", new_callable=AsyncMock) as mock_get:
+        with patch("backend.services.db_client.get_job_by_short_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = job
 
             result_job, _ = await _validate_job_for_quiz(pool, _JOB_ID, user)
@@ -326,10 +326,10 @@ class TestValidateJobForQuizHappyPath:
         from frontend.quiz_routes import _validate_job_for_quiz
 
         pool = AsyncMock()
-        user = {"id": str(_USER_ID), "email": "test@test.com"}
+        user = {"user_id": str(_USER_ID), "email": "test@test.com"}
         job = _make_complete_job(user_id=str(_USER_ID))
 
-        with patch("backend.services.db_client.get_job", new_callable=AsyncMock) as mock_get:
+        with patch("backend.services.db_client.get_job_by_short_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = job
 
             result_job, err = await _validate_job_for_quiz(pool, _JOB_ID, user)
@@ -346,7 +346,7 @@ class TestValidateJobForQuizHappyPath:
         user = _make_user()
         job = _make_complete_job(topics=[{"name": "Single Topic"}])
 
-        with patch("backend.services.db_client.get_job", new_callable=AsyncMock) as mock_get:
+        with patch("backend.services.db_client.get_job_by_short_id", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = job
 
             result_job, err = await _validate_job_for_quiz(pool, _JOB_ID, user)

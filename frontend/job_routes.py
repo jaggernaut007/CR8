@@ -177,6 +177,17 @@ async def start(request: Request, body: dict):
     jobs[job_id] = capture
     logger.info("Starting pipeline: job=%s formats=%s files=%d", job_id, formats, len(input_files))
 
+    # Persist job to DB so quiz/results can find it later
+    pool = getattr(request.app.state, "db_pool", None)
+    user = getattr(request.state, "user", None)
+    if pool and user and user.get("user_id") != "legacy-session":
+        from backend.services.db_client import create_job
+        file_names = [os.path.basename(f) for f in input_files]
+        try:
+            await create_job(pool, str(user["user_id"]), job_id, file_names, ",".join(formats))
+        except Exception:
+            logger.warning("Failed to persist job to DB: job=%s", job_id, exc_info=True)
+
     asyncio.get_running_loop().run_in_executor(
         None, _run_pipeline_sync, input_files, formats, capture
     )
@@ -390,7 +401,8 @@ async def list_jobs(request: Request):
         offset = int(request.query_params.get("offset", "0"))
     except ValueError:
         return JSONResponse({"error": "Invalid limit or offset"}, status_code=400)
-    return await dbc.list_jobs(pool, user_id, limit=limit, offset=offset)
+    jobs = await dbc.list_jobs(pool, user_id, limit=limit, offset=offset)
+    return {"jobs": jobs, "total": len(jobs)}
 
 
 @router.get("/jobs/{job_id}")

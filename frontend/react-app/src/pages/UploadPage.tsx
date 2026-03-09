@@ -119,7 +119,9 @@ export default function UploadPage() {
           <div>
             <p className="text-lg font-medium text-text-primary">{file.name}</p>
             <p className="mt-1 text-sm text-text-muted">
-              {(file.size / 1024 / 1024).toFixed(1)} MB
+              {file.size < 1024 * 100
+                ? `${(file.size / 1024).toFixed(0)} KB`
+                : `${(file.size / 1024 / 1024).toFixed(1)} MB`}
             </p>
             <button
               onClick={(e) => {

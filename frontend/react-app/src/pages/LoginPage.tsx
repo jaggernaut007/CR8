@@ -8,17 +8,24 @@
  * - Loading spinner during auth requests
  */
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/context/AuthContext";
 
 export default function LoginPage() {
-  const { login, register, error, clearError, isLoading } = useAuth();
+  const { user, login, register, error, clearError, isLoading } = useAuth();
   const navigate = useNavigate();
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+
+  // Redirect to dashboard if already authenticated
+  useEffect(() => {
+    if (user && !isLoading) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [user, isLoading, navigate]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
