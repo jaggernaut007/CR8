@@ -38,6 +38,7 @@ def _research_topic(i, topic, total, store, llm, curriculum_scope):
         except PipelineCancelledError:
             raise
         except Exception as exc:
+            logger.exception("Job search failed for '%s'", name)
             print(f"[Research] WARNING: job search failed for '{name}': {exc}")
             job_results = []
         try:
@@ -45,6 +46,7 @@ def _research_topic(i, topic, total, store, llm, curriculum_scope):
         except PipelineCancelledError:
             raise
         except Exception as exc:
+            logger.exception("Trend search failed for '%s'", name)
             print(f"[Research] WARNING: trend search failed for '{name}': {exc}")
             trend_results = []
 
@@ -160,6 +162,7 @@ def research_node(state: PipelineState) -> dict:
                 raise
             except Exception as exc:
                 topic_name = topics[idx]["name"]
+                logger.exception("Research failed for topic '%s'", topic_name)
                 print(f"[Research] ERROR: topic '{topic_name}' failed — {exc}")
                 gap_summary[idx] = {"topic": topic_name, "gaps": [], "enrichments": [], "severity": "minor"}
 

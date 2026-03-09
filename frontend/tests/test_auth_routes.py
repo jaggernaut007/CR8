@@ -2,6 +2,7 @@
 
 Covers:
 - POST /api/auth/register — happy path, duplicate email, short password, no DB
+- POST /api/auth/register — rate limiting (new: records failures, blocks on 5th)
 - POST /api/auth/login (JWT mode) — happy path, wrong password, no DB
 - POST /api/auth/refresh — happy path, missing cookie, invalid token
 - GET  /api/auth/me — JWT Bearer, legacy session, unauthenticated
@@ -227,6 +228,105 @@ class TestRegister:
                 json={"email": "UPPER@Example.COM", "password": "securepass"},
             )
         assert captured_emails[0] == "upper@example.com"
+
+
+# ---------------------------------------------------------------------------
+# POST /api/auth/register — rate limiting (new behaviour added this session)
+# ---------------------------------------------------------------------------
+
+
+class TestRegisterRateLimiting:
+    """Verify that /register applies rate limiting and records failed attempts."""
+
+    def test_register_rate_limited_after_5_failures_returns_429(self, client, mock_db_pool, sample_user):
+        """The 6th attempt from the same IP must receive 429 when the first 5 triggered failures."""
+        with patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get:
+            # Duplicate email so each attempt increments the failed-attempt counter.
+            mock_get.return_value = sample_user
+            for _ in range(5):
+                client.post(
+                    "/api/auth/register",
+                    json={"email": "existing@example.com", "password": "securepass"},
+                )
+            resp = client.post(
+                "/api/auth/register",
+                json={"email": "existing@example.com", "password": "securepass"},
+            )
+        assert resp.status_code == 429
+
+    def test_register_rate_limit_error_message_mentions_15_minutes(self, client, mock_db_pool, sample_user):
+        """The 429 response body must tell the user to wait 15 minutes."""
+        with patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = sample_user
+            for _ in range(5):
+                client.post(
+                    "/api/auth/register",
+                    json={"email": "existing@example.com", "password": "securepass"},
+                )
+            resp = client.post(
+                "/api/auth/register",
+                json={"email": "existing@example.com", "password": "securepass"},
+            )
+        assert "15 minutes" in resp.json()["error"]
+
+    def test_register_missing_email_records_failed_attempt(self, client, mock_db_pool):
+        """A 400 response due to missing email must call record_failed_attempt."""
+        with patch("frontend.auth_routes.record_failed_attempt") as mock_record:
+            client.post(
+                "/api/auth/register",
+                json={"password": "securepass"},
+            )
+        mock_record.assert_called_once()
+
+    def test_register_short_password_records_failed_attempt(self, client, mock_db_pool):
+        """A 400 response due to a short password must call record_failed_attempt."""
+        with patch("frontend.auth_routes.record_failed_attempt") as mock_record:
+            client.post(
+                "/api/auth/register",
+                json={"email": "new@example.com", "password": "abc"},
+            )
+        mock_record.assert_called_once()
+
+    def test_register_duplicate_email_records_failed_attempt(self, client, mock_db_pool, sample_user):
+        """A 409 duplicate-email response must call record_failed_attempt."""
+        with (
+            patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get,
+            patch("frontend.auth_routes.record_failed_attempt") as mock_record,
+        ):
+            mock_get.return_value = sample_user
+            client.post(
+                "/api/auth/register",
+                json={"email": "existing@example.com", "password": "securepass"},
+            )
+        mock_record.assert_called_once()
+
+    def test_register_check_rate_limit_called_on_each_request(self, client, mock_db_pool, sample_user):
+        """check_rate_limit must be invoked on every register request."""
+        with (
+            patch("frontend.auth_routes.check_rate_limit", return_value=True) as mock_check,
+            patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get,
+            patch("frontend.auth_routes.db_client.create_user", new_callable=AsyncMock) as mock_create,
+        ):
+            mock_get.return_value = None
+            mock_create.return_value = sample_user
+            client.post(
+                "/api/auth/register",
+                json={"email": "new@example.com", "password": "securepass"},
+            )
+        mock_check.assert_called_once()
+
+    def test_register_rate_limited_does_not_call_db(self, client, mock_db_pool):
+        """When rate-limited, the register route must not touch the database."""
+        with (
+            patch("frontend.auth_routes.check_rate_limit", return_value=False),
+            patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get,
+        ):
+            resp = client.post(
+                "/api/auth/register",
+                json={"email": "new@example.com", "password": "securepass"},
+            )
+        assert resp.status_code == 429
+        mock_get.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

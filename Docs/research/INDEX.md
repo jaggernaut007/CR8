@@ -30,21 +30,18 @@ Read the relevant note before implementing any feature that uses an external lib
 | Tailwind CSS v4 Custom Styles & Glassmorphism | [tailwind-css-v4.md](tailwind-css-v4.md) | tailwindcss >= 4.0.1 | 2026-03-09 | Current |
 | shadcn/ui Components & TanStack Query | [shadcn-ui-tanstack-query.md](shadcn-ui-tanstack-query.md) | shadcn/ui (CLI-based), @tanstack/react-query >= 5.90.21 | 2026-03-09 | Current |
 | FastAPI File Serving (Range Requests, PDFs, Videos) | [fastapi-file-serving.md](fastapi-file-serving.md) | FastAPI >= 0.115, Starlette (bundled) | 2026-03-09 | Current |
+| ChromaDB Vector Storage | [chromadb.md](chromadb.md) | >=0.5 | 2026-03-09 | Current |
+| LangGraph Pipeline Orchestration | [langgraph.md](langgraph.md) | >=0.2 | 2026-03-09 | Current |
+| OpenAI SDK (via langchain-openai) | [openai-sdk.md](openai-sdk.md) | langchain-openai >=0.3 | 2026-03-09 | Current |
+| Tavily Python SDK | [tavily.md](tavily.md) | >=0.5 | 2026-03-09 | Current |
+| HeyGen REST API | [heygen-api.md](heygen-api.md) | REST API v2 (rejected in ADR-005) | 2026-03-09 | Current |
+| fpdf2 PDF Generation | [fpdf2.md](fpdf2.md) | >=2.8 | 2026-03-09 | Current |
+| python-pptx PowerPoint Generation | [python-pptx.md](python-pptx.md) | >=1.0 | 2026-03-09 | Current |
+| google-cloud-storage SDK | [google-cloud-storage.md](google-cloud-storage.md) | >=2.14 | 2026-03-09 | Current |
 
 ## Priority Research Needed
 
-These libraries are used in CR8 but have no research notes yet:
-
-| Library | Version in pyproject.toml | Why it matters |
-|---------|--------------------------|----------------|
-| LangGraph | `>=0.2` | Core pipeline orchestration — API changes frequently |
-| OpenAI SDK | (via langchain-openai `>=0.3`) | Model names, streaming API, tool calling |
-| ChromaDB | `>=0.5` | Collection management, embedding functions, query API |
-| Tavily | `>=0.5` | Search parameters, result filtering, rate limits |
-| HeyGen | REST API (no Python SDK) | Avatar video generation — undocumented edge cases |
-| fpdf2 | `>=2.8` | Multi-column PDF layout — complex API |
-| python-pptx | `>=1.0` | Slide master styles, shape positioning |
-| google-cloud-storage | `>=2.0` | Blob upload/download patterns, IAM, signed URLs |
+All priority research has been completed. No gaps remain.
 
 ## Notes That Are Outdated
 

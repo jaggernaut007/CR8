@@ -23,9 +23,8 @@ Built with LangGraph, OpenAI, ChromaDB, Tavily, fpdf2, Kokoro TTS, and FastAPI.
 ### Install & Run
 
 ```bash
-# Setup
-python -m venv .venv && source .venv/bin/activate
-make install
+# Setup (requires uv — https://docs.astral.sh/uv/)
+make install   # uv sync --all-extras
 
 # Configure
 cp .env.example .env   # Add your API keys
@@ -42,7 +41,9 @@ Output is saved to `outputs/<timestamp>/`.
 ### Run Tests
 
 ```bash
-make test   # 507 tests (backend + frontend + GPU service)
+make test       # 853 pytest (backend + frontend + GPU/CPU video services)
+make e2e        # 10 Playwright E2E tests
+npx vitest run  # 81 Vitest component tests (from frontend/react-app/)
 ```
 
 ---
@@ -53,12 +54,14 @@ make test   # 507 tests (backend + frontend + GPU service)
 - **Multi-model routing** — GPT-5-nano (extraction), GPT-5-mini (analysis), GPT-5.1 (generation) with severity-based routing
 - **Chained outputs** — PDF → PPT → Scripts → Videos (MP4), each building on the previous
 - **Kokoro TTS video pipeline** — Open-source voiceover + slide backgrounds → rendered MP4 videos at zero API cost
-- **GPU service offload** — Dual-service Cloud Run deployment: CPU (pipeline) + NVIDIA L4 GPU (video rendering)
+- **3-tier video fallback** — GPU Primary (europe-west4) → GPU Fallback (europe-west1) → CPU Video (europe-west2)
+- **React SPA frontend** — React 19 + Vite 7 + Tailwind v4 + Tanstack Query, all pages wired to real API
+- **Content viewers** — Inline PDF iframe, PPT slide carousel with keyboard navigation, HTML5 video player
+- **JWT + session dual auth** — JWT Bearer tokens for the SPA + legacy session cookie for backward compatibility
 - **PDF and PPTX upload** — Drag-drop with magic byte validation
 - **Vector-backed context** — ChromaDB stores curriculum and research for semantic retrieval
-- **Web UI** — Upload files, select formats, track progress with stage-aware ETA
 - **Evaluation framework** — L1 structural checks (free) + L2 DeepSeek-V3 judge (~$0.02/run)
-- **507-test suite** — Full coverage with zero real API calls
+- **944-test suite** — 853 pytest + 81 Vitest + 10 Playwright E2E, zero real API calls
 
 ---
 

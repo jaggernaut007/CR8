@@ -150,6 +150,10 @@ async def start(request: Request, body: dict):
     if not job_id or not JOB_ID_RE.match(str(job_id)):
         return JSONResponse({"error": "Invalid job_id"}, status_code=400)
 
+    valid_formats = frozenset({"pdf", "ppt", "script", "video"})
+    if not isinstance(formats, list) or not all(f in valid_formats for f in formats):
+        return JSONResponse({"error": "Invalid formats. Allowed: pdf, ppt, script, video"}, status_code=422)
+
     for jid, cap in jobs.items():
         if cap.status == "running":
             return JSONResponse(
@@ -342,7 +346,7 @@ async def list_jobs(request: Request):
         )
 
     try:
-        limit = int(request.query_params.get("limit", "20"))
+        limit = min(int(request.query_params.get("limit", "20")), 100)
         offset = int(request.query_params.get("offset", "0"))
     except ValueError:
         return JSONResponse({"error": "Invalid limit or offset"}, status_code=400)
@@ -364,9 +368,18 @@ async def get_job(request: Request, job_id: str):
     if pool is None:
         return JSONResponse({"error": "Database not available"}, status_code=503)
 
+    user = getattr(request.state, "user", None)
+    if not user:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    user_id = user.get("user_id", "")
+    if user_id == "legacy-session":
+        return JSONResponse(
+            {"error": "JWT authentication required"}, status_code=403
+        )
+
     from backend.services import db_client as dbc
 
     job = await dbc.get_job(pool, job_id)
-    if not job:
+    if not job or str(job.get("user_id", "")) != user_id:
         return JSONResponse({"error": "Job not found"}, status_code=404)
     return job

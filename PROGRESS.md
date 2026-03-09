@@ -4,7 +4,7 @@
 
 ## Current Status
 **Last updated:** 2026-03-09
-**Overall project phase:** v0.5.3 complete — Content Viewers (PDF iframe, PPT carousel, video player)
+**Overall project phase:** v0.5.3 complete — post-release security hardening and crash fixes applied
 **Current version:** v0.5.3
 
 ## What's Working
@@ -23,7 +23,7 @@
 - **Video error/warning surfacing** — `ProgressCapture` captures `[Video] ERROR:` and `[Video] WARNING:` lines; UI shows yellow warning box on completion
 - **Configurable login password** — `AUTH_PASSWORD` env var (default: `CR8-AI`); no longer hardcoded
 - **Unified video provider validation** — `_validate_video_provider()` shared between CLI and web
-- 834-test suite — all passing, ruff clean, pytest-xdist parallel (~42s)
+- 853-test suite — all passing, ruff clean, pytest-xdist parallel (~42s)
 - **Video slides from generated PPT** (was: original PDF) — fixed `_get_slide_images()` bug
 - **Two-phase video pipeline** — sequential TTS (shared engine) → parallel ffmpeg composition
 - **GPU acceleration** — MPS/CUDA for TTS, hardware H.264 encoding (VideoToolbox/NVENC/QSV/AMF), per-worker thread control
@@ -34,6 +34,9 @@
 - MkDocs documentation site (55 pages, Material theme)
 - Agent-readiness scaffolding complete (AGENTS.md, skills, hooks, rules, subagents)
 - **docs-writer agent expanded** — now covers 6 documentation layers (mk-docs, CHANGELOG, Loop Intelligence, AGENTS.md counts, PROGRESS.md, llms.txt); Playwright MCP for visual page verification; Sequential Thinking MCP for planning large updates
+- **Security hardening (post-v0.5.3)** — Settings validator rejects weak JWT_SECRET/OPENAI_API_KEY at startup; rate limiting on /register; job ownership enforcement on GET /api/jobs/{id}; formats allowlist on /api/start; pagination cap on /api/jobs; GCS path sanitisation
+- **Crash resilience** — MoviePy clips released in try/finally; Tavily errors return [] instead of crashing Research agent; GPU client validates video_job_id in submit response
+- **Observability** — All pipeline agent exception handlers now call logger.exception(); video_builder uses exc_info=True throughout
 - **research-assistant agent now security-aware** — mandatory security assessment on new dependencies (CVE scan, license audit, maintenance health, dependency tree, supply chain risk); Sequential Thinking for evaluating trade-offs
 - **RESEARCH-TEMPLATE.md security section** — standardised Security Assessment table with SAFE/WARNING/BLOCK verdict; research notes without a security section are now considered incomplete
 - LangSmith tracing opt-in with metadata (job_id, output_formats, file_count)
@@ -67,10 +70,50 @@
 - 5 new Playwright E2E tests in `frontend/react-app/e2e/results.spec.ts` (5 → 10 total)
 - 3 new Vitest keyboard navigation tests (66 → 69 Vitest total)
 
+### Post-Wave: Path Traversal Security Fix (COMPLETE)
+- `frontend/view_routes.py` — CWE-23 path traversal fix: `job_id` validated against `JOB_ID_RE` (8-char hex), all file paths resolved with `Path.resolve()` and checked against the outputs root before serving
+- Additional agent-generated tests for path validation edge cases
+
 ### Test Counts (v0.5.3 final)
-- **834 pytest** backend tests (was 795, +39 view route tests)
-- **69 Vitest** component tests (was 42, +27 viewer component + keyboard nav tests)
+- **853 pytest** backend tests (was 795, +39 view route tests + 19 additional post-wave tests)
+- **81 Vitest** component tests (was 42, +27 viewer component + keyboard nav tests + 12 additional)
 - **10 Playwright** E2E tests (was 5, +5 content viewer tests)
+
+---
+
+## Security Hardening + Crash Fixes (2026-03-09 Code Review Session)
+> Comprehensive code review found 16 critical issues and 51 warnings; all fixes applied.
+
+### Security Fixes (COMPLETE)
+- `backend/config.py` — Settings validator (`_validate_required_secrets`) fails fast on weak `JWT_SECRET` (< 32 chars) or invalid `OPENAI_API_KEY` (< 8 chars)
+- `frontend/auth_routes.py` — Rate limiting now covers `/register` endpoint (was login-only); prevents account-enumeration brute force
+- `frontend/job_routes.py` — `GET /api/jobs/{job_id}` enforces job ownership; unauthenticated or cross-user access returns 404
+- `frontend/job_routes.py` — `POST /api/start` validates `formats` against explicit allowlist `{"pdf", "ppt", "script", "video"}`
+- `frontend/job_routes.py` — Pagination `limit` capped at 100 on `GET /api/jobs`
+- `backend/services/gcs_client.py` — `job_id` sanitised before GCS key construction (path traversal prevention)
+
+### Data Integrity Fixes (COMPLETE)
+- `backend/services/db_client.py` — `completed_at` now set on job completion/error
+- `backend/services/db_client.py` — Stale-job timeout uses `created_at` (immutable) not `updated_at`
+- `backend/db/schema.sql` — `ON DELETE CASCADE` on `jobs.user_id` FK
+- `backend/db/schema.sql` — Index on `quiz_questions(quiz_id, sort_order)`
+
+### Crash Fixes (COMPLETE)
+- `backend/services/video_builder.py` — MoviePy clips closed in `try/finally` in `_compose_video()` (file handle + RAM leak fix)
+- `backend/services/video_builder.py` — Return type corrected to `list[str | None]`
+- `backend/services/gpu_client.py` — `_do_submit()` raises `RuntimeError` on missing `video_job_id` in response (was silent `None` crash)
+- `backend/services/web_search.py` — Tavily exceptions caught, returns `[]` instead of crashing Research agent
+
+### Observability (COMPLETE)
+- All pipeline agent `except` blocks now call `logger.exception()` alongside print
+- `video_builder.py` — `exc_info=True` replaces manual `traceback.format_exc()`; unused `traceback` import removed
+
+### Code Quality (COMPLETE)
+- `backend/services/ppt_builder.py` — `_ppt_monolithic_fallback()` helper extracted (eliminates ~60 lines of duplication)
+- `backend/services/ppt_builder.py` — Hardcoded `"75%"` fake statistic replaced with `"Data unavailable"`
+
+### Test Counts (unchanged)
+- **853 pytest** + **81 Vitest** + **10 Playwright E2E** — all pass after fixes
 
 ---
 
@@ -231,5 +274,5 @@ CPU service (europe-west2, 2 vCPU, 4 GiB)
 ## Environment Notes
 - Dev server: `make dev` → http://localhost:8080
 - Docs preview: `make docs-serve` → http://localhost:8000
-- Tests: `make test` → 834 pytest + 69 Vitest + 10 Playwright E2E
+- Tests: `make test` → 853 pytest + 81 Vitest + 10 Playwright E2E
 - Requires: `.env` file with OPENAI_API_KEY, TAVILY_API_KEY (copy from `.env.example`)

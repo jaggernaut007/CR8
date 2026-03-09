@@ -1,6 +1,7 @@
 import logging
 import os
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -109,6 +110,18 @@ class Settings(BaseSettings):
     gcs_bucket: str = "cr8-jobs"      # shared GCS bucket for data transfer
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+
+    _MIN_JWT_SECRET_LEN = 32
+    _MIN_API_KEY_LEN = 8
+
+    @model_validator(mode="after")
+    def _validate_required_secrets(self) -> "Settings":
+        """Fail fast if critical secrets are missing or too short."""
+        if self.jwt_secret and len(self.jwt_secret) < self._MIN_JWT_SECRET_LEN:
+            raise ValueError("JWT_SECRET must be at least 32 characters")
+        if self.openai_api_key and len(self.openai_api_key) < self._MIN_API_KEY_LEN:
+            raise ValueError("OPENAI_API_KEY looks invalid (too short)")
+        return self
 
     @property
     def output_formats_list(self) -> list[str]:

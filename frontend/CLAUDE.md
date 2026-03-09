@@ -3,7 +3,7 @@
 
 ## Frontend Architecture
 
-### Current State (v0.5.2)
+### Current State (v0.5.3)
 The `frontend/` directory contains two layers:
 
 1. **React SPA** (`frontend/react-app/`) — the primary UI, built with React 19 + Vite 7 + Tailwind v4 + Tanstack Query
@@ -11,7 +11,7 @@ The `frontend/` directory contains two layers:
 
 The SPA is built via `make build-frontend` → copies to `frontend/static/` (gitignored).
 FastAPI detects `frontend/static/index.html` at import time — if present, serves the React SPA;
-otherwise falls back to Jinja2 templates (legacy, being removed in v0.5.3).
+otherwise falls back to Jinja2 templates (legacy). The Jinja2 fallback is retained while the React SPA is the primary path.
 
 ### React SPA Structure (`frontend/react-app/`)
 
@@ -23,11 +23,15 @@ otherwise falls back to Jinja2 templates (legacy, being removed in v0.5.3).
 | `src/context/AuthContext.tsx` | Auth state provider with silent refresh on mount |
 | `src/components/Navbar.tsx` | Top navigation bar with logout |
 | `src/components/ProtectedRoute.tsx` | Auth guard wrapping `<Outlet />` |
+| `src/components/ContentTabs.tsx` | Tab bar switching between PDF / Slides / Video viewer panels |
+| `src/components/PdfViewer.tsx` | Inline PDF viewer via `<iframe>` (browser-native, zero deps) |
+| `src/components/PptCarousel.tsx` | Slide image carousel — prev/next, counter, keyboard arrow navigation |
+| `src/components/VideoPlayer.tsx` | HTML5 `<video>` with topic selector dropdown |
 | `src/pages/LoginPage.tsx` | Login + register card with glassmorphism |
 | `src/pages/DashboardPage.tsx` | Job history list with status badges |
 | `src/pages/UploadPage.tsx` | Drag-drop file upload + format selection |
 | `src/pages/ProgressPage.tsx` | Pipeline stages + progress bar + ETA polling |
-| `src/pages/ResultsPage.tsx` | Download buttons + job metadata |
+| `src/pages/ResultsPage.tsx` | Viewer panels (PDF / Slides / Video) above download buttons |
 | `src/index.css` | Tailwind v4 design system (`@theme` + `@utility` directives) |
 
 **Key patterns:**

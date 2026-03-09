@@ -21,7 +21,7 @@ Run `git diff --name-only HEAD~1` (or `git diff --staged --name-only` for uncomm
 Run these commands and read the output:
 ```bash
 make lint    # ruff check . — must be clean
-make test    # pytest -v (507 tests) — must all pass
+make test    # pytest -v (853 tests) — must all pass
 ```
 
 ### Step 3 — Check Each Category Below
@@ -140,7 +140,7 @@ Structure your review as:
 
 ### Verification
 - `make lint`: ✅ clean / ❌ N violations
-- `make test`: ✅ 507 passed / ❌ N failures
+- `make test`: ✅ 853 passed / ❌ N failures
 
 ### Code Quality
 [checklist results with tool evidence]

@@ -44,12 +44,12 @@ Route logic was extracted from `app.py` into focused sub-modules during the Wave
 | Endpoint | Method | Auth required | Description |
 |----------|--------|---------------|-------------|
 | `/api/upload` | POST | Yes | Upload a PDF or PPTX, returns `{job_id, filename}` |
-| `/api/start` | POST | Yes | Start pipeline for a job, returns `{status: running}` |
+| `/api/start` | POST | Yes | Start pipeline for a job; `formats` list validated against `{"pdf","ppt","script","video"}` allowlist, returns `{status: running}` |
 | `/api/progress/{job_id}` | GET | Yes | Poll progress: `{status, stage, percent, logs, elapsed, warnings}` |
 | `/api/cancel/{job_id}` | POST | Yes | Cancel a running job |
 | `/api/download/{job_id}/{type}` | GET | Yes | Download output files (pdf, ppt, scripts, videos) |
-| `/api/jobs` | GET | Yes | List jobs for the current user (requires JWT + `DATABASE_URL`) |
-| `/api/jobs/{job_id}` | GET | Yes | Get a single job record from the database |
+| `/api/jobs` | GET | Yes | List jobs for the current user (requires JWT + `DATABASE_URL`); `limit` capped at 100 |
+| `/api/jobs/{job_id}` | GET | Yes | Get a single job from the database; returns 404 if job does not belong to the authenticated user |
 
 ### View Routes (`/api/view`)
 
@@ -141,7 +141,7 @@ The `cr8_session` cookie is accepted as an alternative to JWT Bearer by `get_cur
 
 ### Rate Limiting
 
-Login failures are rate-limited per IP: 5 failures within 15 minutes triggers HTTP 429. The counter resets automatically after 15 minutes.
+Login and registration failures are rate-limited per IP: 5 failures within 15 minutes triggers HTTP 429. The counter resets automatically after 15 minutes. Rate limiting applies to both `POST /api/auth/login` and `POST /api/auth/register`.
 
 ### DB-Less Mode
 
@@ -186,12 +186,14 @@ Any other file type is rejected with HTTP 400. The validated file is saved to a 
 POST /api/start
 Content-Type: application/json
 
-Body: {"job_id": "abc123"}
+Body: {"job_id": "abc123", "formats": ["pdf", "ppt"]}
 
 Response: {"status": "running"}
 ```
 
 The pipeline runs in a background thread. Progress is tracked via `ProgressCapture`. On start, the endpoint scans the job directory for both `.pdf` and `.pptx` files to locate the uploaded source file.
+
+The `formats` field is validated against the allowlist `{"pdf", "ppt", "script", "video"}`. A non-list value or any format not in the allowlist returns HTTP 422.
 
 ## Progress Polling
 

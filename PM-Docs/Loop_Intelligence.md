@@ -15,8 +15,8 @@ This document is the **single source of strategic truth** for CR8. It serves two
 
 **Update cadence:** Refresh after each minor version bump (0.4 → 0.5 → 0.6). Keep under 400 lines.
 
-**Last Updated**: 2026-03-09 (v0.5.3 — Content viewers: PDF iframe, PPT carousel, HTML5 video player)
-**Previous Version**: Loop Intelligence update 2026-03-09 (v0.5.2)
+**Last Updated**: 2026-03-09 (post-v0.5.3 — security hardening, crash fixes, observability improvements)
+**Previous Version**: Loop Intelligence update 2026-03-09 (v0.5.3)
 
 ---
 
@@ -34,7 +34,7 @@ Curriculum PDFs → [Ingest Agent] → [Research Agent] → [Generate Agent] →
        └── Feedback Loop → Agent improves future content
 ```
 
-Built with LangGraph, OpenAI, ChromaDB, Tavily, fpdf2, FastAPI, React 19 + Vite 7 + Tailwind v4. Deployed on GCP Cloud Run. 834 backend tests + 69 Vitest + 10 Playwright E2E = 913 tests total.
+Built with LangGraph, OpenAI, ChromaDB, Tavily, fpdf2, FastAPI, React 19 + Vite 7 + Tailwind v4. Deployed on GCP Cloud Run. 853 backend tests + 81 Vitest + 10 Playwright E2E = 944 tests total.
 
 ---
 
@@ -50,7 +50,7 @@ CR8 is a **late-prototype / early-product**. The content generation pipeline is 
 | GPU video service (NVIDIA L4, Cloud Run) | Complete, deployed |
 | 3-tier video fallback (GPU → GPU fallback → CPU) | Complete, deployed |
 | Web UI (FastAPI + Jinja2 prototype) | Complete, deployed |
-| Security hardening (CORS, CSP, auth middleware) | Complete |
+| Security hardening (CORS, CSP, auth middleware, config validators, ownership checks) | Complete |
 | Database layer (Neon PostgreSQL, 8 tables) | Complete |
 | JWT authentication + legacy session dual-auth | Complete |
 | Frontend route restructure (modular) | Complete |
@@ -99,11 +99,12 @@ Three-container deployment on GCP Cloud Run, all scale to zero (~£0 idle):
 
 Video data moves between services via GCS. Service-to-service calls authenticated with OIDC.
 
-### Database & Auth (v0.5.1)
+### Database & Auth (v0.5.1, hardened post-v0.5.3)
 
-- **Neon PostgreSQL** — 8 tables (users, jobs, quizzes, quiz_questions, quiz_attempts, quiz_responses, chat_sessions, chat_messages), async via asyncpg. Schema includes Bloom's taxonomy, difficulty levels, one-attempt-only constraint, and pre-provisioned chat tables for v0.5.1.
+- **Neon PostgreSQL** — 8 tables (users, jobs, quizzes, quiz_questions, quiz_attempts, quiz_responses, chat_sessions, chat_messages), async via asyncpg. Schema includes Bloom's taxonomy, difficulty levels, one-attempt-only constraint, and pre-provisioned chat tables for v0.5.1. Post-v0.5.3: `ON DELETE CASCADE` on jobs FK, index on quiz_questions ordered lookup.
 - **Dual auth** — JWT (PyJWT + bcrypt) for API consumers + legacy session auth for existing web UI
-- **Security** — SecurityHeadersMiddleware (CSP, X-Frame-Options, etc.), CORS locked to configured origins, AuthMiddleware on all non-public paths
+- **Security** — SecurityHeadersMiddleware (CSP, X-Frame-Options, etc.), CORS locked to configured origins, AuthMiddleware on all non-public paths. Rate limiting covers both login and registration. Job ownership enforced on GET /api/jobs/{id}. Settings validator rejects weak JWT secrets at startup.
+- **Pipeline resilience** — Tavily search failures return empty results instead of crashing the Research agent. MoviePy clips released on composition failure. GPU service submit validates response before polling begins.
 
 ---
 

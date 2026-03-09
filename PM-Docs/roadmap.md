@@ -172,8 +172,8 @@ All instances scale to zero ($0 when idle).
 ### Phase Breakdown (each phase = patch release)
 
 **v0.5.1: Foundation** — DB + JWT + API restructure + test optimization (Jinja2 still works) **[COMPLETE]**
-**v0.5.2: React SPA Shell** — Login + Dashboard + Upload + Progress (replaces Jinja2)
-**v0.5.3: Results + Content Viewers** — PDF viewer, PPT carousel, video player
+**v0.5.2: React SPA Shell** — Login + Dashboard + Upload + Progress (replaces Jinja2) **[COMPLETE]**
+**v0.5.3: Results + Content Viewers** — PDF viewer, PPT carousel, video player **[COMPLETE]**
 **v0.5.4: Quiz Agent + Quiz UI** — edX-style quiz, red/green results
 
 ### Agent & MCP Checkpoints Per Phase
@@ -196,7 +196,7 @@ Each phase follows the Wave Protocol from AGENTS.md. Agents run in strict order 
 - **Playwright**: E2E tests against localhost:8080 (login flow, upload, progress)
 - **Sequential Thinking**: not needed (no architectural trade-offs beyond existing ADRs)
 
-#### v0.5.2: React SPA Shell
+#### v0.5.2: React SPA Shell [COMPLETE]
 **Pre-implementation:**
 - `research-assistant` → React 19, Vite 6, Tailwind v4, React Router v7 (Context7 for all; Snyk package health for each new npm dep)
 - `research-assistant` → tailwindcss-glassmorphism patterns, shadcn/ui + Radix primitives, Tanstack Query
@@ -231,7 +231,7 @@ Each phase follows the Wave Protocol from AGENTS.md. Agents run in strict order 
 - **Playwright**: verify each page renders at localhost:8080 after SPA integration — LoginPage, DashboardPage, UploadPage, ProgressPage; test dark mode toggle; test responsive layout
 - **Sequential Thinking**: reason through SPA routing strategy (hash vs browser router, FastAPI catch-all)
 
-#### v0.5.3: Results + Content Viewers
+#### v0.5.3: Results + Content Viewers [COMPLETE]
 **Pre-implementation:**
 - `research-assistant` → react-pdf or PDF.js for inline viewing (Context7 + Snyk health check)
 - `research-assistant` → HTML5 video player patterns, LibreOffice PPTX→PNG server-side conversion
@@ -279,6 +279,48 @@ Each phase follows the Wave Protocol from AGENTS.md. Agents run in strict order 
 4. `docs-writer` — full docs pass: mk-docs quiz pages, CHANGELOG, Loop Intelligence, PROGRESS, todo.md, llms.txt
 5. `code-reviewer` with Snyk — full `snyk_code_scan` + `snyk_sca_scan` on entire codebase
 6. `research-assistant` — final dependency audit (all new deps added across v0.5.2-v0.5.4)
+
+#### Post-v0.5.4 Research Sprint: Code Knowledge Graph + PM Tool Evaluation
+> **PRIORITY** — Run immediately after v0.5.4 ships. Both research streams inform tooling for v0.6+ and are prerequisites for implementation.
+
+**Stream 1: Code Knowledge Graph (for CR8 codebase understanding)**
+
+Existing research: `docs/research/code-intelligence-tools.md` (2026-03-06), `docs/research/gitlab-knowledge-graph.md` (2026-03-06). Both need refreshing — tools have evolved since initial evaluation.
+
+- `research-assistant` → **Refresh code-graph-mcp evaluation** (v1.2.0+ — check if Python 3.11 is now supported, ast-grep backend improvements, real-world benchmarks on ~20K LoC Python projects)
+- `research-assistant` → **Deep-dive codebase-memory-mcp** (Go binary, 35 languages, 99.2% token reduction claimed — verify with CR8-sized project, check MCP compatibility with Claude Code, security assessment)
+- `research-assistant` → **Re-evaluate Axon MCP** (KuzuDB vs Neo4j for CR8's scale, Python structural analysis quality, impact analysis accuracy on LangGraph codebases)
+- `research-assistant` → **Evaluate new entrants** (web search for code graph MCP tools released since March 2026 — the ecosystem moves fast)
+- **Hands-on trial**: Install top 2 candidates, index CR8 codebase, run 10 standard queries:
+  1. "What calls `build_videos()`?"
+  2. "What does `agent_generate.py` depend on?"
+  3. "Show me all ChromaDB usage"
+  4. "Impact of changing `PipelineState` schema"
+  5. "What services does `gpu_client.py` interact with?"
+  6. "Find all LangGraph node functions"
+  7. "What routes call `db_client` functions?"
+  8. "Show the import graph for `backend/pipeline/`"
+  9. "Dead code in `backend/services/`?"
+  10. "What tests cover `video_builder.py`?"
+- **Deliverable**: `docs/research/code-knowledge-graph-eval.md` with benchmark results, token savings measured on CR8, recommendation with ADR if warranted
+- **Decision criteria**: Must demonstrate >5x token savings on structural queries AND work with Python 3.11 AND have MIT/Apache license
+
+**Stream 2: PM Tool Evaluation (Notion vs alternatives)**
+
+Existing research: `docs/research/code-intelligence-tools.md` Category 2 (2026-03-06). Covered Notion, GitHub Projects V2, Linear, Plane superficially. Needs deeper comparative evaluation.
+
+- `research-assistant` → **Notion API deep-dive** — rate limits (3 req/sec), database query performance at scale, MCP server capabilities (which tools are available, what's read-only vs read-write), webhook support for bidirectional sync, pricing implications
+- `research-assistant` → **GitHub Projects V2 re-evaluation** — has the status field API limitation been resolved? New GraphQL mutations? Integration with GitHub Actions for automated board updates
+- `research-assistant` → **Linear re-evaluation** — free tier changes? AI agent delegation improvements? Worth the $8-20/person/month for a 2-person team if agent features are significantly better?
+- `research-assistant` → **Plane re-evaluation** — Plane Cloud (hosted) improvements since initial research? API maturity? MCP server availability?
+- `research-assistant` → **New entrants** — Shortcut, Height, Huly, or any PM tools with native MCP/AI agent support released since March 2026
+- **Evaluation matrix**: Score each on: (1) MCP/API quality, (2) AI agent support, (3) cost, (4) setup complexity, (5) bidirectional sync capability, (6) security/SOC2, (7) team scalability
+- **Deliverable**: `docs/research/pm-tool-evaluation.md` with scored comparison matrix and recommendation
+- **Decision criteria**: Must have working MCP or REST API, support bidirectional sync, and cost <$25/month for 2-person team
+
+**Timeline**: Both streams run in parallel. Results feed directly into v0.6 implementation — the winning PM tool replaces the current Notion-specific plan, and the winning code graph tool gets installed immediately.
+
+---
 
 ### Foundation work
 - **MCP Phase 1+2 (config-only): COMPLETE** (2026-03-04, updated 2026-03-05) — Context7, Playwright, Sequential Thinking installed and wired into agents. GitHub MCP removed (unreliable). See `docs/research/mcp-dev-tools.md` and `PM-Docs/MCP_Integration_Plan.md`.
@@ -577,9 +619,51 @@ Every feature follows Red → Green → Refactor. Tests written before implement
 ### Foundation work
 - ADR-004: Feedback loop architecture (quiz data → content regeneration, thresholds, regression prevention)
 - ADR-005: Observability stack (structured logging, metrics, health checks)
+- ADR-006: PM tool integration architecture (winner from post-v0.5.4 research sprint — API vs MCP, sync strategy, data model mapping)
 - Research notes: `recharts.md`, `structured-logging-python.md`
+- **Research note (REQUIRED — completed in post-v0.5.4 research sprint):** `docs/research/pm-tool-evaluation.md` — comparative evaluation of Notion, GitHub Projects V2, Linear, Plane, and new entrants. Scored matrix on API quality, AI agent support, cost, sync capability, security.
 - Backfill remaining research notes: `fpdf2.md`, `python-pptx.md`, `chromadb.md`
 - **Code intelligence upgrade:** Evaluate code-graph-mcp for call graphs + dependency analysis (requires Python 3.12 upgrade decision). Evaluate Axon MCP if codebase exceeds 30K LoC. Review CodeGrok token savings metrics from v0.5 usage.
+
+### PM Tool Integration (developer workflow — NOT content source)
+> Winning tool from post-v0.5.4 research sprint. No content ingestion into the pipeline from PM tool.
+
+**Scope:** Sync CR8 project state (jobs, sprints, features, bugs) to the chosen PM platform for queryable tracking. Replaces manual markdown-grep for feature status. `PROGRESS.md` remains as agent session handoff cache.
+
+**Prerequisites (MUST be completed before implementation):**
+- `docs/research/pm-tool-evaluation.md` — scored comparison (from post-v0.5.4 research sprint)
+- ADR-006 written based on evaluation winner
+- Security assessment of chosen tool (data exposure, SOC2, token scope)
+
+**Integration points (tool-agnostic — applies to whichever PM tool wins):**
+| Sync | Direction | Trigger |
+|------|-----------|---------|
+| Job completion | CR8 → PM tool | Pipeline finishes → create/update item |
+| Sprint board | CR8 → PM tool | `cz bump` → update version tracking |
+| Bug/feature tracking | Bidirectional | Manual triage in PM tool → query from CLI |
+| Test counts | CR8 → PM tool | Post-test-run hook → update metrics |
+
+**New files:**
+| File | Purpose |
+|------|---------|
+| `backend/services/pm_client.py` | PM tool API wrapper (Notion/Linear/GitHub/etc. — depends on research outcome) |
+| `backend/tests/test_pm_client.py` | Mocked API tests |
+| `scripts/pm_sync.py` | CLI script for manual/scheduled sync |
+
+**Explicitly out of scope:** PM tool as a content/curriculum source for the pipeline. CR8 ingests PDF/PPTX only.
+
+### Code Knowledge Graph Integration (codebase intelligence)
+> Winning tool from post-v0.5.4 research sprint. Installed as MCP server for developer workflow.
+
+**Prerequisites (MUST be completed before integration):**
+- `docs/research/code-knowledge-graph-eval.md` — hands-on benchmark (from post-v0.5.4 research sprint)
+- ADR if new infrastructure required (e.g., Neo4j for Axon)
+
+**Integration:**
+- Add winning tool to `.claude/mcp.json`
+- Update `CLAUDE.md` MCP Servers section
+- Update agent instructions to use graph queries for code navigation
+- Verify token savings on 10 standard queries (benchmarked in research sprint)
 
 ### Admin Dashboard (React)
 | Page | What it shows |
@@ -675,20 +759,97 @@ PostgreSQL quiz data → feedback_analyser.py (50+ completions, avg < 60% = weak
 
 ---
 
-## v0.7 — Student Engagement & Competitive Features
-> Mind maps, flashcards, RAG chat, student dashboard. Closes the engagement gap with NoteGPT while leveraging CR8's curriculum-grounded advantage.
+## v0.7 — Student Engagement, Knowledge Graph & Competitive Features
+> Mind maps, flashcards, RAG chat, student dashboard, curriculum knowledge graph. Closes the engagement gap with NoteGPT while leveraging CR8's curriculum-grounded advantage.
 
 ### Why v0.7
-NoteGPT (B2C, $19.92/mo) offers mind maps, flashcards, and RAG chat. Universities expect visual summaries and active recall tools. These features close the engagement gap while leveraging CR8's advantage — competitors generate from generic prompts, CR8 generates from actual university materials + industry research data.
+NoteGPT (B2C, $19.92/mo) offers mind maps, flashcards, and RAG chat. Universities expect visual summaries and active recall tools. These features close the engagement gap while leveraging CR8's advantage — competitors generate from generic prompts, CR8 generates from actual university materials + industry research data. The Knowledge Graph takes this further — structuring curriculum concepts into a queryable graph that powers smarter quiz generation, mind maps, and adaptive learning.
 
 ### Features
 
 | Feature | Description | CR8 Advantage |
 |---------|-------------|---------------|
-| **Mind maps** | Mermaid.js from module JSON → SVG/PNG. Topic nodes linked to gap analysis. | Curriculum-grounded, not generic |
+| **Knowledge Graph** | Curriculum concepts extracted into a graph (concepts, prerequisites, relationships). Powers quiz targeting, mind maps, and adaptive learning. | Structured curriculum understanding, not flat RAG |
+| **Mind maps** | Generated from Knowledge Graph → Mermaid.js → SVG/PNG. Topic nodes linked to gap analysis and prerequisite chains. | Curriculum-grounded with prerequisite awareness |
 | **Flashcards + SM-2** | Spaced repetition (SM-2 algorithm), Bloom's taxonomy tagged, Anki `.apkg` export | Quiz failure rates auto-seed difficulty; gap-aware |
 | **RAG chat** | ChromaDB retrieval + GPT-5-mini streaming. Students ask questions about course content. Citations shown as chips. | ChromaDB already populated by pipeline — zero extra ingestion |
 | **Student dashboard** | Topic mastery radar chart, flashcard progress, recommended study areas, quiz history | Institutional + individual views; data stays with university |
+
+### Knowledge Graph (curriculum concept graph)
+> Extract structured concept relationships from curriculum content. NOT a general-purpose knowledge base — scoped to the specific course material ingested.
+
+**Pre-implementation research (MANDATORY — run before any code):**
+- `research-assistant` → Graph storage options: Neo4j (hosted Aura free tier) vs NetworkX (in-memory, no infra) vs extending ChromaDB with metadata relationships vs PostgreSQL `ltree`/adjacency list
+- `research-assistant` → LLM-based concept extraction techniques (structured output parsing, entity-relationship extraction prompts, validation strategies)
+- `research-assistant` → Graph visualisation libraries (Mermaid.js, D3-force, Cytoscape.js) — browser rendering, interactivity, bundle size
+- Security assessment: graph storage auth, data isolation per user/job, injection risks in graph queries
+- ADR required: `docs/adr/ADR-0XX-knowledge-graph-architecture.md` — storage choice, extraction pipeline design, query patterns
+
+**Architecture:**
+```
+PDF/PPTX → agent_ingest.py (existing)
+  → concept_extractor.py (NEW — LLM extracts concepts + relationships)
+    → knowledge_graph_store.py (NEW — persist graph)
+      ↓
+  Quiz Agent reads graph for targeted question generation
+  Mind Map builder reads graph for visualisation
+  RAG chat uses graph for context-aware retrieval
+  Adaptive learning (post-1.0) uses graph for prerequisite chains
+```
+
+**Concept extraction pipeline:**
+1. After Ingest agent parses content, run concept extraction on each module
+2. LLM identifies: concepts (nodes), prerequisites (directed edges), difficulty level, Bloom's taxonomy mapping
+3. Store as graph with per-job isolation (each pipeline run produces its own graph)
+4. Validate: no orphan nodes, no cycles in prerequisite chains, coverage check against module headings
+
+**New files:**
+| File | Purpose |
+|------|---------|
+| `backend/services/concept_extractor.py` | LLM-based concept + relationship extraction from module markdown |
+| `backend/services/knowledge_graph_store.py` | Graph CRUD — add concepts, query prerequisites, find related concepts |
+| `backend/prompts/concept_extraction.py` | Structured output prompt for concept/relationship extraction |
+| `backend/tests/test_concept_extractor.py` | Mocked LLM tests for extraction quality |
+| `backend/tests/test_knowledge_graph_store.py` | Graph storage CRUD tests |
+| `docs/research/knowledge-graph-architecture.md` | Research note (MUST exist before any code) |
+| `docs/research/concept-extraction-llm.md` | Research note on extraction techniques |
+| `docs/research/graph-visualisation.md` | Research note on browser rendering options |
+| `docs/adr/ADR-0XX-knowledge-graph-architecture.md` | Architecture decision record |
+
+**Database additions:**
+```sql
+-- Option A: PostgreSQL adjacency list (simple, no new infra)
+CREATE TABLE concepts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id VARCHAR(12) REFERENCES jobs(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    module_index INTEGER,
+    blooms_level VARCHAR(20),
+    difficulty VARCHAR(10) CHECK (difficulty IN ('foundational', 'intermediate', 'advanced')),
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE concept_relationships (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_id UUID REFERENCES concepts(id) ON DELETE CASCADE,
+    target_id UUID REFERENCES concepts(id) ON DELETE CASCADE,
+    relationship VARCHAR(30) NOT NULL CHECK (relationship IN ('prerequisite', 'related', 'part_of', 'builds_on')),
+    strength DECIMAL(3,2) DEFAULT 1.00,
+    UNIQUE(source_id, target_id, relationship)
+);
+
+CREATE INDEX idx_concepts_job ON concepts(job_id);
+CREATE INDEX idx_relationships_source ON concept_relationships(source_id);
+CREATE INDEX idx_relationships_target ON concept_relationships(target_id);
+```
+*Note: Final storage choice (PostgreSQL vs Neo4j vs other) decided by research + ADR. Schema above is illustrative.*
+
+**Integration with existing features:**
+- **Quiz Agent** — queries graph for prerequisite-aware question generation (test prerequisite concepts before advanced ones)
+- **Mind Maps** — generated directly from graph structure instead of flat module JSON
+- **RAG Chat** — graph-augmented retrieval: when student asks about concept X, also retrieve prerequisites and related concepts
+- **Gap Analysis** — enrich `gap_summary` with concept-level granularity (which specific concepts are weak, not just topics)
 
 ### New files (estimated)
 | File | Purpose |
@@ -737,10 +898,14 @@ CREATE TABLE flashcards (
 ```
 
 ### Done when
-- [ ] Mind maps render from any completed pipeline job
+- [ ] Knowledge Graph extracts concepts + relationships from any completed pipeline job
+- [ ] Mind maps generated from Knowledge Graph (not flat JSON), render as interactive SVG
+- [ ] Quiz Agent uses graph for prerequisite-aware question ordering
 - [ ] Flashcards with SM-2 scheduling, Anki `.apkg` export works
 - [ ] RAG chat answers questions with citations from course content
 - [ ] Student dashboard shows mastery radar and study recommendations
+- [ ] All 3 research notes written and indexed before implementation starts
+- [ ] ADR for Knowledge Graph architecture approved
 - [ ] `make test` passes, `make lint` clean
 - [ ] `cz bump --increment MINOR` → v0.7.0
 
@@ -1001,18 +1166,33 @@ Non-negotiable before any university pilot contract.
 | Document new MCPs | `CLAUDE.md` | Agent awareness |
 | Add token optimization guidelines | `mk-docs/getting-started/developer-workflow.md` | Team discipline |
 
-### v0.5 Post-Launch — Upgrade Tracking
+### Post-v0.5.4 — Research Sprint (Code Graph + PM Tool)
 | Change | File | Impact |
 |--------|------|--------|
-| Create Notion feature database | Notion (external) | 70% faster feature queries vs markdown |
-| Export PROGRESS.md to Notion | Notion + `PROGRESS.md` | Single source of truth for features |
+| **Research: code-graph-mcp refresh** | `docs/research/code-knowledge-graph-eval.md` | Python 3.11 compat, benchmarks on CR8 |
+| **Research: codebase-memory-mcp deep-dive** | `docs/research/code-knowledge-graph-eval.md` | 99% token reduction claims verified |
+| **Research: Axon MCP re-evaluation** | `docs/research/code-knowledge-graph-eval.md` | KuzuDB vs Neo4j for CR8 scale |
+| **Research: new code graph entrants** | `docs/research/code-knowledge-graph-eval.md` | Ecosystem scan since March 2026 |
+| **Hands-on trial**: top 2 tools on CR8 | `.claude/mcp.json` | 10 standard queries benchmarked |
+| **Research: PM tool evaluation** (Notion vs alternatives) | `docs/research/pm-tool-evaluation.md` | Scored matrix: Notion, GitHub Projects, Linear, Plane, new entrants |
 
-### v0.6 — Evaluate Deeper Tools
+### v0.6 — PM Tool + Code Graph Integration + Admin Dashboard
 | Change | File | Impact |
 |--------|------|--------|
-| Evaluate code-graph-mcp (needs Python 3.12) | `.claude/mcp.json` | Call graphs + dependency analysis |
-| Evaluate Axon MCP (if codebase >30K LoC) | `.claude/mcp.json` | Full knowledge graph with impact analysis |
+| Install winning code graph MCP | `.claude/mcp.json` | >5x token savings on structural queries |
+| Implement `pm_client.py` + sync script (winner from research) | `backend/services/pm_client.py` | Queryable project tracking |
+| Sync job completions + sprint status to PM tool | `scripts/pm_sync.py` | Single source of truth for features |
 | Review token savings metrics from v0.5 | `PM-Docs/token-usage-report.md` | Data-driven tool decisions |
+
+### v0.7 — Knowledge Graph Research + Implementation
+| Change | File | Impact |
+|--------|------|--------|
+| **Research note: graph storage** (REQUIRED) | `docs/research/knowledge-graph-architecture.md` | Must complete before any graph code |
+| **Research note: concept extraction** (REQUIRED) | `docs/research/concept-extraction-llm.md` | LLM extraction techniques |
+| **Research note: graph visualisation** (REQUIRED) | `docs/research/graph-visualisation.md` | Browser rendering options |
+| **ADR: Knowledge Graph architecture** (REQUIRED) | `docs/adr/ADR-0XX-knowledge-graph-architecture.md` | Storage + extraction design |
+| Implement concept extractor + graph store | `backend/services/` | Structured curriculum understanding |
+| Integrate graph with Quiz Agent + Mind Maps | `backend/pipeline/` | Prerequisite-aware generation |
 
 ### Token Optimization Behaviours (Immediate — No Tools)
 | Behaviour | When | Expected Savings |
@@ -1024,13 +1204,22 @@ Non-negotiable before any university pilot contract.
 | Multi-session architecture | Backend / Frontend / Docs as separate sessions | 40-50% total |
 
 ### Rejected Tools (with rationale)
-| Tool | Reason |
-|------|--------|
-| GitLab Knowledge Graph | Python cross-file refs incomplete; requires platform migration from GitHub |
-| Linear MCP | $20/person/month; overkill for 2-person team (revisit at v1.0+ / 5+ people) |
-| CodePathfinder | AGPL license incompatible with CR8's deployment model |
-| CodeIndexer / Milvus | Requires separate vector DB infrastructure; overkill for ~15K LoC |
-| Plane | Extra self-hosted infrastructure; Notion is simpler |
+| Tool | Reason | Status |
+|------|--------|--------|
+| GitLab Knowledge Graph | Python cross-file refs incomplete; requires platform migration from GitHub | Rejected (re-check if Python support reaches GA) |
+| CodePathfinder | AGPL license incompatible with CR8's deployment model | Rejected permanently |
+| CodeIndexer / Milvus | Requires separate vector DB infrastructure; overkill for ~15K LoC | Rejected (revisit at 100K+ LoC) |
+
+### Under Re-evaluation (post-v0.5.4 research sprint)
+| Tool | Category | Why re-evaluating |
+|------|----------|-------------------|
+| Linear MCP | PM | AI agent delegation has improved; free tier may have changed; worth fresh look |
+| Plane | PM | Plane Cloud matured; MCP support may exist now |
+| GitHub Projects V2 | PM | Status field API limitation may be resolved |
+| Notion | PM | Already connected via MCP; needs deeper API capability assessment |
+| code-graph-mcp | Code graph | Python 3.11 support? Benchmark on CR8 needed |
+| codebase-memory-mcp | Code graph | 99% token reduction claimed; never tested on CR8 |
+| Axon MCP | Code graph | KuzuDB option removes Neo4j overhead; re-evaluate for CR8 scale |
 
 ---
 
@@ -1043,8 +1232,8 @@ v0.4.0  ← Kokoro TTS video pipeline (507 tests)
   v0.4.2  ← CPU video service, 3-tier fallback (626 tests)
 v0.5.0  ← React frontend + Quiz platform (IN PROGRESS)
   v0.5.1  ← dark mode, polish
-v0.6.0  ← Admin dashboard + feedback loop + Prompt v3 + SCORM
-v0.7.0  ← Student engagement (mind maps, flashcards, RAG chat)
+v0.6.0  ← Admin dashboard + feedback loop + Prompt v3 + SCORM + PM tool + code graph integration
+v0.7.0  ← Student engagement (mind maps, flashcards, RAG chat) + Knowledge Graph
 v0.8.0  ← Production readiness (job queuing, TTS upgrade, eval datasets)
 v0.9.0  ← LMS & integration (LTI 1.3, avatar, WCAG, DPIA)
 v1.0.0  ← University pilot release (stabilisation, no new features)
@@ -1080,7 +1269,7 @@ All bumps via `cz bump` — auto-updates `pyproject.toml` version, creates git t
 - **`PROGRESS.md`** — Agent-facing session state. Update at the end of each coding session. Keep concise.
 - **`feature_list.json`** — Machine-readable status. Update after each `cz bump`.
 - **`CHANGELOG.md`** — Auto-generated by `cz bump`. No manual edits.
-- **Notion Feature Database** (v0.5+) — Queryable feature tracker (Name | Status | Phase | Owner | Blocker | PR). Replaces manual search through markdown. `PROGRESS.md` remains as session handoff cache. See `PM-Docs/CODEBASE-INTELLIGENCE-SUMMARY.md`.
+- **PM Tool Feature Database** (v0.6+) — Queryable feature tracker (Name | Status | Phase | Owner | Blocker | PR). Tool chosen by post-v0.5.4 research sprint (Notion, Linear, GitHub Projects, or other). `PROGRESS.md` remains as session handoff cache. See `PM-Docs/CODEBASE-INTELLIGENCE-SUMMARY.md`.
 
 ## Verification
 After each update: `./scripts/init.sh` (ruff + full test suite + docs build), then `cz bump`. Update `PROGRESS.md`, `feature_list.json`, and Loop_Intelligence.md task checkboxes at the end of each update.

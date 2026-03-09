@@ -52,15 +52,24 @@ async def register(request: Request, body: dict):
     Returns:
         201 with user_id and access token, or 400/409 on error.
     """
+    ip = request.client.host if request.client else "unknown"
+    if not check_rate_limit(ip):
+        return JSONResponse(
+            {"error": "Too many failed attempts. Try again in 15 minutes."},
+            status_code=429,
+        )
+
     email = body.get("email", "").strip().lower()
     password = body.get("password", "")
 
     if not email or not password:
+        record_failed_attempt(ip)
         return JSONResponse(
             {"error": "Email and password are required"}, status_code=400
         )
     min_password_length = 6
     if len(password) < min_password_length:
+        record_failed_attempt(ip)
         return JSONResponse(
             {"error": "Password must be at least 6 characters"}, status_code=400
         )
@@ -74,6 +83,7 @@ async def register(request: Request, body: dict):
     # Check for existing user
     existing = await db_client.get_user_by_email(pool, email)
     if existing:
+        record_failed_attempt(ip)
         return JSONResponse(
             {"error": "An account with this email already exists"}, status_code=409
         )

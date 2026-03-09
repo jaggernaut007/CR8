@@ -152,7 +152,8 @@ class TestWebSearch:
 
         assert results == []
 
-    def test_client_exception_propagates(self):
+    def test_client_exception_returns_empty_list(self):
+        """Tavily errors are caught gracefully and return an empty list."""
         from backend.services.web_search import search
 
         mock_client = MagicMock()
@@ -161,8 +162,8 @@ class TestWebSearch:
         with patch("backend.services.web_search.TavilyClient", return_value=mock_client):
             with patch("backend.services.web_search.settings") as mock_settings:
                 mock_settings.tavily_api_key = "test-key"
-                with pytest.raises(RuntimeError, match="Network error"):
-                    search("any query")
+                result = search("any query")
+                assert result == []
 
     def test_max_results_passed_to_client(self):
         from backend.services.web_search import search

@@ -196,11 +196,18 @@ HeyGen keys are only needed when `VIDEO_PROVIDER=heygen`. All three variables mu
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `AUTH_PASSWORD` | No | `CR8-AI` | Password for the web UI login form |
+| `JWT_SECRET` | Yes (production) | *(empty)* | HMAC secret for signing JWT tokens. Must be at least 32 characters. |
+| `JWT_ALGORITHM` | No | `HS256` | JWT signing algorithm |
+| `JWT_ACCESS_EXPIRY_MINUTES` | No | `480` | Access token lifetime in minutes (default 8 hours) |
+| `JWT_REFRESH_EXPIRY_DAYS` | No | `7` | Refresh token lifetime in days |
 
 The web UI uses bcrypt session authentication. The password is read from `AUTH_PASSWORD` at startup and hashed with bcrypt. For local development the default `CR8-AI` is sufficient. For production deployments, set a strong unique password in your secrets manager.
 
 !!! warning "Change the default password in production"
     The default password `CR8-AI` is publicly documented. Always set `AUTH_PASSWORD` to a strong secret value before deploying to any environment reachable from the internet.
+
+!!! warning "JWT_SECRET must be at least 32 characters"
+    The settings validator in `backend/config.py` will raise a `ValueError` at startup if `JWT_SECRET` is set but shorter than 32 characters. Likewise, `OPENAI_API_KEY` is rejected if it is present but shorter than 8 characters. Both checks use a `@model_validator(mode="after")` on the `Settings` class — the application will refuse to start rather than run with a weak secret.
 
 ### Output
 

@@ -15,7 +15,7 @@ AI voiceover videos). Stack: Python 3.11+, FastAPI, LangGraph, OpenAI, ChromaDB,
 - Vector store: ChromaDB (local, all-MiniLM-L6-v2 embeddings)
 - Web search: Tavily API
 - Package manager: uv (Astral) — lockfile at `uv.lock`
-- Testing: pytest — 834 backend tests + 69 Vitest + 10 Playwright E2E, zero real API calls (pytest-xdist parallel, ~42s)
+- Testing: pytest — 853 backend tests + 81 Vitest + 10 Playwright E2E, zero real API calls (pytest-xdist parallel, ~42s)
 - Linting: Ruff (line-length = 100)
 - Docs: MkDocs Material — source in `mk-docs/`, config at `mkdocs.yml`
 - Deployment: Docker + GCP Cloud Run
@@ -24,7 +24,7 @@ AI voiceover videos). Stack: Python 3.11+, FastAPI, LangGraph, OpenAI, ChromaDB,
 ```bash
 make install      # uv sync --all-extras
 make dev          # FastAPI dev server → http://localhost:8080
-make test         # uv run pytest -v  (834 backend tests, ~42s with xdist)
+make test         # uv run pytest -v  (853 backend tests, ~42s with xdist)
 make e2e          # Playwright E2E tests (10 E2E tests: 5 auth + 5 content viewers)
 make build-frontend # npm ci + npm run build → frontend/static/
 make lint         # uv run ruff check .
@@ -40,7 +40,7 @@ make run ARGS="path/to/file.pdf"  # CLI pipeline
 - Use typed `TypedDict` for all LangGraph state schemas in `backend/pipeline/state.py`
 - Mock all external API calls in tests — the full test suite runs with zero real API calls
 - Run `ruff check .` and confirm clean before marking any task complete
-- Run `make test` and confirm all 834 backend tests (0 real API calls) pass before marking any task complete
+- Run `make test` and confirm all 853 backend tests (0 real API calls) pass before marking any task complete
 
 ## Code Quality (Enforced by Ruff + Agent Rules)
 - **Short functions**: max 25 statements, max 5 args, max cyclomatic complexity 10 (see `.claude/rules/code-quality.md`)
@@ -60,7 +60,7 @@ make run ARGS="path/to/file.pdf"  # CLI pipeline
 
 ## Definition of Done
 A task is complete only when ALL of the following are true:
-1. `make test` passes (all 834 backend tests (0 real API calls))
+1. `make test` passes (all 853 backend tests (0 real API calls))
 2. `make lint` passes (ruff clean)
 3. Docs updated if any public behaviour changed
 4. `PROGRESS.md` updated with what was done

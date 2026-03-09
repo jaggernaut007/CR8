@@ -156,3 +156,90 @@ class TestCleanupJob:
         mock_client.list_blobs.return_value = []
 
         assert gcs_client.cleanup_job("nonexistent") == 0
+
+
+# ---------------------------------------------------------------------------
+# job_id validation (new behaviour added this session)
+# ---------------------------------------------------------------------------
+
+
+class TestJobIdValidation:
+    """Covers the _VALID_JOB_ID regex guard on all three GCSVideoClient methods."""
+
+    # upload_job_inputs
+
+    def test_upload_rejects_path_traversal(self, gcs_client):
+        """Path traversal sequences like '../etc' must raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid job_id"):
+            gcs_client.upload_job_inputs("../traversal", [], {})
+
+    def test_upload_rejects_empty_string(self, gcs_client):
+        """An empty job_id must raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid job_id"):
+            gcs_client.upload_job_inputs("", [], {})
+
+    def test_upload_rejects_job_id_with_slash(self, gcs_client):
+        """A job_id containing a slash must raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid job_id"):
+            gcs_client.upload_job_inputs("job/subdir", [], {})
+
+    def test_upload_rejects_job_id_exceeding_128_chars(self, gcs_client):
+        """A job_id longer than 128 characters must raise ValueError."""
+        long_id = "a" * 129
+        with pytest.raises(ValueError, match="Invalid job_id"):
+            gcs_client.upload_job_inputs(long_id, [], {})
+
+    def test_upload_accepts_alphanumeric_id(self, gcs_client, mock_storage):
+        """A purely alphanumeric job_id must be accepted."""
+        _, mock_bucket = mock_storage
+        mock_bucket.blob.return_value = MagicMock()
+        # Should not raise
+        gcs_client.upload_job_inputs("abc123", [], {})
+
+    def test_upload_accepts_id_with_hyphens_and_underscores(self, gcs_client, mock_storage):
+        """Hyphens and underscores are valid job_id characters."""
+        _, mock_bucket = mock_storage
+        mock_bucket.blob.return_value = MagicMock()
+        gcs_client.upload_job_inputs("job-abc_def-123", [], {})
+
+    def test_upload_accepts_exactly_128_char_id(self, gcs_client, mock_storage):
+        """A 128-character job_id is at the boundary and must be accepted."""
+        _, mock_bucket = mock_storage
+        mock_bucket.blob.return_value = MagicMock()
+        gcs_client.upload_job_inputs("a" * 128, [], {})
+
+    # download_videos
+
+    def test_download_rejects_path_traversal(self, gcs_client):
+        """Path traversal in download_videos must raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid job_id"):
+            gcs_client.download_videos("../etc/passwd", "/tmp/out")
+
+    def test_download_rejects_empty_string(self, gcs_client):
+        """Empty job_id in download_videos must raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid job_id"):
+            gcs_client.download_videos("", "/tmp/out")
+
+    def test_download_accepts_valid_id(self, gcs_client, mock_storage, tmp_path):
+        """A valid alphanumeric job_id must not raise in download_videos."""
+        mock_client, _ = mock_storage
+        mock_client.list_blobs.return_value = []
+        gcs_client.download_videos("valid123", str(tmp_path))  # no exception
+
+    # cleanup_job
+
+    def test_cleanup_rejects_path_traversal(self, gcs_client):
+        """Path traversal in cleanup_job must raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid job_id"):
+            gcs_client.cleanup_job("../../root")
+
+    def test_cleanup_rejects_empty_string(self, gcs_client):
+        """Empty job_id in cleanup_job must raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid job_id"):
+            gcs_client.cleanup_job("")
+
+    def test_cleanup_accepts_valid_id(self, gcs_client, mock_storage):
+        """A valid alphanumeric job_id must not raise in cleanup_job."""
+        mock_client, _ = mock_storage
+        mock_client.list_blobs.return_value = []
+        gcs_client.cleanup_job("validjob123")  # no exception

@@ -115,6 +115,18 @@
     "tests": "passing",
     "files": ["backend/config.py", "backend/run_pipeline.py", "backend/services/tts_engine.py", "backend/services/script_parser.py", "backend/services/file_parser.py", "backend/services/video_builder.py"]
   },
+  "content_viewers": {
+    "description": "React SPA content viewers — inline PDF iframe, PPT slide carousel with keyboard navigation, HTML5 video player with topic selector. Five backend view endpoints in frontend/view_routes.py (pdf, slides, slide/{index}, videos, video/{index}). Zero new npm dependencies.",
+    "status": "complete",
+    "tests": "passing",
+    "files": ["frontend/view_routes.py", "frontend/react-app/src/components/ContentTabs.tsx", "frontend/react-app/src/components/PdfViewer.tsx", "frontend/react-app/src/components/PptCarousel.tsx", "frontend/react-app/src/components/VideoPlayer.tsx", "frontend/react-app/src/pages/ResultsPage.tsx", "frontend/tests/test_view_routes.py"]
+  },
+  "path_traversal_security_fix": {
+    "description": "CWE-23 path traversal fix on view endpoints — job_id validated against JOB_ID_RE (8-char hex), file paths resolved with Path.resolve() and checked against outputs root before serving. Returns HTTP 400 on boundary escape.",
+    "status": "complete",
+    "tests": "passing",
+    "files": ["frontend/view_routes.py", "frontend/tests/test_view_routes.py"]
+  },
   "adaptive_assessment": {
     "description": "Adaptive assessment feature (PPO + DKVMN, Phase 3)",
     "status": "planned",

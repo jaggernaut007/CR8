@@ -137,7 +137,11 @@ class VideoServiceClient:
         )
         resp.raise_for_status()
         data = resp.json()
-        video_job_id = data["video_job_id"]
+        video_job_id = data.get("video_job_id")
+        if not video_job_id:
+            raise RuntimeError(
+                "GPU service response missing 'video_job_id': %r" % data
+            )
         logger.info("Video job submitted to %s: %s", self.base_url, video_job_id)
         return video_job_id
 

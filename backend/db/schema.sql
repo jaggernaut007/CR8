@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- Jobs (pipeline runs)
 CREATE TABLE IF NOT EXISTS jobs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     short_id TEXT UNIQUE NOT NULL,  -- 8-char hex used in URLs
     status TEXT NOT NULL DEFAULT 'pending'
         CHECK (status IN ('pending', 'running', 'complete', 'error', 'cancelled')),
@@ -103,6 +103,7 @@ CREATE INDEX IF NOT EXISTS idx_quiz_attempts_quiz_id ON quiz_attempts(quiz_id);
 CREATE INDEX IF NOT EXISTS idx_quiz_attempts_user_id ON quiz_attempts(user_id);
 CREATE INDEX IF NOT EXISTS idx_chat_sessions_job_id ON chat_sessions(job_id);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_questions_quiz_sort ON quiz_questions(quiz_id, sort_order);
 
 -- Auto-update updated_at on row modification
 CREATE OR REPLACE FUNCTION set_updated_at()

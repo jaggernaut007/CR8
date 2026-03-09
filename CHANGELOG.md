@@ -7,6 +7,41 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## Unreleased — Security Hardening + Crash Fixes (Code Review Wave)
+
+### Security
+- `backend/config.py` — Settings validator now fails fast if `JWT_SECRET` is present but shorter than 32 characters, or `OPENAI_API_KEY` is present but shorter than 8 characters. Prevents misconfigured deployments reaching production.
+- `frontend/auth_routes.py` — Rate limiting (`check_rate_limit`) now applied to `POST /api/auth/register` in addition to login. Prevents account-creation enumeration and brute-force via registration endpoint.
+- `frontend/job_routes.py` — `GET /api/jobs/{job_id}` now enforces ownership: returns 404 when the job's `user_id` does not match the authenticated caller. Previously any authenticated user could fetch any job by ID.
+- `frontend/job_routes.py` — `POST /api/start` now validates the `formats` list against an explicit allowlist (`{"pdf", "ppt", "script", "video"}`). Non-list values or unknown format strings return 422.
+- `frontend/job_routes.py` — `GET /api/jobs` pagination limit capped at 100. Prevents unbounded result sets from very large `limit` values.
+- `backend/services/gcs_client.py` — `job_id` path sanitised before GCS key construction to prevent path traversal via crafted job IDs.
+
+### Data Integrity
+- `backend/services/db_client.py` — `completed_at` now set when a job transitions to `complete` or `error` status.
+- `backend/services/db_client.py` — Stale-job timeout detection uses `created_at` (immutable) instead of `updated_at`. Prevents perpetually extending the timeout window on long-running or stuck jobs.
+- `backend/db/schema.sql` — `ON DELETE CASCADE` added to the `jobs.user_id` foreign key so deleting a user removes their jobs automatically.
+- `backend/db/schema.sql` — Index added on `quiz_questions(quiz_id, sort_order)` to speed up ordered question listing.
+
+### Bug Fixes
+- `backend/services/video_builder.py` — MoviePy clips now closed in a `try/finally` block inside `_compose_video()`. Prevents file-handle leaks and excess RAM retention when composition fails or is cancelled.
+- `backend/services/video_builder.py` — Return type annotation corrected to `list[str | None]` (was `list[str]`). Failed topics produce `None` entries; the old annotation was inaccurate.
+- `backend/services/gpu_client.py` — `_do_submit()` now raises `RuntimeError` when the service response is missing `video_job_id` instead of silently returning `None` and crashing later in polling.
+- `backend/services/web_search.py` — Tavily API exceptions are caught by `search()` and return `[]` instead of propagating and crashing the Research agent. Error is logged with `exc_info=True`.
+
+### Observability
+- `backend/pipeline/agent_ingest.py`, `agent_research.py`, `agent_generate.py` — All `except` blocks that previously only `print()`-ed the error now also call `logger.exception()` so errors appear in structured logs on Cloud Run.
+- `backend/services/video_builder.py` — Exception handlers now use `logger.error(..., exc_info=True)` instead of manual `traceback.format_exc()`. Unused `traceback` import removed.
+
+### Code Quality
+- `backend/services/ppt_builder.py` — Duplicated PPT fallback code extracted into `_ppt_monolithic_fallback()` helper, eliminating ~60 lines of duplicated logic.
+- `backend/services/ppt_builder.py` — Hardcoded `"75%"` figure removed from fallback slide data; replaced with `"Data unavailable"` to avoid surfacing misleading statistics.
+
+### Test Suite
+Total: **853 pytest** + **81 Vitest** + **10 Playwright E2E** (unchanged — security and crash fixes covered by existing test suite; no new public interfaces added).
+
+---
+
 ## [0.5.3] — 2026-03-09 — Content Viewers (PDF iframe, PPT carousel, HTML5 video player)
 
 ### Added — Backend View Endpoints (`frontend/view_routes.py`)
@@ -28,12 +63,17 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - `SecurityHeadersMiddleware`: `X-Frame-Options` changed from `DENY` to `SAMEORIGIN` (allows same-origin iframe for PDF viewer)
 - `Content-Security-Policy` extended with `media-src 'self'` (HTML5 video) and `frame-src 'self'` (PDF iframe)
 
+### Fixed — Security
+- `frontend/view_routes.py` — CWE-23 path traversal fix: `job_id` validated against `JOB_ID_RE` (8-character hex pattern); all resolved file paths are checked against the outputs root with `Path.resolve()` before serving. Any path escaping the outputs directory returns HTTP 400.
+
 ### Test Suite
-- 39 new pytest tests in `frontend/tests/test_view_routes.py`; backend total: 795 → 834
+- 39 new pytest tests in `frontend/tests/test_view_routes.py` (Wave 1); backend total: 795 → 834
+- 19 additional pytest tests added post-wave (path traversal edge cases + agent-generated coverage); backend total: 834 → 853
 - 27 new Vitest component tests (ContentTabs, PdfViewer, PptCarousel, VideoPlayer + keyboard nav); Vitest total: 42 → 69
+- 12 additional Vitest tests added post-wave; Vitest total: 69 → 81
 - 5 new Playwright E2E tests in `frontend/react-app/e2e/results.spec.ts`; Playwright total: 5 → 10
 
-Total: **834 pytest** + **69 Vitest** + **10 Playwright E2E** = 913 tests
+Total: **853 pytest** + **81 Vitest** + **10 Playwright E2E** = **944 tests**
 
 ---
 

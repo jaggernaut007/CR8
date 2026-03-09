@@ -142,6 +142,7 @@ def ingest_node(state: PipelineState) -> dict:
                 raise
             except Exception as exc:
                 source = file_items[idx][0]
+                logger.exception("Summarization failed for '%s'", source)
                 print(f"[Ingest] ERROR: summarization of '{source}' failed — {exc}")
                 summaries[idx] = f"## {source}\n\n*Summarization failed: {exc}*"
 
@@ -158,6 +159,7 @@ def ingest_node(state: PipelineState) -> dict:
         topics = data.get("topics", [])
         curriculum_scope = data.get("curriculum_scope", "")
     except json.JSONDecodeError:
+        logger.warning("Malformed JSON from LLM during topic extraction, using single-topic fallback")
         print("[Ingest] WARNING: malformed JSON from LLM during topic extraction, using single-topic fallback")
         topics = [{"name": "Curriculum Overview", "description": "Full curriculum content", "key_techniques": []}]
         curriculum_scope = "General curriculum content"

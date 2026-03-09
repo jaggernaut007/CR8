@@ -14,8 +14,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 
 from backend.config import settings
+
+_VALID_JOB_ID = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +43,8 @@ class GCSVideoClient:
         Returns:
             The GCS prefix string, e.g. ``gs://cr8-jobs/job123``.
         """
+        if not _VALID_JOB_ID.match(job_id):
+            raise ValueError(f"Invalid job_id for GCS path: {job_id!r}")
         try:
             prefix = job_id
 
@@ -68,6 +73,8 @@ class GCSVideoClient:
         Returns:
             Sorted list of local MP4 file paths.
         """
+        if not _VALID_JOB_ID.match(job_id):
+            raise ValueError(f"Invalid job_id for GCS path: {job_id!r}")
         try:
             os.makedirs(local_dir, exist_ok=True)
             prefix = f"{job_id}/output/"
@@ -85,6 +92,8 @@ class GCSVideoClient:
 
     def cleanup_job(self, job_id: str) -> int:
         """Delete all blobs under ``{job_id}/``. Returns count of deleted blobs."""
+        if not _VALID_JOB_ID.match(job_id):
+            raise ValueError(f"Invalid job_id for GCS path: {job_id!r}")
         try:
             prefix = f"{job_id}/"
             blobs = list(self._client.list_blobs(self._bucket, prefix=prefix))

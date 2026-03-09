@@ -33,9 +33,14 @@ Each returned dict contains:
 | `content` | `str` | Extracted page content |
 | `score` | `float` | Relevance score (0-1) |
 
+## Error Handling
+
+`search()` wraps the Tavily API call in a `try/except`. If Tavily raises any exception (network timeout, rate limit, API error), the function logs the error with `exc_info=True` and returns `[]`. This prevents a single failed web search from crashing the Research agent — the topic continues with empty search results rather than failing the entire pipeline.
+
 ## Configuration Notes
 
 - Uses `search_depth="basic"` for fast results
-- The Tavily client is lazily initialized as a singleton
+- The Tavily client is lazily initialised as a singleton on first call
 - Requires `TAVILY_API_KEY` environment variable
-- The research agent runs two searches per topic in parallel (job requirements + trends)
+- The research agent runs two searches per topic in parallel (job requirements + industry trends)
+- Returns `[]` on any Tavily API error — the pipeline continues with empty results for that topic

@@ -444,11 +444,11 @@ def _build_fallback_slide_data(gap_summary, curriculum_scope):
             },
             "market_signal": {
                 "signal": f"Industry increasingly demands practical {topic_name.lower()} skills beyond academic coverage.",
-                "stat": "75%",
-                "stat_label": f"of roles require {topic_name.lower()} proficiency",
-                "context": f"Employers are looking for candidates who can apply {topic_name.lower()} concepts in real-world settings. Building these skills now gives you a competitive advantage.",
+                "stat": None,
+                "stat_label": "Data unavailable — research data could not be retrieved",
+                "context": f"Building practical {topic_name.lower()} skills complements your coursework and strengthens your professional profile.",
                 "supporting_points": [f"Growing demand for {first_gap}", "Industry adoption accelerating", "Skills shortage in the market"],
-                "source": "Industry analysis",
+                "source": "Fallback — no research data available",
             },
             "top_recommendations": [f"Learn: {gap}" for gap in gaps[:3]],
         })
@@ -725,6 +725,36 @@ def _generate_scripts_from_slides(slide_data, topic_modules_map, gap_lookup, chr
     return video_topics, scripts
 
 
+def _ppt_monolithic_fallback(topics, modules_md, gap_summary, curriculum_scope):
+    """Fall back to monolithic PPT structuring when parallel structuring fails.
+
+    Sends all modules and gap data in a single LLM call. Returns parsed
+    slide data dict, or fallback placeholder data if parsing also fails.
+    """
+    llm_ppt = get_llm("mini")
+    total = len(topics)
+    modules_content = "\n\n---\n\n".join(
+        f"### {topics[i]['name']}\n{md}" for i, md in enumerate(modules_md)
+    )
+    ppt_prompt = STRUCTURE_GAP_SLIDES.format(
+        curriculum_scope=curriculum_scope,
+        topic_count=total,
+        modules_content=modules_content,
+        gap_summary_json=json.dumps(gap_summary, indent=2),
+    )
+    ppt_response = llm_ppt.invoke(
+        ppt_prompt,
+        config={"run_name": "structure_gap_slides"},
+        response_format={"type": "json_object"},
+    )
+    try:
+        return json.loads(ppt_response.content)
+    except json.JSONDecodeError:
+        logger.warning("Failed to parse monolithic slide JSON, using fallback")
+        print("[Generate] WARNING: Failed to parse slide JSON, using fallback")
+        return _build_fallback_slide_data(gap_summary, curriculum_scope)
+
+
 # ---------------------------------------------------------------------------
 # Main generate node
 # ---------------------------------------------------------------------------
@@ -789,6 +819,7 @@ def generate_node(state: PipelineState) -> dict:
                 raise
             except Exception as exc:
                 topic_name = topics[idx]["name"]
+                logger.exception("Module generation failed for '%s'", topic_name)
                 print(f"[Generate] ERROR: module '{topic_name}' failed — {exc}")
                 modules_md[idx] = f"## {topic_name}\n\n*Module generation failed: {exc}*"
 
@@ -829,26 +860,7 @@ def generate_node(state: PipelineState) -> dict:
         # If parallel PPT structuring failed, fall back to monolithic
         if slide_data is None:
             print("[Generate] Falling back to monolithic PPT structuring...")
-            llm_ppt = get_llm("mini")
-            modules_content = "\n\n---\n\n".join(
-                f"### {topics[i]['name']}\n{md}" for i, md in enumerate(modules_md)
-            )
-            ppt_prompt = STRUCTURE_GAP_SLIDES.format(
-                curriculum_scope=curriculum_scope,
-                topic_count=total,
-                modules_content=modules_content,
-                gap_summary_json=json.dumps(gap_summary, indent=2),
-            )
-            ppt_response = llm_ppt.invoke(
-                ppt_prompt,
-                config={"run_name": "structure_gap_slides"},
-                response_format={"type": "json_object"},
-            )
-            try:
-                slide_data = json.loads(ppt_response.content)
-            except json.JSONDecodeError:
-                print("[Generate] WARNING: Failed to parse slide JSON, using fallback")
-                slide_data = _build_fallback_slide_data(gap_summary, curriculum_scope)
+            slide_data = _ppt_monolithic_fallback(topics, modules_md, gap_summary, curriculum_scope)
 
         ppt_path = os.path.join("outputs", f"{timestamp}_gap_analysis.pptx")
         _, topic_slide_map = build_gap_ppt(slide_data=slide_data, output_path=ppt_path)
@@ -874,27 +886,8 @@ def generate_node(state: PipelineState) -> dict:
                 topics, modules_md, gap_summary, gap_lookup, curriculum_scope, chroma_cache,
             )
             if slide_data is None:
-                # Fall back to monolithic
-                llm_ppt = get_llm("mini")
-                modules_content = "\n\n---\n\n".join(
-                    f"### {topics[i]['name']}\n{md}" for i, md in enumerate(modules_md)
-                )
-                ppt_prompt = STRUCTURE_GAP_SLIDES.format(
-                    curriculum_scope=curriculum_scope,
-                    topic_count=total,
-                    modules_content=modules_content,
-                    gap_summary_json=json.dumps(gap_summary, indent=2),
-                )
-                ppt_response = llm_ppt.invoke(
-                    ppt_prompt,
-                    config={"run_name": "structure_gap_slides"},
-                    response_format={"type": "json_object"},
-                )
-                try:
-                    slide_data = json.loads(ppt_response.content)
-                except json.JSONDecodeError:
-                    print("[Generate] WARNING: Failed to parse slide JSON, using fallback")
-                    slide_data = _build_fallback_slide_data(gap_summary, curriculum_scope)
+                print("[Generate] Falling back to monolithic PPT structuring...")
+                slide_data = _ppt_monolithic_fallback(topics, modules_md, gap_summary, curriculum_scope)
 
             ppt_path = os.path.join("outputs", f"{timestamp}_gap_analysis.pptx")
             _, topic_slide_map = build_gap_ppt(slide_data=slide_data, output_path=ppt_path)
@@ -963,6 +956,7 @@ def generate_node(state: PipelineState) -> dict:
             json.dump(raw_outputs, f, indent=2, ensure_ascii=False)
         print(f"[Generate] Raw outputs saved to {raw_outputs_path}")
     except Exception as e:
+        logger.exception("Failed to save raw outputs")
         print(f"[Generate] WARNING: Failed to save raw outputs: {e}")
 
     result["modules_md"] = modules_md

@@ -514,3 +514,137 @@ class TestGenerateNode:
         state = self._build_state(output_formats="pdf", num_topics=0)
         result = self._run_generate(state, tmp_path, monkeypatch)
         assert result.get("current_stage") == "complete"
+
+
+# ===========================================================================
+# _ppt_monolithic_fallback (agent_generate — new helper extracted this session)
+# ===========================================================================
+
+
+def _make_gap_summary_for_ppt():
+    """Return a minimal gap_summary that exercises the fallback path."""
+    return [
+        {
+            "topic": "Transformer Architecture",
+            "gaps": ["deployment optimization", "quantization"],
+            "severity": "critical",
+        },
+        {
+            "topic": "BERT Pretraining",
+            "gaps": ["masked language modeling"],
+            "severity": "moderate",
+        },
+    ]
+
+
+class TestPptMonolithicFallback:
+    """Tests for _ppt_monolithic_fallback (extracted helper, added this session).
+
+    The function sends all module content in a single LLM call and returns
+    parsed slide data. On JSON parse failure it falls back to _build_fallback_slide_data.
+    """
+
+    def _run_fallback(self, llm_response_content: str):
+        """Run _ppt_monolithic_fallback with a mocked LLM response."""
+        from backend.pipeline.agent_generate import _ppt_monolithic_fallback
+
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(content=llm_response_content)
+
+        topics = [
+            {"name": "Transformer Architecture"},
+            {"name": "BERT Pretraining"},
+        ]
+        modules_md = ["Module content A " * 50, "Module content B " * 50]
+        gap_summary = _make_gap_summary_for_ppt()
+        curriculum_scope = "NLP fundamentals"
+
+        with patch("backend.pipeline.agent_generate.get_llm", return_value=mock_llm):
+            return _ppt_monolithic_fallback(topics, modules_md, gap_summary, curriculum_scope)
+
+    def test_returns_dict_on_valid_json(self):
+        """When the LLM returns valid JSON, the parsed dict must be returned."""
+        payload = json.dumps({
+            "presentation_title": "Gap Analysis",
+            "topic_slides": [{"topic_name": "Transformers"}],
+        })
+        result = self._run_fallback(payload)
+        assert isinstance(result, dict)
+
+    def test_returns_presentation_title_from_llm(self):
+        """Parsed output must preserve the LLM-provided presentation_title."""
+        payload = json.dumps({"presentation_title": "My Gaps", "topic_slides": []})
+        result = self._run_fallback(payload)
+        assert result["presentation_title"] == "My Gaps"
+
+    def test_falls_back_to_placeholder_on_invalid_json(self):
+        """When the LLM returns non-JSON, a fallback dict must still be returned."""
+        result = self._run_fallback("This is not JSON at all {{")
+        assert isinstance(result, dict)
+
+    def test_fallback_dict_is_non_empty_on_invalid_json(self):
+        """The fallback placeholder dict must contain at least one key."""
+        result = self._run_fallback("INVALID_JSON")
+        assert len(result) > 0
+
+    def test_calls_get_llm_with_mini_tier(self):
+        """_ppt_monolithic_fallback must use the 'mini' LLM tier."""
+        from backend.pipeline.agent_generate import _ppt_monolithic_fallback
+
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(content=json.dumps({"topic_slides": []}))
+
+        with patch("backend.pipeline.agent_generate.get_llm", return_value=mock_llm) as mock_get_llm:
+            _ppt_monolithic_fallback(
+                topics=[{"name": "T"}],
+                modules_md=["content"],
+                gap_summary=[],
+                curriculum_scope="scope",
+            )
+        mock_get_llm.assert_called_once_with("mini")
+
+    def test_invokes_llm_exactly_once(self):
+        """The function must make exactly one LLM call (monolithic = single request)."""
+        from backend.pipeline.agent_generate import _ppt_monolithic_fallback
+
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(content=json.dumps({"topic_slides": []}))
+
+        with patch("backend.pipeline.agent_generate.get_llm", return_value=mock_llm):
+            _ppt_monolithic_fallback(
+                topics=[{"name": "T1"}, {"name": "T2"}],
+                modules_md=["mod1", "mod2"],
+                gap_summary=[],
+                curriculum_scope="scope",
+            )
+
+        assert mock_llm.invoke.call_count == 1
+
+    def test_fallback_on_empty_response_string(self):
+        """An empty string response from the LLM must not raise — fallback is used."""
+        result = self._run_fallback("")
+        assert isinstance(result, dict)
+
+    def test_module_content_included_in_prompt(self):
+        """The LLM prompt must contain the module markdown content."""
+        from backend.pipeline.agent_generate import _ppt_monolithic_fallback
+
+        mock_llm = MagicMock()
+        mock_llm.invoke.return_value = MagicMock(content=json.dumps({"topic_slides": []}))
+        captured_prompts = []
+
+        def capture_invoke(prompt, **kwargs):
+            captured_prompts.append(prompt)
+            return MagicMock(content=json.dumps({"topic_slides": []}))
+
+        mock_llm.invoke.side_effect = capture_invoke
+
+        with patch("backend.pipeline.agent_generate.get_llm", return_value=mock_llm):
+            _ppt_monolithic_fallback(
+                topics=[{"name": "Transformers"}],
+                modules_md=["unique_module_sentinel_xyz"],
+                gap_summary=[],
+                curriculum_scope="scope",
+            )
+
+        assert any("unique_module_sentinel_xyz" in str(p) for p in captured_prompts)

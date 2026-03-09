@@ -173,13 +173,14 @@ async def update_job_result(
     Args:
         pool: asyncpg connection pool.
         job_id: UUID of the job.
-        status: Final status (completed, error, cancelled).
+        status: Final status (complete, error, cancelled).
         result_meta: JSON-serializable metadata dict or None.
     """
     logger.info("Updating job result: job_id=%s, status=%s", job_id, status)
     await pool.execute(
         "UPDATE jobs SET status = $1, result_meta = $2, "
-        "progress_pct = 100, updated_at = now() WHERE id = $3",
+        "progress_pct = 100, updated_at = now(), completed_at = now() "
+        "WHERE id = $3",
         status,
         result_meta,
         job_id,
@@ -281,7 +282,7 @@ async def mark_stale_jobs_as_error(pool: asyncpg.Pool) -> int:
         "error_message = 'Job timed out after 1 hour', "
         "updated_at = now() "
         "WHERE status = 'running' "
-        "AND updated_at < now() - INTERVAL '1 hour'"
+        "AND created_at < now() - INTERVAL '1 hour'"
     )
     # asyncpg execute returns a status string like "UPDATE 3"
     count = int(result.split()[-1])

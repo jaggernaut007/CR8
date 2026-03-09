@@ -24,7 +24,6 @@ import logging
 import os
 import re
 import time
-import traceback
 
 import requests
 
@@ -370,6 +369,17 @@ def _compose_video(
             codec="libx264",
             ffmpeg_params=_build_params("libx264"),
         )
+    finally:
+        # Close all clips to release file handles and free memory
+        for clip in clips:
+            try:
+                clip.close()
+            except Exception:
+                pass
+        try:
+            final.close()
+        except Exception:
+            pass
 
     elapsed = time.monotonic() - t0
     logger.info("Composed %s in %.1fs (encoder=%s)", fname, elapsed, used_encoder)
@@ -463,7 +473,7 @@ def build_videos(
     kokoro_lang: str = "a",
     video_fps: int = 5,
     cancel_check: "callable | None" = None,
-) -> list[str]:
+) -> list[str | None]:
     """Build videos for the given topics and scripts.
 
     For ``provider="kokoro"``, videos are generated locally using Kokoro TTS
@@ -490,8 +500,8 @@ def build_videos(
         video_fps: Video frame rate for local generation.
 
     Returns:
-        List of filesystem paths to the ``.mp4`` files, in the same order
-        as *topics*.
+        List of filesystem paths to the ``.mp4`` files (or None for failed
+        topics), in the same order as *topics*.
     """
     if provider == "kokoro":
         return _build_kokoro_videos(
@@ -520,7 +530,7 @@ def _build_kokoro_videos(
     lang: str = "a",
     fps: int = 5,
     cancel_check: "callable | None" = None,
-) -> list[str]:
+) -> list[str | None]:
     """Build Kokoro videos in two phases for performance.
 
     Phase 1 (sequential): TTS synthesis with a shared engine (memory-heavy).
@@ -581,10 +591,9 @@ def _build_kokoro_videos(
             audio_paths = engine.synthesize_segments(segments, audio_dir)
             tts_results.append((segments, audio_paths, topic_images, video_path))
         except Exception as exc:
-            tb = traceback.format_exc()
             error_msg = f"'{topic_name}' TTS failed — {exc}"
             errors.append(error_msg)
-            logger.error("TTS failed for '%s': %s\n%s", topic_name, exc, tb)
+            logger.error("TTS failed for '%s'", topic_name, exc_info=True)
             print(f"[Video] ERROR: {error_msg}")
             tts_results.append(None)
 
@@ -641,10 +650,9 @@ def _build_kokoro_videos(
                 logger.info("Video saved: %s", path)
                 print(f"[Video]   {topic_name}: saved to {path}")
             except Exception as exc:
-                tb = traceback.format_exc()
                 error_msg = f"'{topic_name}' compose failed — {exc}"
                 errors.append(error_msg)
-                logger.error("Video composition failed for '%s': %s\n%s", topic_name, exc, tb)
+                logger.error("Video composition failed for '%s'", topic_name, exc_info=True)
                 print(f"[Video] ERROR: {error_msg}")
 
     succeeded = sum(1 for p in video_paths if p is not None)

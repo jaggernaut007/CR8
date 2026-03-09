@@ -2,6 +2,46 @@
 
 > **See also**: [Services Reference](services/index.md) and [Prompt Templates](agents/prompts.md) — Complete technical reference for all builders, prompts, and eval checks.
 
+## v0.5.3 — Content Viewers (2026-03-09)
+
+**Summary**: Inline content viewers embedded in the React SPA ResultsPage. Users can preview generated PDF, browse PPT slides, and watch videos without downloading files. Three-wave delivery: backend view endpoints → React viewer components → keyboard navigation + Playwright E2E. Post-wave path traversal security fix (CWE-23). Test suite grew from 795 pytest / 42 Vitest / 5 E2E to **853 pytest / 81 Vitest / 10 E2E = 944 total**.
+
+### Added — Backend View Endpoints (`frontend/view_routes.py`)
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/view/{job_id}/pdf` | Serve generated PDF inline (`Content-Disposition: inline`) for iframe embedding |
+| `GET /api/view/{job_id}/slides` | JSON `{slides: [...], total: N}` — list of slide image URLs |
+| `GET /api/view/{job_id}/slide/{index}` | Individual slide PNG (1-based index) |
+| `GET /api/view/{job_id}/videos` | JSON `{videos: [{name, url}, ...]}` — per-topic video listing |
+| `GET /api/view/{job_id}/video/{index}` | Stream MP4 (0-based index); Starlette `FileResponse` handles HTTP Range for seeking |
+
+All view endpoints validate `job_id` format and require job status `complete`.
+
+### Added — React Viewer Components
+
+| Component | Description |
+|-----------|-------------|
+| `ContentTabs` | Tab bar switching between PDF / Slides / Video panels |
+| `PdfViewer` | Browser-native PDF rendering via `<iframe>` — zero new npm dependencies |
+| `PptCarousel` | Slide image carousel with prev/next, slide counter, keyboard arrow key navigation |
+| `VideoPlayer` | HTML5 `<video>` element with topic selector dropdown |
+| `ResultsPage` | Viewer panels displayed above download buttons |
+
+### Changed — Security Headers
+- `SecurityHeadersMiddleware`: `X-Frame-Options` changed from `DENY` to `SAMEORIGIN` (allows same-origin iframe for PDF viewer)
+- `Content-Security-Policy` extended with `media-src 'self'` (HTML5 video) and `frame-src 'self'` (PDF iframe)
+
+### Fixed — Security
+- **CWE-23 Path Traversal**: `job_id` validated against 8-character hex regex (`JOB_ID_RE`); all resolved file paths checked against the outputs root using `Path.resolve()` before serving. Paths escaping the outputs directory return HTTP 400.
+
+### Test Suite
+- 39 new pytest tests (Wave 1 view routes) + 19 post-wave tests (path traversal edge cases): 795 → 853
+- 27 new Vitest tests (viewer components + keyboard nav) + 12 post-wave: 42 → 81
+- 5 new Playwright E2E tests (`results.spec.ts`): 5 → 10
+
+---
+
 ## v0.5.2 — React SPA Shell (2026-03-09)
 
 **Summary**: Delivered the full React 19 + Vite 7 + Tailwind v4 frontend in three waves. All five pages (Login, Dashboard, Upload, Progress, Results) are wired to the real API via Tanstack Query and a JWT-aware fetch client. Added 42 Vitest component tests and 5 Playwright E2E auth flow tests. Removed 7 stale Jinja2 backend tests. Backend test count: 802 → 795.

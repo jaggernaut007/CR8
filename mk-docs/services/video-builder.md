@@ -72,7 +72,7 @@ def _build_kokoro_videos(
     voice: str = "af_heart",
     lang: str = "a",
     fps: int = 24,
-) -> list[str]
+) -> list[str | None]
 ```
 
 **Parameters**:
@@ -88,7 +88,10 @@ def _build_kokoro_videos(
 | `lang` | `str` | Kokoro language code |
 | `fps` | `int` | Output frame rate |
 
-**Returns**: List of filesystem paths to `.mp4` files in the same order as `topics`. Failed topics produce `None` at their position; errors are logged and printed as `[Video] ERROR:` lines.
+**Returns**: `list[str | None]` — filesystem paths to `.mp4` files in the same order as `topics`. Failed topics produce `None` at their position; errors are logged with `exc_info=True` and printed as `[Video] ERROR:` lines.
+
+!!! warning "Resource cleanup"
+    `_compose_video()` wraps all MoviePy `ImageClip` and `CompositeVideoClip` instances in a `try/finally` block to ensure `clip.close()` is called even when composition fails. This prevents file-handle leaks and releases the ~3.4 GB RAM peak when a video fails mid-encode.
 
 **Output spec**:
 - Format: MP4 (H.264 video, AAC audio)

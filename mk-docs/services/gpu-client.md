@@ -37,6 +37,10 @@ Fallback to the next tier is triggered by **infrastructure failures only**:
 
 Job-level errors (4xx responses, worker errors reported in the job status) do **not** trigger fallback. Once a tier accepts a job (`submit_job` succeeds), all subsequent polling stays on that tier.
 
+### Submit Response Validation
+
+`submit_job()` raises `RuntimeError` immediately if the service response is missing the `video_job_id` field. This prevents a `None` value from propagating silently into `poll_until_complete()` and causing a confusing downstream failure. Services must return a JSON body containing `"video_job_id"` for the submit to be considered successful.
+
 ### Authentication
 
 Uses Cloud Run identity tokens (OIDC) for service-to-service auth. Tokens are fetched via `google-auth` and cached. Falls back gracefully when running outside GCP (local dev).

@@ -191,6 +191,39 @@ class TestUpdateJobResult:
         args = pool.execute.call_args[0]
         assert "completed" in args
 
+    @pytest.mark.asyncio
+    async def test_sql_sets_completed_at(self):
+        """The SQL must include completed_at = now() (bug fix added this session)."""
+        pool = _make_pool()
+        pool.execute.return_value = "UPDATE 1"
+
+        await db_client.update_job_result(pool, _JOB_ID, "complete", None)
+
+        sql = pool.execute.call_args[0][0]
+        assert "completed_at" in sql
+
+    @pytest.mark.asyncio
+    async def test_sql_sets_status(self):
+        """The SQL must update the status column."""
+        pool = _make_pool()
+        pool.execute.return_value = "UPDATE 1"
+
+        await db_client.update_job_result(pool, _JOB_ID, "complete", None)
+
+        sql = pool.execute.call_args[0][0]
+        assert "status" in sql
+
+    @pytest.mark.asyncio
+    async def test_sql_sets_progress_to_100(self):
+        """The SQL must set progress_pct = 100 on completion."""
+        pool = _make_pool()
+        pool.execute.return_value = "UPDATE 1"
+
+        await db_client.update_job_result(pool, _JOB_ID, "complete", None)
+
+        sql = pool.execute.call_args[0][0]
+        assert "100" in sql
+
 
 class TestGetJob:
     @pytest.mark.asyncio
@@ -271,6 +304,57 @@ class TestMarkStaleJobs:
         count = await db_client.mark_stale_jobs_as_error(pool)
 
         assert count == 0
+
+    @pytest.mark.asyncio
+    async def test_sql_uses_created_at_not_updated_at(self):
+        """The stale-job query must use created_at for the age check (bug fix added this session).
+
+        Using updated_at would never catch truly stuck jobs that have stopped
+        logging progress updates.
+        """
+        pool = _make_pool()
+        pool.execute.return_value = "UPDATE 0"
+
+        await db_client.mark_stale_jobs_as_error(pool)
+
+        sql = pool.execute.call_args[0][0]
+        assert "created_at" in sql
+
+    @pytest.mark.asyncio
+    async def test_sql_does_not_use_updated_at_for_age_check(self):
+        """The stale-job query's age check column must not be updated_at."""
+        pool = _make_pool()
+        pool.execute.return_value = "UPDATE 0"
+
+        await db_client.mark_stale_jobs_as_error(pool)
+
+        sql = pool.execute.call_args[0][0]
+        # updated_at may appear in the SET clause (updated_at = now()) but must
+        # not appear in the WHERE clause age comparison.
+        where_clause = sql.split("WHERE")[-1] if "WHERE" in sql else ""
+        assert "updated_at" not in where_clause
+
+    @pytest.mark.asyncio
+    async def test_sql_filters_on_running_status(self):
+        """Only running jobs should be marked stale."""
+        pool = _make_pool()
+        pool.execute.return_value = "UPDATE 0"
+
+        await db_client.mark_stale_jobs_as_error(pool)
+
+        sql = pool.execute.call_args[0][0]
+        assert "running" in sql
+
+    @pytest.mark.asyncio
+    async def test_sql_uses_one_hour_interval(self):
+        """Stale threshold must be 1 hour."""
+        pool = _make_pool()
+        pool.execute.return_value = "UPDATE 0"
+
+        await db_client.mark_stale_jobs_as_error(pool)
+
+        sql = pool.execute.call_args[0][0]
+        assert "1 hour" in sql
 
 
 # ---------------------------------------------------------------------------

@@ -155,6 +155,75 @@ class TestSubmitJob:
                 three_tier_client.submit_job("z", "gs://b/z")
 
 
+# ---------------------------------------------------------------------------
+# _do_submit — KeyError guard (new behaviour added this session)
+# ---------------------------------------------------------------------------
+
+
+class TestDoSubmit:
+    """Covers the new RuntimeError raised when 'video_job_id' is missing in response."""
+
+    def test_raises_runtime_error_when_video_job_id_missing(self, video_client):
+        """When the response has no 'video_job_id' key, RuntimeError must be raised."""
+        with patch("backend.services.gpu_client.requests") as mock_req:
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = {"status": "accepted"}  # missing video_job_id
+            mock_resp.raise_for_status = MagicMock()
+            mock_req.post.return_value = mock_resp
+
+            with pytest.raises(RuntimeError, match="video_job_id"):
+                video_client._do_submit("job123", "gs://bucket/job123")
+
+    def test_raises_runtime_error_for_empty_response(self, video_client):
+        """An empty response dict must also raise RuntimeError."""
+        with patch("backend.services.gpu_client.requests") as mock_req:
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = {}
+            mock_resp.raise_for_status = MagicMock()
+            mock_req.post.return_value = mock_resp
+
+            with pytest.raises(RuntimeError):
+                video_client._do_submit("job123", "gs://bucket/job123")
+
+    def test_raises_runtime_error_for_null_video_job_id(self, video_client):
+        """A null/None value for 'video_job_id' must raise RuntimeError."""
+        with patch("backend.services.gpu_client.requests") as mock_req:
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = {"video_job_id": None}
+            mock_resp.raise_for_status = MagicMock()
+            mock_req.post.return_value = mock_resp
+
+            with pytest.raises(RuntimeError):
+                video_client._do_submit("job123", "gs://bucket/job123")
+
+    def test_returns_video_job_id_when_present(self, video_client):
+        """When 'video_job_id' is present and non-empty, it must be returned."""
+        with patch("backend.services.gpu_client.requests") as mock_req:
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = {"video_job_id": "vj-xyz-789", "status": "accepted"}
+            mock_resp.raise_for_status = MagicMock()
+            mock_req.post.return_value = mock_resp
+
+            result = video_client._do_submit("job123", "gs://bucket/job123")
+
+        assert result == "vj-xyz-789"
+
+    def test_error_message_references_response_data(self, video_client):
+        """The RuntimeError message must include the bad response data for debugging."""
+        with patch("backend.services.gpu_client.requests") as mock_req:
+            bad_response = {"unexpected_key": "value"}
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = bad_response
+            mock_resp.raise_for_status = MagicMock()
+            mock_req.post.return_value = mock_resp
+
+            with pytest.raises(RuntimeError) as exc_info:
+                video_client._do_submit("job123", "gs://bucket/job123")
+
+        # The error should mention what was received to help debugging
+        assert "video_job_id" in str(exc_info.value)
+
+
 class TestPollUntilComplete:
     def test_returns_on_complete(self, video_client):
         with patch("backend.services.gpu_client.requests") as mock_req:

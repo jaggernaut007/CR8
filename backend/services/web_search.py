@@ -29,7 +29,11 @@ def search(query: str, max_results: int = 5) -> list[dict]:
     """
     client = _get_client()
     logger.debug("Tavily search: %s (max_results=%d)", query[:80], max_results)
-    response = client.search(query=query, max_results=max_results, search_depth="basic")
+    try:
+        response = client.search(query=query, max_results=max_results, search_depth="basic")
+    except Exception:
+        logger.error("Tavily search failed for query: %s", query[:80], exc_info=True)
+        return []
     results = response.get("results", [])
     logger.debug("Tavily returned %d results", len(results))
     return results
