@@ -8,17 +8,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/api/client";
-
-interface ProgressData {
-  status: string;
-  stage: string;
-  percent: number;
-  logs: string[];
-  elapsed: number;
-  warnings: string[];
-  eta_seconds?: number;
-}
+import { fetchProgress, cancelJob } from "@/api/jobs";
 
 const STAGES = ["Ingest", "Research", "Generate", "Video"];
 
@@ -39,7 +29,7 @@ export default function ProgressPage() {
 
   const { data } = useQuery({
     queryKey: ["progress", jobId],
-    queryFn: () => apiFetch<ProgressData>(`/api/progress/${jobId}`),
+    queryFn: () => fetchProgress(jobId!),
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       if (status && TERMINAL_STATUSES.has(status)) return false;
@@ -62,7 +52,7 @@ export default function ProgressPage() {
 
   const handleCancel = async () => {
     try {
-      await apiFetch(`/api/cancel/${jobId}`, { method: "POST" });
+      await cancelJob(jobId!);
     } catch (err) {
       setCancelError(err instanceof Error ? err.message : "Cancel failed");
     }

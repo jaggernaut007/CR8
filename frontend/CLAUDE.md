@@ -3,17 +3,40 @@
 
 ## Frontend Architecture
 
-### Current State
-The `frontend/` directory contains a **temporary prototype UI** — a FastAPI server
-serving plain HTML/CSS/JavaScript templates. A proper React/Next.js frontend has NOT
-been implemented yet. This prototype exists to demonstrate the pipeline and should be
-treated as a placeholder.
+### Current State (v0.5.2)
+The `frontend/` directory contains two layers:
 
-**Before building the real frontend**: create a research note at `docs/research/frontend-framework.md`
-to decide on the tech stack (React + Vite, Next.js, etc.) and check `docs/adr/` for any
-prior decisions on frontend architecture.
+1. **React SPA** (`frontend/react-app/`) — the primary UI, built with React 19 + Vite 7 + Tailwind v4 + Tanstack Query
+2. **FastAPI backend** (`frontend/app.py`) — serves the API + static SPA files in production
 
-### Module Structure (Wave 3 restructure)
+The SPA is built via `make build-frontend` → copies to `frontend/static/` (gitignored).
+FastAPI detects `frontend/static/index.html` at import time — if present, serves the React SPA;
+otherwise falls back to Jinja2 templates (legacy, being removed in v0.5.3).
+
+### React SPA Structure (`frontend/react-app/`)
+
+| Path | Purpose |
+|------|---------|
+| `src/api/client.ts` | JWT-aware fetch wrapper with auto-refresh on 401 |
+| `src/api/auth.ts` | Auth API: login, register, logout, fetchCurrentUser |
+| `src/api/jobs.ts` | Job API: fetchJobs, uploadFile, startPipeline, fetchProgress, cancelJob, downloadUrl |
+| `src/context/AuthContext.tsx` | Auth state provider with silent refresh on mount |
+| `src/components/Navbar.tsx` | Top navigation bar with logout |
+| `src/components/ProtectedRoute.tsx` | Auth guard wrapping `<Outlet />` |
+| `src/pages/LoginPage.tsx` | Login + register card with glassmorphism |
+| `src/pages/DashboardPage.tsx` | Job history list with status badges |
+| `src/pages/UploadPage.tsx` | Drag-drop file upload + format selection |
+| `src/pages/ProgressPage.tsx` | Pipeline stages + progress bar + ETA polling |
+| `src/pages/ResultsPage.tsx` | Download buttons + job metadata |
+| `src/index.css` | Tailwind v4 design system (`@theme` + `@utility` directives) |
+
+**Key patterns:**
+- Access tokens stored in memory only (never localStorage) — prevents XSS exfiltration
+- Silent refresh on mount via httpOnly `cr8_refresh` cookie
+- Tanstack Query for all GET requests (caching, refetch, loading states)
+- All API types centralized in `api/jobs.ts` and `api/auth.ts`
+
+### FastAPI Module Structure
 
 `frontend/app.py` was refactored from ~693 lines to ~320 lines. Route logic now lives in
 separate modules. `app.py` is responsible for app creation, lifespan, CORS/middleware
@@ -21,19 +44,13 @@ wiring, and router mounting only.
 
 | Module | Purpose |
 |--------|---------|
-| `frontend/app.py` | FastAPI app factory, lifespan, middleware wiring, health check, HTML pages |
+| `frontend/app.py` | FastAPI app factory, lifespan, middleware wiring, health check, SPA catch-all |
 | `frontend/middleware.py` | `AuthMiddleware`, `SecurityHeadersMiddleware`, `get_current_user()` dependency, rate-limiter, session store |
 | `frontend/auth_routes.py` | `/api/auth/*` — JWT register/login/refresh/me/logout + legacy session login |
 | `frontend/job_routes.py` | `/api/upload`, `/api/start`, `/api/progress/{job_id}`, `/api/cancel/{job_id}`, `/api/download/{job_id}/{type}`, `/api/jobs`, `/api/jobs/{job_id}` |
 | `frontend/quiz_routes.py` | `/api/quiz/*` — stubs returning 501 (Phase 4) |
 
-### Entry point
-`frontend/app.py` — FastAPI application with Uvicorn on port 8080.
-
-**HTML pages (served directly from app.py):**
-- `/` — Main application UI (Jinja2 template: `templates/index.html`)
-- `/login` — Login form (Jinja2 template: `templates/login.html`)
-- `/health` — Health check (public, no auth; used by Cloud Run readiness probe)
+### API Endpoints
 
 **Auth routes (prefix `/api/auth`):**
 - `POST /api/auth/register` — Create account (email + password, requires DATABASE_URL)
@@ -54,17 +71,11 @@ wiring, and router mounting only.
 **Quiz routes (prefix `/api/quiz`):**
 - All return `501 Not Implemented` — reserved for Phase 4
 
-### Templates (frontend/templates/)
-- `index.html` — Main app UI: drag-drop upload, format selection, real-time progress bar, download links
-- `login.html` — Authentication form with rate-limiting feedback
-
-These are static HTML files with inline CSS and vanilla JavaScript. No JSX or framework.
-
 ### Authentication
-- **Dual auth**: JWT Bearer token (primary) with legacy session cookie fallback
+- **Dual auth**: JWT Bearer token (primary) with legacy session cookie fallback (see ADR-002)
 - `get_current_user()` dependency in `frontend/middleware.py`: tries JWT Bearer first, falls back to `cr8_session` cookie
 - JWT tokens: access token (short-lived, in response body) + refresh token (httponly cookie, path-scoped to `/api/auth/refresh`)
-- Legacy session: 256-bit random token, 8-hour TTL, stored in process memory; for Jinja2 UI backward-compat
+- Legacy session: 256-bit random token, 8-hour TTL, stored in process memory; being removed after v0.5.3
 - Rate limiting: 5 failed attempts per 15 minutes per IP (sliding window, in-memory)
 - `AuthMiddleware` enforces auth on all paths except `/login`, `/api/auth/login`, `/api/auth/register`, `/health`, `/static/`
 
@@ -75,30 +86,21 @@ These are static HTML files with inline CSS and vanilla JavaScript. No JSX or fr
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'`
 
-### CORS
-`allowed_origins` is read from `settings.allowed_origins` (comma-separated string). The
-app no longer uses `["*"]`. Set the `ALLOWED_ORIGINS` environment variable in production.
-
-### DB Pool Lifecycle
-On app startup (`lifespan`), if `DATABASE_URL` is set, an asyncpg pool is initialised and
-stored at `app.state.db_pool`. On shutdown the pool is closed. If `DATABASE_URL` is absent
-(local dev without Neon), the app runs without a database — auth routes requiring DB
-return `503 Database not available`.
-
-### Progress Streaming
-Pipeline progress uses polling:
-- Backend: `ProgressCapture` class in `frontend/app.py` intercepts `print()` from the pipeline thread
-- Frontend JS: polls `/api/progress/{job_id}` every 2-3 seconds using `fetch` with auth header
-- Progress events: `{"stage": "Ingest|Research|Generate|Script|Video", "percent": 0-100, "logs": [...], "warnings": [...]}`
+### Development
+- **React dev server**: `cd frontend/react-app && npm run dev` → port 5173 (proxies `/api` to 8080)
+- **FastAPI server**: `make dev` → port 8080
+- **Build SPA**: `make build-frontend` → `frontend/static/` (gitignored)
+- `frontend/static/` and `frontend/react-app/dist/` are gitignored — build artifacts only
 
 ### Tests (frontend/tests/)
 - Tests use `pytest` + `httpx.AsyncClient` with FastAPI `TestClient`
 - All tests mock the pipeline — they test HTTP routes and auth, not pipeline logic
-- Key test files: `test_api.py` (route tests), `test_progress_capture.py` (SSE + progress tests)
+- Key test files: `test_api.py` (route tests), `test_progress_capture.py` (progress tests)
 
 ## Key Rules
-- All HTML is in `templates/` — no inline HTML strings in Python files
+- Access tokens in memory only — NEVER in localStorage or cookies
 - Auth middleware applies to every route except the public paths listed above
-- File uploads: 20 MB limit; accepted types: PDF, PPTX
+- File uploads: 50 MB limit; accepted types: PDF, PPTX
 - Outputs written to `outputs/` directory (gitignored); served via `/api/download/`
 - Job routes import `ProgressCapture` and `_run_pipeline_sync` from `frontend.app` at call time (circular import guard)
+- All API types live in `api/jobs.ts` and `api/auth.ts` — pages import from these, not inline

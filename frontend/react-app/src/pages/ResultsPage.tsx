@@ -1,47 +1,153 @@
 /**
- * Results page stub — placeholder until Wave 2 builds content viewers.
+ * Results page — shows completion status, artifact download buttons, and job metadata.
  *
- * Shows job completion status and links back to dashboard.
- * Will be replaced with PDF viewer, PPT carousel, video player, and download buttons.
+ * Fetches job details from /api/jobs/:jobId. Download buttons link to
+ * /api/download/:jobId/:type (browser handles file download natively).
+ * Content viewers (PDF, PPT carousel, video player) are planned for v0.5.3.
  */
 
 import { useParams, Link } from "react-router";
+import { useQuery } from "@tanstack/react-query";
+import { fetchJob, downloadUrl, type Job } from "@/api/jobs";
+
+const DOWNLOAD_TYPES: { key: string; label: string; icon: string }[] = [
+  { key: "pdf", label: "Learning Guide", icon: "PDF" },
+  { key: "ppt", label: "Slide Deck", icon: "PPT" },
+  { key: "scripts", label: "Video Scripts", icon: "TXT" },
+  { key: "videos", label: "Videos", icon: "MP4" },
+];
+
+function formatLabel(format: string): string {
+  switch (format) {
+    case "pdf": return "PDF";
+    case "ppt": return "Slides";
+    case "video": return "Video";
+    default: return format.toUpperCase();
+  }
+}
+
+/** Trigger a file download via browser navigation. Auth is handled by same-origin cookies. */
+function triggerDownload(url: string): void {
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.setAttribute("download", "");
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+}
 
 export default function ResultsPage() {
   const { jobId } = useParams<{ jobId: string }>();
 
+  const { data: job, isLoading, error } = useQuery({
+    queryKey: ["job", jobId],
+    queryFn: () => fetchJob(jobId!),
+    enabled: !!jobId,
+  });
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <div className="glass glass-shadow p-8 text-center">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success/20">
-          <svg
-            className="h-8 w-8 text-success"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
+      {isLoading && (
+        <div className="glass p-12 text-center text-text-secondary">
+          Loading results...
         </div>
+      )}
 
-        <h1 className="mb-2 text-2xl font-bold">Generation Complete</h1>
-        <p className="text-text-secondary">
-          Job <span className="font-mono text-text-primary">{jobId}</span> finished
-          successfully.
-        </p>
+      {error && (
+        <div className="badge-error rounded-lg p-4 text-sm">
+          <p>Failed to load job details.</p>
+          <Link to="/dashboard" className="mt-2 inline-block underline">
+            Back to Dashboard
+          </Link>
+        </div>
+      )}
 
-        <p className="mt-6 text-sm text-text-muted">
-          Content viewers and download buttons are coming in Wave 2.
-        </p>
+      {job && (
+        <>
+          {/* Header */}
+          <div className="glass glass-shadow p-8 text-center">
+            <StatusIcon status={job.status} />
 
-        <Link
-          to="/dashboard"
-          className="mt-6 inline-block accent-gradient rounded-lg px-6 py-2.5 font-medium text-white transition hover:opacity-90"
-        >
-          Back to Dashboard
-        </Link>
+            <h1 className="mb-2 text-2xl font-bold">
+              {job.status === "complete" ? "Generation Complete" : `Job ${job.status}`}
+            </h1>
+            <p className="text-text-secondary">{job.filename}</p>
+            <p className="mt-1 text-xs text-text-muted">
+              {new Date(job.created_at).toLocaleDateString()} &middot;{" "}
+              {job.formats.map(formatLabel).join(", ")}
+            </p>
+          </div>
+
+          {/* Download buttons */}
+          {job.status === "complete" && (
+            <div className="mt-6 space-y-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary">
+                Downloads
+              </h2>
+              <div className="grid grid-cols-2 gap-3">
+                {availableDownloads(job).map(({ key, label, icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => triggerDownload(downloadUrl(jobId!, key))}
+                    className="glass flex items-center gap-3 p-4 transition hover:glass-hover"
+                  >
+                    <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-blue/20 text-xs font-bold text-accent-blue">
+                      {icon}
+                    </span>
+                    <span className="text-sm font-medium text-text-primary">{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Back to dashboard */}
+          <Link
+            to="/dashboard"
+            className="mt-6 inline-block accent-gradient rounded-lg px-6 py-2.5 font-medium text-white transition hover:opacity-90"
+          >
+            Back to Dashboard
+          </Link>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Filter download types based on which formats the job was configured with. */
+function availableDownloads(job: Job) {
+  return DOWNLOAD_TYPES.filter(({ key }) => {
+    if (key === "pdf") return true; // PDF guide is always generated
+    if (key === "ppt") return job.formats.includes("ppt");
+    if (key === "scripts" || key === "videos") return job.formats.includes("video");
+    return false;
+  });
+}
+
+function StatusIcon({ status }: { status: string }) {
+  if (status === "complete") {
+    return (
+      <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success/20">
+        <svg className="h-8 w-8 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
       </div>
+    );
+  }
+  if (status === "error") {
+    return (
+      <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-error/20">
+        <svg className="h-8 w-8 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </div>
+    );
+  }
+  return (
+    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-bg-tertiary">
+      <svg className="h-8 w-8 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01" />
+      </svg>
     </div>
   );
 }

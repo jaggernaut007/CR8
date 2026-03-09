@@ -6,22 +6,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router";
-import { apiFetch } from "@/api/client";
-
-interface Job {
-  id: string;
-  filename: string;
-  status: string;
-  stage: string | null;
-  percent: number;
-  created_at: string;
-  formats: string[];
-}
-
-interface JobsResponse {
-  jobs: Job[];
-  total: number;
-}
+import { fetchJobs } from "@/api/jobs";
 
 function statusBadgeClass(status: string): string {
   switch (status) {
@@ -52,7 +37,7 @@ function StatusBadge({ status, percent }: { status: string; percent: number }) {
 export default function DashboardPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["jobs"],
-    queryFn: () => apiFetch<JobsResponse>("/api/jobs?limit=20&offset=0"),
+    queryFn: () => fetchJobs(),
     refetchInterval: 10000,
   });
 

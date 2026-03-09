@@ -7,18 +7,13 @@
 
 import { useState, useCallback, type DragEvent, type ChangeEvent } from "react";
 import { useNavigate } from "react-router";
-import { apiFetch } from "@/api/client";
+import { uploadFile, startPipeline } from "@/api/jobs";
 
 const ACCEPTED_TYPES = [
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ];
 const ACCEPTED_EXTENSIONS = [".pdf", ".pptx"];
-
-interface UploadResponse {
-  job_id: string;
-  filename: string;
-}
 
 export default function UploadPage() {
   const navigate = useNavigate();
@@ -72,21 +67,13 @@ export default function UploadPage() {
 
     try {
       // Step 1: Upload file
-      const formData = new FormData();
-      formData.append("file", file);
-      const { job_id } = await apiFetch<UploadResponse>("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
+      const { job_id } = await uploadFile(file);
 
       // Step 2: Start pipeline
       const selectedFormats = Object.entries(formats)
         .filter(([, v]) => v)
         .map(([k]) => k);
-      await apiFetch("/api/start", {
-        method: "POST",
-        body: JSON.stringify({ job_id, formats: selectedFormats }),
-      });
+      await startPipeline(job_id, selectedFormats);
 
       navigate(`/progress/${job_id}`);
     } catch (err) {
