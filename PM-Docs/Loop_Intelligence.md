@@ -15,8 +15,8 @@ This document is the **single source of strategic truth** for CR8. It serves two
 
 **Update cadence:** Refresh after each minor version bump (0.4 → 0.5 → 0.6). Keep under 400 lines.
 
-**Last Updated**: 2026-03-06 (v0.5.1 — foundation: DB + JWT + routes + test optimization)
-**Previous Version**: Loop Intelligence v0.4 (2026-03-04)
+**Last Updated**: 2026-03-09 (v0.5.2 — React SPA shell: Vite + Tailwind v4 + Tanstack Query + Vitest)
+**Previous Version**: Loop Intelligence update 2026-03-06 (v0.5.1)
 
 ---
 
@@ -34,7 +34,7 @@ Curriculum PDFs → [Ingest Agent] → [Research Agent] → [Generate Agent] →
        └── Feedback Loop → Agent improves future content
 ```
 
-Built with LangGraph, OpenAI, ChromaDB, Tavily, fpdf2, FastAPI. Deployed on GCP Cloud Run. 802 tests, zero real API calls.
+Built with LangGraph, OpenAI, ChromaDB, Tavily, fpdf2, FastAPI, React 19 + Vite 7 + Tailwind v4. Deployed on GCP Cloud Run. 795 backend tests + 42 Vitest + 5 Playwright E2E = 842 tests total.
 
 ---
 
@@ -56,7 +56,8 @@ CR8 is a **late-prototype / early-product**. The content generation pipeline is 
 | Frontend route restructure (modular) | Complete |
 | Test optimization (171s → 42s, pytest-xdist) | Complete |
 | SPA catch-all + build pipeline ready | Complete |
-| React SPA frontend | Not started (v0.5.2) |
+| React SPA shell (Vite + Tailwind v4 + Tanstack Query, all pages wired to API) | Complete (v0.5.2) |
+| React component tests (Vitest 42 tests) + Playwright E2E (5 auth flows) | Complete (v0.5.2) |
 | Quiz Agent + quiz platform | Not started (v0.5) |
 | Admin dashboard + analytics | Not started (v0.6) |
 | Feedback loop (quiz → content regeneration) | Not started (v0.6) |
@@ -116,7 +117,7 @@ Local video generation with open-source TTS. GPU service offload. Security basel
 ### v0.5 — React Frontend + Quiz Platform (IN PROGRESS)
 **Phase 1 (COMPLETE):** Database layer (Neon PostgreSQL), JWT auth, route restructure, Playwright E2E.
 **Phase 1.5 (COMPLETE):** Test optimization (171s → 42s), pytest-xdist parallelism, SPA catch-all route, configurable upload limits (50MB), `make build-frontend` / `make e2e` / `make test-fast` targets, all docs migrated from pip to uv.
-**Phase 2 (NEXT):** Glassmorphism React SPA (Vite + Tailwind v4 + shadcn/ui + Tanstack Query). Light mode first — dark mode deferred to v0.5.1.
+**Phase 2 (COMPLETE — v0.5.2):** Glassmorphism React SPA (React 19 + Vite 7 + Tailwind v4 + Tanstack Query). Five pages (Login, Dashboard, Upload, Progress, Results) wired to real API. JWT-aware fetch client and AuthContext. Vitest 42 component tests + Playwright 5 E2E tests. Stale Jinja2 tests removed.
 **Phase 3:** Content viewers (PDF iframe, PPT carousel, HTML5 video player). Download PDF/PPT/Video only.
 **Phase 4:** Quiz Agent (separate LangGraph workflow), one-attempt quizzes, Bloom's taxonomy, difficulty distribution.
 **Infrastructure:** GitHub Actions CI, Dependabot planned alongside Phase 2.

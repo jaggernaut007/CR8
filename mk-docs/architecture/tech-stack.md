@@ -15,7 +15,11 @@
 | PDF generation | fpdf2 | Compile learning guide PDF |
 | PPT generation | python-pptx | Generate gap analysis PowerPoint slides |
 | Video generation | HeyGen API v2 | AI avatar video rendering from scripts |
-| Web framework | FastAPI + uvicorn | Async HTTP server for web UI |
+| Web framework | FastAPI + uvicorn | Async HTTP server, API layer, SPA host |
+| React SPA | React 19 + Vite 7 | Client-side single-page application |
+| UI styling | Tailwind v4 | Utility-first CSS with glassmorphism design |
+| Client state | Tanstack Query | Server-state caching, polling, and mutations |
+| Client routing | React Router v7 | Client-side navigation with protected routes |
 | Concurrency | ThreadPoolExecutor | Parallel agent execution (configurable `max_workers`) |
 | Configuration | pydantic-settings | Type-safe env loading |
 | Observability | LangSmith | Trace every LLM call |

@@ -36,3 +36,4 @@
 13. Citation/references for ppt in the same slide, pdf in the end.
 14. ruff upgrade and codebase linting
 15. github actions
+16. caching for AI agents/vector databases and software dependencies (e.g. model files, ffmpeg binaries) to speed up setup and execution

@@ -194,13 +194,16 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         """Add security headers to the response."""
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
+        # SAMEORIGIN allows our SPA to embed PDFs in iframes
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data:; "
-            "font-src 'self'"
+            "font-src 'self'; "
+            "media-src 'self'; "
+            "frame-src 'self'"
         )
         return response

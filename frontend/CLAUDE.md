@@ -49,6 +49,7 @@ wiring, and router mounting only.
 | `frontend/auth_routes.py` | `/api/auth/*` — JWT register/login/refresh/me/logout + legacy session login |
 | `frontend/job_routes.py` | `/api/upload`, `/api/start`, `/api/progress/{job_id}`, `/api/cancel/{job_id}`, `/api/download/{job_id}/{type}`, `/api/jobs`, `/api/jobs/{job_id}` |
 | `frontend/quiz_routes.py` | `/api/quiz/*` — stubs returning 501 (Phase 4) |
+| `frontend/view_routes.py` | `/api/view/*` — inline PDF, slide images, video streaming for content viewers |
 
 ### API Endpoints
 
@@ -68,6 +69,13 @@ wiring, and router mounting only.
 - `GET /api/jobs` — List jobs for current user (requires JWT auth + DATABASE_URL)
 - `GET /api/jobs/{job_id}` — Get single job from database
 
+**View routes (prefix `/api/view`):**
+- `GET /api/view/{job_id}/pdf` — Serve PDF inline (Content-Disposition: inline) for iframe embedding
+- `GET /api/view/{job_id}/slides` — JSON listing of slide image URLs and count
+- `GET /api/view/{job_id}/slide/{index}` — Individual slide PNG (1-based index)
+- `GET /api/view/{job_id}/videos` — JSON listing of video names and stream URLs
+- `GET /api/view/{job_id}/video/{index}` — Stream MP4 video (0-based index, supports Range requests)
+
 **Quiz routes (prefix `/api/quiz`):**
 - All return `501 Not Implemented` — reserved for Phase 4
 
@@ -82,9 +90,9 @@ wiring, and router mounting only.
 ### Security Headers
 `SecurityHeadersMiddleware` adds to all responses:
 - `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: DENY`
+- `X-Frame-Options: SAMEORIGIN` (allows PDF iframe embedding from same origin)
 - `Referrer-Policy: strict-origin-when-cross-origin`
-- `Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'`
+- `Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; frame-src 'self'`
 
 ### Development
 - **React dev server**: `cd frontend/react-app && npm run dev` → port 5173 (proxies `/api` to 8080)

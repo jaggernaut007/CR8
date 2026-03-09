@@ -1,22 +1,61 @@
 # Web UI
 
-A minimal FastAPI web interface for uploading PDFs, selecting output formats, monitoring progress in real time, and downloading generated files.
+CR8 ships a React SPA (v0.5.2+) served by the FastAPI backend. The Jinja2 prototype remains as a fallback when the React build is absent.
 
 ## Starting the Server
 
 ```bash
+# Build the React SPA (one-time or after frontend changes)
+make build-frontend
+
+# Start the backend server
 make dev
 # Opens at http://localhost:8080
 ```
 
-The UI is a single-page HTML file with inline CSS and vanilla JS -- no build step required.
+Without `make build-frontend`, the server serves the legacy Jinja2 UI.
 
-## Features
+## React SPA (v0.5.2+)
 
-- **PDF upload** -- drag-and-drop or file picker
-- **Format selection** -- PDF (always on), PPT (optional gap analysis slides), Script (optional, auto-enables PPT), Video (disabled by default, requires HeyGen API keys, auto-enables Script + PPT)
-- **Real-time progress** -- stage label, progress bar, elapsed/estimated time, scrolling log area
-- **Download** -- PDF as direct download, scripts and videos as .zip files
+**Stack**: React 19 + Vite 7 + Tailwind v4 + Tanstack Query + React Router v7.
+
+**Pages**:
+
+| Route | Page | Description |
+|-------|------|-------------|
+| `/login` | `LoginPage` | JWT login form; redirects to `/dashboard` on success |
+| `/dashboard` | `DashboardPage` | Recent jobs list; protected route |
+| `/upload` | `UploadPage` | Drag-and-drop PDF/PPTX upload with format selector |
+| `/progress/:jobId` | `ProgressPage` | Real-time progress polling (2 s interval via Tanstack Query) |
+| `/results/:jobId` | `ResultsPage` | Download buttons for PDF, PPT, scripts, video ZIP |
+
+**Features**:
+- Glassmorphism design system (backdrop-blur, semi-transparent cards)
+- JWT-aware fetch client — attaches `Authorization: Bearer` automatically; auto-refreshes on 401
+- `AuthContext` — provides `user`, `login`, `logout`, and `isLoading` throughout the tree
+- `ProtectedRoute` guard — unauthenticated users are redirected to `/login`
+- Responsive `Navbar` with user display and logout
+
+## Building the React App
+
+```bash
+# In the project root
+make build-frontend
+# Equivalent: cd frontend/react-app && npm ci && npm run build
+# Output: frontend/static/ (index.html + /assets/ bundle)
+```
+
+The FastAPI catch-all (`/{full_path:path}`) serves `frontend/static/index.html` for all non-API paths when the build is present, enabling React Router client-side navigation.
+
+## Legacy Jinja2 UI (fallback)
+
+When `frontend/static/index.html` is absent, the server falls back to the Jinja2-templated prototype. This path remains useful for quick local development without a Node.js build step.
+
+Features of the legacy UI:
+- **PDF upload** — drag-and-drop or file picker
+- **Format selection** — PDF (always on), PPT (optional), Script (optional), Video (Kokoro TTS)
+- **Real-time progress** — stage label, progress bar, elapsed/estimated time, scrolling log area
+- **Download** — PDF as direct download, scripts and videos as .zip files
 
 ## Architecture
 

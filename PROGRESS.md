@@ -4,8 +4,8 @@
 
 ## Current Status
 **Last updated:** 2026-03-09
-**Overall project phase:** v0.5.2 Wave 3 complete — React SPA shell + Vitest/Playwright test infra
-**Current version:** v0.5.2
+**Overall project phase:** v0.5.3 in progress — Content Viewers (PDF iframe, PPT carousel, video player)
+**Current version:** v0.5.3
 
 ## What's Working
 - Full 3-agent pipeline end-to-end (Ingest → Research → Generate)
@@ -40,6 +40,34 @@
 - SECURITY.md vulnerability disclosure policy
 - `slide_images` field is `NotRequired[list[str]]` in `PipelineState` — correctly optional
 - `docs/adr/ADR-001-three-tier-video-fallback.md` — architecture decision record
+
+## v0.5.3 Sprint (2026-03-09 Session)
+> Content Viewers — inline PDF, PPT slide carousel, HTML5 video player
+
+### Wave 1: Backend View Endpoints (in progress)
+- `frontend/view_routes.py` — 5 new endpoints:
+  - `GET /api/view/{job_id}/pdf` — inline PDF for iframe (`Content-Disposition: inline`)
+  - `GET /api/view/{job_id}/slides` — slide image listing JSON
+  - `GET /api/view/{job_id}/slide/{index}` — individual slide PNG
+  - `GET /api/view/{job_id}/videos` — video listing JSON
+  - `GET /api/view/{job_id}/video/{index}` — MP4 streaming with Range support
+- `SecurityHeadersMiddleware` update — `SAMEORIGIN`, `media-src 'self'`, `frame-src 'self'`
+- `frontend/tests/test_view_routes.py` — TDD (tests first)
+
+### Wave 2: React Viewer Components (planned)
+- `PdfViewer` — iframe-based, browser native PDF rendering
+- `PptCarousel` — slide image navigation with prev/next + counter
+- `VideoPlayer` — HTML5 `<video>` with topic selector dropdown
+- `ContentTabs` — tab bar switching between PDF/Slides/Video
+- ResultsPage integration with viewers above downloads
+
+### Wave 3: Polish + E2E (planned)
+- Keyboard navigation (arrow keys for PPT carousel)
+- Edge cases (missing formats, incomplete jobs)
+- Playwright E2E tests for content viewers
+- Vitest component tests for viewer components
+
+---
 
 ## v0.5.2 Sprint (2026-03-09 Session)
 
@@ -174,12 +202,15 @@ CPU service (europe-west2, 2 vCPU, 4 GiB)
 - Main Dockerfile no longer includes video deps — video must route to a remote service; local video requires a different Dockerfile configuration
 
 ## Next Steps (Prioritised)
-1. **v0.5** — Glassmorphism React frontend + Quiz platform + Neon PostgreSQL + JWT auth + CORS lockdown + FastAPI-MCP mount
-2. **v0.6** — Admin dashboard + feedback loop + structured logging + RBAC + audit logging
+1. **v0.5.3** — Content viewers (PDF iframe, PPT carousel, video player) ← **IN PROGRESS**
+2. **v0.5.4** — Quiz Agent + Quiz UI (edX-style, one-attempt, red/green feedback)
+3. **v0.6** — Admin dashboard + feedback loop + structured logging + RBAC + audit logging
 
 ## Recent Decisions
 | Date | Decision | Rationale | ADR |
 |------|----------|-----------|-----|
+| 2026-03-09 | Content viewers use native browser capabilities | No external PDF.js or video player library — iframe for PDF, `<img>` carousel for PPT, HTML5 `<video>` for MP4. Zero new npm dependencies. | — |
+| 2026-03-09 | Separate view_routes.py module | Content serving is distinct from job CRUD — separate module keeps job_routes.py focused | — |
 | 2026-03-06 | CPU video service as Tier 3 fallback | Infrastructure failures on GPU (cold-start, region outage) should not fail video jobs; a CPU fallback with 8 vCPU / 32 GiB provides adequate throughput at ~20-30 min/job | ADR-001 |
 | 2026-03-06 | Fallback on infrastructure errors only | Job-level errors (bad input, Kokoro failure) should not silently retry on a different tier — the error would recur and waste compute | ADR-001 |
 | 2026-03-06 | VideoServiceClient replaces GPUVideoClient | The client now routes to GPU or CPU tiers; keeping the GPU-specific name was misleading | — |
@@ -196,5 +227,5 @@ CPU service (europe-west2, 2 vCPU, 4 GiB)
 ## Environment Notes
 - Dev server: `make dev` → http://localhost:8080
 - Docs preview: `make docs-serve` → http://localhost:8000
-- Tests: `make test` → all 802 pass
+- Tests: `make test` → 795 pytest + 42 Vitest + 5 Playwright E2E
 - Requires: `.env` file with OPENAI_API_KEY, TAVILY_API_KEY (copy from `.env.example`)

@@ -29,6 +29,7 @@ Read the relevant note before implementing any feature that uses an external lib
 | React 19 + Vite 6 + FastAPI Integration | [react-vite-fastapi.md](react-vite-fastapi.md) | React 19.2.4, Vite 6.2.6, React Router 7.13.1, TanStack Query 5.90.21 | 2026-03-09 | Current |
 | Tailwind CSS v4 Custom Styles & Glassmorphism | [tailwind-css-v4.md](tailwind-css-v4.md) | tailwindcss >= 4.0.1 | 2026-03-09 | Current |
 | shadcn/ui Components & TanStack Query | [shadcn-ui-tanstack-query.md](shadcn-ui-tanstack-query.md) | shadcn/ui (CLI-based), @tanstack/react-query >= 5.90.21 | 2026-03-09 | Current |
+| FastAPI File Serving (Range Requests, PDFs, Videos) | [fastapi-file-serving.md](fastapi-file-serving.md) | FastAPI >= 0.115, Starlette (bundled) | 2026-03-09 | Current |
 
 ## Priority Research Needed
 

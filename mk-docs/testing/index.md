@@ -1,14 +1,23 @@
 # Testing Guide
 
-CR8 has a comprehensive automated test suite of **802 tests** covering the full stack: pipeline agents, eval harness, structural checks, services, LangGraph graph integration, all FastAPI endpoints, GCS/GPU/CPU-video service clients, both video microservice workers, and all frontend auth and quiz routes. All tests run with **zero real API calls** — all LLMs, web search, ChromaDB, GCS, and the video services are mocked where needed.
+CR8 has a comprehensive automated test suite covering the full stack across three layers:
+
+- **795 pytest tests** (backend + FastAPI endpoints + GPU/CPU video services) — zero real API calls
+- **42 Vitest component tests** (React SPA pages and shared components)
+- **5 Playwright E2E tests** (auth flow: login, protected route guard, logout, token persistence)
+
+All pipeline agents, eval harness, structural checks, services, LangGraph graph integration, all FastAPI endpoints, GCS/GPU/CPU-video service clients, both video microservice workers, and all frontend auth and quiz routes are covered. All pytest tests run with **zero real API calls** — all LLMs, web search, ChromaDB, GCS, and video services are mocked where needed.
 
 ---
 
 ## Running Tests
 
 ```bash
-# Full suite (recommended)
+# Full backend + frontend pytest suite (recommended)
 python3 -m pytest backend/tests/ frontend/tests/ gpu_service/tests/ cpu_video_service/tests/ --tb=short -q
+
+# Parallel (fastest, uses all CPU cores)
+make test-parallel
 
 # Backend only
 python3 -m pytest backend/tests/ -v
@@ -50,7 +59,7 @@ python3 -m pytest backend/tests/test_eval_harness.py::TestEvalResultSnapshot \
 | `test_gpu_client.py` | 37 | `VideoServiceClient` 3-tier fallback, `submit_job()`, `poll_until_complete()` (complete/error/timeout paths), `_try_next_tier()`, identity token fetch, `is_available()` |
 | `test_agent_generate_dispatch.py` | 8 | `_build_videos_dispatch()`: GPU path (GCS upload → submit → poll → download), local fallback path |
 
-### Frontend Tests
+### FastAPI Backend / Frontend Tests
 
 | File | Tests | What it covers |
 |------|-------|----------------|
@@ -58,6 +67,40 @@ python3 -m pytest backend/tests/test_eval_harness.py::TestEvalResultSnapshot \
 | `frontend/tests/test_progress_capture.py` | 39 | Stage parsing, progress %age (updated STAGE_WEIGHTS), thread safety, stage time budgets |
 | `frontend/tests/test_auth_routes.py` | 49 | Register (201, 409, 400, 503, email normalisation), JWT login (200, 401, 429), legacy login, refresh (happy/invalid/no-cookie), `/me` (JWT Bearer, legacy session, expired), logout (204, session invalidation), `get_current_user` (expired JWT, malformed header) |
 | `frontend/tests/test_quiz_routes.py` | 12 | All quiz stub endpoints (`GET /api/quiz/`, `GET /api/quiz/{id}`, `POST /api/quiz/{id}/start`, `POST /api/quiz/{id}/submit`) return 501 with `error` key |
+
+### React SPA Tests (Vitest)
+
+42 component tests run via `npx vitest run` from `frontend/react-app/`.
+
+| Scope | Tests | What it covers |
+|-------|-------|----------------|
+| `LoginPage` | ~8 | Form render, submit with valid credentials, error display on 401, redirect on success |
+| `DashboardPage` | ~6 | Renders authenticated user, lists recent jobs via mocked Tanstack Query |
+| `UploadPage` | ~8 | Drag-and-drop area, file type validation, format selector checkboxes |
+| `ProgressPage` | ~6 | Polling interval, stage + percent display, log stream render, completion redirect |
+| `ResultsPage` | ~6 | Download button rendering per output type, disabled state when file absent |
+| `Navbar` | ~4 | User display, logout trigger |
+| `ProtectedRoute` | ~2 | Redirects unauthenticated users to `/login` |
+| `AuthContext` | ~2 | Context value propagation, login/logout state transitions |
+
+Test utilities (`frontend/react-app/src/test/test-utils.tsx`) provide factory helpers:
+- `makeUser(overrides?)` — creates a typed mock user object
+- `renderWithAuth(ui, user?)` — wraps component in `AuthContext` with optional authenticated user
+- `renderWithQueryClient(ui)` — wraps component with a fresh `QueryClient`
+
+### Playwright E2E Tests (React SPA)
+
+5 E2E scenarios in `frontend/react-app/e2e/auth.spec.ts`:
+
+| Scenario | What it verifies |
+|----------|-----------------|
+| Login happy path | User can log in and land on the dashboard |
+| Protected route guard | Unauthenticated user is redirected to `/login` |
+| Logout | User is redirected to `/login` and token is cleared |
+| Token persistence | Refreshing the page keeps the user authenticated |
+| Invalid credentials | 401 error is displayed on the login page |
+
+Run E2E tests with `make e2e` (requires the dev server and React build to be running).
 
 ### GPU Service Tests
 
@@ -74,7 +117,7 @@ python3 -m pytest backend/tests/test_eval_harness.py::TestEvalResultSnapshot \
 | `cpu_video_service/tests/test_worker.py` | 37 | Full job lifecycle, cancellation flow (during TTS and compose), ETA estimation, error handling, GCS status upload |
 | `cpu_video_service/tests/test_gcs_client.py` | 22 | `download_manifest()`, `download_slides()`, `upload_videos()`, `upload_status()` with mocked `google.cloud.storage` |
 
-**Total: 802 tests — 0 real API calls**
+**Total: 795 pytest (0 real API calls) + 42 Vitest + 5 Playwright E2E = 842 tests across all layers**
 
 ---
 
@@ -240,6 +283,9 @@ All test files share a common fixture set:
 | CPU video service FastAPI endpoints (accept, concurrency limit, cancel) | Yes — 19 tests in `cpu_video_service/tests/test_app.py` |
 | CPU video worker lifecycle, cancellation, ETA, error handling | Yes — 37 tests in `cpu_video_service/tests/test_worker.py` |
 | CPU video GCS client (manifest, slides, upload, status) | Yes — 22 tests in `cpu_video_service/tests/test_gcs_client.py` |
+| React SPA pages (render, form interaction, query integration) | Yes — 42 Vitest tests in `frontend/react-app/` |
+| React SPA auth flow E2E (login, logout, guard, persistence) | Yes — 5 Playwright tests in `frontend/react-app/e2e/` |
+| JWT-aware fetch client (token attachment, 401 auto-refresh) | Yes — Vitest tests in `api/client.ts` tests |
 
 ## Known Gaps
 

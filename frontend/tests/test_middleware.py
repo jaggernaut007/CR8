@@ -180,7 +180,7 @@ class TestSecurityHeadersMiddleware:
 
     def test_x_frame_options_present_on_health(self, client):
         resp = client.get("/health")
-        assert resp.headers.get("x-frame-options") == "DENY"
+        assert resp.headers.get("x-frame-options") == "SAMEORIGIN"
 
     def test_referrer_policy_present_on_health(self, client):
         resp = client.get("/health")
@@ -200,7 +200,7 @@ class TestSecurityHeadersMiddleware:
     def test_security_headers_on_authenticated_index(self, authed_client):
         """Authenticated GET / traverses the full middleware stack."""
         resp = authed_client.get("/")
-        assert resp.headers.get("x-frame-options") == "DENY"
+        assert resp.headers.get("x-frame-options") == "SAMEORIGIN"
 
     def test_all_four_headers_present_on_login_page(self, client):
         """All four security headers must appear on a normal public response."""

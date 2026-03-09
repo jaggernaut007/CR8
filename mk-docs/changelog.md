@@ -2,6 +2,39 @@
 
 > **See also**: [Services Reference](services/index.md) and [Prompt Templates](agents/prompts.md) — Complete technical reference for all builders, prompts, and eval checks.
 
+## v0.5.2 — React SPA Shell (2026-03-09)
+
+**Summary**: Delivered the full React 19 + Vite 7 + Tailwind v4 frontend in three waves. All five pages (Login, Dashboard, Upload, Progress, Results) are wired to the real API via Tanstack Query and a JWT-aware fetch client. Added 42 Vitest component tests and 5 Playwright E2E auth flow tests. Removed 7 stale Jinja2 backend tests. Backend test count: 802 → 795.
+
+### Added — React SPA
+
+| Component | Description |
+|-----------|-------------|
+| `frontend/react-app/` | React 19 + Vite 7 + Tailwind v4 SPA with glassmorphism design |
+| `LoginPage` | JWT login form with error display, redirects to `/dashboard` on success |
+| `DashboardPage` | Authenticated landing page with recent jobs list (Tanstack Query) |
+| `UploadPage` | Drag-and-drop PDF/PPTX upload with format selector checkboxes |
+| `ProgressPage` | Real-time polling every 2 s (Tanstack Query), stage + percent + log stream |
+| `ResultsPage` | Download buttons for PDF, PPT, scripts, and video ZIP |
+| `api/client.ts` | JWT-aware fetch — attaches `Authorization: Bearer`, auto-refresh on 401 |
+| `api/jobs.ts` | Centralised `Job`, `ProgressResponse`, `UploadResponse` types + API functions |
+| `AuthContext` | React context: `user`, `login`, `logout`, `isLoading` |
+| `ProtectedRoute` | Redirects unauthenticated users to `/login` |
+| `Navbar` | Responsive nav with user display and logout |
+
+### Added — Tests
+
+- **42 Vitest component tests** — all pages and shared components
+- **5 Playwright E2E tests** — login, protected route guard, logout, token persistence, invalid credentials
+- Factory-pattern test utilities: `makeUser()`, `renderWithAuth()`, `renderWithQueryClient()`
+
+### Changed
+
+- `AuthMiddleware` — `/assets/` path prefix added to allowlist so Vite bundles load without auth challenge
+- 7 stale Jinja2 backend tests replaced; backend suite reduced from 802 → 795
+
+---
+
 ## v0.5.1 — Foundation: DB + JWT Auth + Route Restructure + Test Optimization
 
 **Summary**: Migrated to uv package manager. Added asyncpg database layer (8 tables), JWT auth service (PyJWT + bcrypt), refactored frontend/app.py from 693→320 lines into 4 route modules + middleware. Added SPA catch-all, configurable upload size, and pytest-xdist parallel testing (802 tests in ~42s, 4.1x speedup). Grew test suite from 626 → 802 tests (+176).

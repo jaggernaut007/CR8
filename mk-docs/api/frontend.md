@@ -1,8 +1,8 @@
 # Frontend API Endpoints
 
-The CR8 web UI is a FastAPI application serving a single-page HTML interface.
+The CR8 web server is a FastAPI application. When `frontend/static/index.html` is present (built via `make build-frontend`), it serves the React SPA; otherwise it falls back to the legacy Jinja2 UI.
 
-**Entry point**: `frontend/app.py` (app factory, lifespan, middleware wiring, health check)
+**Entry point**: `frontend/app.py` (app factory, lifespan, middleware wiring, health check, SPA catch-all)
 
 ## Module Structure
 
@@ -18,12 +18,14 @@ Route logic was extracted from `app.py` into focused sub-modules during the Wave
 
 ## Endpoints
 
-### HTML Pages
+### HTML Pages / SPA Routes
 
 | Endpoint | Method | Auth required | Description |
 |----------|--------|---------------|-------------|
-| `/` | GET | Yes | Serve the main application UI (redirects to `/login` if unauthenticated) |
-| `/login` | GET | No | Serve the login form |
+| `/` | GET | Yes | Serve the main application UI (React SPA `index.html` if built, else Jinja2) |
+| `/login` | GET | No | Serve the login form (React SPA handles routing client-side; Jinja2 fallback serves a form) |
+| `/{full_path}` | GET | No | SPA catch-all — returns `index.html` for any path not matched by an API route, enabling React Router client-side navigation |
+| `/assets/{path}` | GET | No | Vite static asset passthrough — served without auth challenge so the SPA bundle loads correctly |
 | `/health` | GET | No | Health check — returns `{"status": "ok"}` (used by Cloud Run readiness probe) |
 
 ### Auth Routes (`/api/auth`)

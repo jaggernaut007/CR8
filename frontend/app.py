@@ -36,6 +36,7 @@ from frontend.auth_routes import router as auth_router  # noqa: E402
 from frontend.job_routes import router as job_router  # noqa: E402
 from frontend.middleware import AuthMiddleware, SecurityHeadersMiddleware  # noqa: E402
 from frontend.quiz_routes import router as quiz_router  # noqa: E402
+from frontend.view_routes import router as view_router  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -358,6 +359,7 @@ app.add_middleware(AuthMiddleware)
 app.include_router(auth_router)
 app.include_router(job_router)
 app.include_router(quiz_router)
+app.include_router(view_router)
 
 
 # ---------------------------------------------------------------------------

@@ -7,6 +7,42 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.5.2] — 2026-03-09 — React SPA Shell (Vite + Tailwind v4 + Tanstack Query + Vitest)
+
+### Added — React SPA Frontend
+- `frontend/react-app/` — React 19 + Vite 7 + Tailwind v4 SPA with glassmorphism design system
+- `frontend/react-app/src/pages/LoginPage.tsx` — JWT login form with error display and redirect on success
+- `frontend/react-app/src/pages/DashboardPage.tsx` — authenticated landing page with recent jobs list
+- `frontend/react-app/src/pages/UploadPage.tsx` — drag-and-drop PDF/PPTX upload with format selector
+- `frontend/react-app/src/pages/ProgressPage.tsx` — real-time polling via Tanstack Query (2 s interval, stage + percent + log stream)
+- `frontend/react-app/src/pages/ResultsPage.tsx` — download buttons for PDF, PPT, scripts, and video ZIP
+- `frontend/react-app/src/api/client.ts` — JWT-aware fetch client (attaches `Authorization: Bearer`, auto-refresh on 401)
+- `frontend/react-app/src/api/auth.ts` — `login()`, `logout()`, `getMe()` API functions
+- `frontend/react-app/src/api/jobs.ts` — centralised types (`Job`, `ProgressResponse`, `UploadResponse`) + API functions for all job routes
+- `frontend/react-app/src/context/AuthContext.tsx` — React context providing `user`, `login`, `logout`, `isLoading`
+- `frontend/react-app/src/components/Navbar.tsx` — responsive navigation with user display and logout
+- `frontend/react-app/src/components/ProtectedRoute.tsx` — React Router guard; redirects to `/login` if unauthenticated
+- `frontend/react-app/src/test/setup.ts` — Vitest global setup (jsdom environment, `@testing-library/jest-dom` matchers)
+- `frontend/react-app/src/test/test-utils.tsx` — factory-pattern mock auth (`makeUser()`, `renderWithAuth()`, `renderWithQueryClient()`)
+- `frontend/react-app/e2e/auth.spec.ts` — 5 Playwright E2E scenarios covering login, protected route guard, logout, and token persistence
+
+### Changed — Test Suite
+- 42 Vitest component tests added covering all pages and shared components (LoginPage, DashboardPage, UploadPage, ProgressPage, ResultsPage, Navbar, ProtectedRoute, AuthContext)
+- 5 Playwright E2E auth flow tests added for the React SPA
+- 7 stale Jinja2 backend tests removed (the Jinja2 UI is superseded by the SPA catch-all); backend test count: 802 → 795
+- `/assets/` path prefix added to `AuthMiddleware` allowlist to serve Vite static assets without auth challenge
+- `data-testid` attributes added to key interactive elements for reliable E2E selection
+- Drag-and-drop upload area test coverage added in Vitest suite
+
+### Changed — SPA Activation
+- `frontend/app.py` catch-all (`/{full_path:path}`) now serves the compiled React SPA from `frontend/static/index.html` when the build is present; falls back to Jinja2 404 when absent
+- `make build-frontend` compiles the Vite app into `frontend/static/` (runs `npm ci && npm run build` in `frontend/react-app/`)
+
+### Test Suite
+Total: **795 pytest** (backend) + **42 Vitest** (component) + **5 Playwright E2E** = 842 tests. Backend reduction: 7 stale Jinja2 tests removed.
+
+---
+
 ## [0.5.1] — 2026-03-06 — Foundation: DB + JWT Auth + Route Restructure + Test Optimization
 
 ### Added — Database & Auth
