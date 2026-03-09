@@ -3,9 +3,9 @@
      Updated at the end of every session using the session-handoff skill. -->
 
 ## Current Status
-**Last updated:** 2026-03-06
-**Overall project phase:** v0.5.1 complete — DB layer, JWT auth, route restructure, test optimization, uv migration. 802 tests
-**Current version:** v0.5.1
+**Last updated:** 2026-03-09
+**Overall project phase:** v0.5.2 Wave 3 complete — React SPA shell + Vitest/Playwright test infra
+**Current version:** v0.5.2
 
 ## What's Working
 - Full 3-agent pipeline end-to-end (Ingest → Research → Generate)
@@ -40,6 +40,34 @@
 - SECURITY.md vulnerability disclosure policy
 - `slide_images` field is `NotRequired[list[str]]` in `PipelineState` — correctly optional
 - `docs/adr/ADR-001-three-tier-video-fallback.md` — architecture decision record
+
+## v0.5.2 Sprint (2026-03-09 Session)
+
+### Wave 1: React SPA Scaffold
+- **React 19 + Vite 7 + Tailwind v4** with glassmorphism design system
+- **Pages**: LoginPage, DashboardPage, UploadPage, ProgressPage, ResultsPage
+- **Auth**: JWT-aware fetch client, AuthContext with memory-only tokens, silent refresh
+- **Routing**: React Router v7, ProtectedRoute guard, SPA catch-all in FastAPI
+
+### Wave 2: Job API + Data Wiring
+- **`api/jobs.ts`** — centralized types and API functions (DRY extraction from pages)
+- **ResultsPage** rebuilt — download buttons, status icons, same-origin cookie auth
+- **All pages** wired to real API via Tanstack Query
+
+### Wave 3: Test Infrastructure + Review Fixes
+- **Vitest 4** — 42 component tests across 5 pages (2.8s)
+- **Playwright E2E** — 5 auth flow tests against localhost:8080 (14s)
+- **Test utils** — factory-pattern mock auth, QueryClient wrapper, BrowserRouter
+- **Auth middleware fix** — `/assets/` added to public paths (SPA JS/CSS was blocked)
+- **Stale Jinja2 tests** replaced with SPA-aware assertion (802 → 795 backend tests)
+- **Code review fixes**: data-testid on error divs, drag-drop test, cancel failure test, cancelled badge test, login navigation test
+
+### Test Counts
+- **42 Vitest** component tests (React)
+- **5 Playwright** E2E tests
+- **795 pytest** backend tests (7 stale Jinja2 template tests replaced with 1 flexible test)
+
+---
 
 ## v0.5.1 Sprint (2026-03-06 Session)
 

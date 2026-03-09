@@ -1,4 +1,4 @@
-.PHONY: install test test-fast run clean serve dev docker-build docker-run docs-serve docs-build docs-deploy lint lint-fix build-frontend e2e
+.PHONY: install test test-fast run clean serve dev docker-build docker-run docs-serve docs-build docs-deploy lint lint-fix build-frontend e2e test-react e2e-react
 
 install:
 	uv sync --all-extras
@@ -50,3 +50,9 @@ build-frontend:
 
 e2e:
 	uv run pytest frontend/tests/ -v -k "e2e or playwright" --tb=short
+
+test-react:
+	cd frontend/react-app && npm run test
+
+e2e-react:
+	cd frontend/react-app && npx playwright test

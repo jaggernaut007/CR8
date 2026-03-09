@@ -175,6 +175,7 @@ class TestAuthEnforcement:
 # ---------------------------------------------------------------------------
 
 class TestIndexRoute:
+    """Tests for the index route — serves React SPA when built, Jinja2 fallback otherwise."""
 
     def test_returns_200(self, authed_client):
         resp = authed_client.get("/")
@@ -184,40 +185,10 @@ class TestIndexRoute:
         resp = authed_client.get("/")
         assert "text/html" in resp.headers["content-type"]
 
-    def test_contains_page_title(self, authed_client):
+    def test_serves_spa_or_jinja2(self, authed_client):
         resp = authed_client.get("/")
-        assert "CR8 Learning Pipeline" in resp.text
-
-    def test_contains_upload_elements(self, authed_client):
-        resp = authed_client.get("/")
-        assert 'id="file-input"' in resp.text
-        assert 'id="btn-generate"' in resp.text
-
-    def test_file_input_accepts_pdf_and_pptx(self, authed_client):
-        resp = authed_client.get("/")
-        assert 'accept=".pdf,.pptx"' in resp.text
-
-    def test_drop_zone_mentions_pptx(self, authed_client):
-        resp = authed_client.get("/")
-        assert "PPTX" in resp.text
-
-    def test_contains_format_checkboxes(self, authed_client):
-        resp = authed_client.get("/")
-        assert 'id="chk-script"' in resp.text
-        assert 'id="chk-video"' in resp.text
-
-    def test_video_checkbox_enabled(self, authed_client):
-        resp = authed_client.get("/")
-        video_line = next(line for line in resp.text.split("\n") if "chk-video" in line)
-        assert "disabled" not in video_line
-
-    def test_video_label_mentions_kokoro(self, authed_client):
-        resp = authed_client.get("/")
-        assert "Kokoro TTS" in resp.text
-
-    def test_contains_sign_out_button(self, authed_client):
-        resp = authed_client.get("/")
-        assert "Sign out" in resp.text
+        # SPA: has React root div; Jinja2: has CR8 page title
+        assert 'id="root"' in resp.text or "CR8 Learning Pipeline" in resp.text
 
 
 # ---------------------------------------------------------------------------

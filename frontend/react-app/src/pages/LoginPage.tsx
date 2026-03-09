@@ -117,7 +117,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="badge-error rounded-lg px-4 py-2.5 text-sm">
+              <div data-testid="auth-error" className="badge-error rounded-lg px-4 py-2.5 text-sm">
                 {error}
               </div>
             )}

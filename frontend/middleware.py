@@ -167,8 +167,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if request.url.path in _PUBLIC_PATHS:
             return await call_next(request)
 
-        # Allow static assets if any
-        if request.url.path.startswith("/static/"):
+        # Allow static assets (SPA JS/CSS/images)
+        if request.url.path.startswith(("/static/", "/assets/")):
             return await call_next(request)
 
         user = await get_current_user(request)
