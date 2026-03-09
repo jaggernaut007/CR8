@@ -15,8 +15,8 @@ This document is the **single source of strategic truth** for CR8. It serves two
 
 **Update cadence:** Refresh after each minor version bump (0.4 → 0.5 → 0.6). Keep under 400 lines.
 
-**Last Updated**: 2026-03-09 (v0.5.2 — React SPA shell: Vite + Tailwind v4 + Tanstack Query + Vitest)
-**Previous Version**: Loop Intelligence update 2026-03-06 (v0.5.1)
+**Last Updated**: 2026-03-09 (v0.5.3 — Content viewers: PDF iframe, PPT carousel, HTML5 video player)
+**Previous Version**: Loop Intelligence update 2026-03-09 (v0.5.2)
 
 ---
 
@@ -34,7 +34,7 @@ Curriculum PDFs → [Ingest Agent] → [Research Agent] → [Generate Agent] →
        └── Feedback Loop → Agent improves future content
 ```
 
-Built with LangGraph, OpenAI, ChromaDB, Tavily, fpdf2, FastAPI, React 19 + Vite 7 + Tailwind v4. Deployed on GCP Cloud Run. 795 backend tests + 42 Vitest + 5 Playwright E2E = 842 tests total.
+Built with LangGraph, OpenAI, ChromaDB, Tavily, fpdf2, FastAPI, React 19 + Vite 7 + Tailwind v4. Deployed on GCP Cloud Run. 834 backend tests + 69 Vitest + 10 Playwright E2E = 913 tests total.
 
 ---
 
@@ -58,6 +58,7 @@ CR8 is a **late-prototype / early-product**. The content generation pipeline is 
 | SPA catch-all + build pipeline ready | Complete |
 | React SPA shell (Vite + Tailwind v4 + Tanstack Query, all pages wired to API) | Complete (v0.5.2) |
 | React component tests (Vitest 42 tests) + Playwright E2E (5 auth flows) | Complete (v0.5.2) |
+| Content viewers (PDF iframe, PPT carousel, HTML5 video player) | Complete (v0.5.3) |
 | Quiz Agent + quiz platform | Not started (v0.5) |
 | Admin dashboard + analytics | Not started (v0.6) |
 | Feedback loop (quiz → content regeneration) | Not started (v0.6) |
@@ -106,6 +107,25 @@ Video data moves between services via GCS. Service-to-service calls authenticate
 
 ---
 
+## Architecture Decision Records
+
+Key structural decisions are documented in `docs/adr/`. The Strategy Agent should treat these as constraints — they explain why the system is shaped the way it is and what trade-offs were accepted.
+
+| ADR | Decision | Rationale | Version |
+|-----|----------|-----------|---------|
+| 003 | LangGraph 3-agent pipeline (Ingest → Research → Generate) | Linear pipeline with TypedDict state — explicit control flow, testable agents, future extensibility via conditional edges | v0.1 |
+| 004 | Multi-model routing (nano/mini/premium tiers) | 60-70% cost reduction by routing extraction to cheap models; severity-based routing gives premium to critical gaps | v0.3 |
+| 007 | ChromaDB for vector storage | Local-first, zero cost, built-in MiniLM embeddings; sufficient for single-user pipeline; pgvector migration path exists | v0.1 |
+| 008 | Chained output generation (PDF → PPT → Script → Video) | Content consistency across formats; `modules_md` is canonical source; scripts sync to PPT slide structure | v0.2 |
+| 005 | Kokoro TTS open-source video pipeline | Zero marginal cost; curriculum data stays on-infra; no vendor lock-in; two-phase design (sequential TTS, parallel ffmpeg) | v0.4 |
+| 006 | GPU offload via GCS data bus | Cloud Run services share no filesystem; GPU workload has different resource profile than I/O-bound pipeline; scale-to-zero economics | v0.4 |
+| 001 | Three-tier video fallback (GPU → GPU fallback → CPU) | Infrastructure failures should not fail video jobs; CPU fallback is slow but always available | v0.4.2 |
+| 002 | Dual-auth strategy (JWT + legacy session) | React SPA needs stateless JWT; Jinja2 demo must keep working during migration; clean removal path post-v0.5.3 | v0.5.1 |
+| 009 | uv package manager (pip → uv) | 10-100x faster installs; built-in lockfile for deterministic builds; single `uv run` command | v0.5.1 |
+| 010 | React SPA frontend (Vite + Tailwind v4) | Component reuse for quiz UI; real-time progress; JWT auth flow; Jinja2 was blocking dashboard/upload features | v0.5.2 |
+
+---
+
 ## Strategic Roadmap
 
 ### Versioning
@@ -118,7 +138,7 @@ Local video generation with open-source TTS. GPU service offload. Security basel
 **Phase 1 (COMPLETE):** Database layer (Neon PostgreSQL), JWT auth, route restructure, Playwright E2E.
 **Phase 1.5 (COMPLETE):** Test optimization (171s → 42s), pytest-xdist parallelism, SPA catch-all route, configurable upload limits (50MB), `make build-frontend` / `make e2e` / `make test-fast` targets, all docs migrated from pip to uv.
 **Phase 2 (COMPLETE — v0.5.2):** Glassmorphism React SPA (React 19 + Vite 7 + Tailwind v4 + Tanstack Query). Five pages (Login, Dashboard, Upload, Progress, Results) wired to real API. JWT-aware fetch client and AuthContext. Vitest 42 component tests + Playwright 5 E2E tests. Stale Jinja2 tests removed.
-**Phase 3:** Content viewers (PDF iframe, PPT carousel, HTML5 video player). Download PDF/PPT/Video only.
+**Phase 3 (COMPLETE — v0.5.3):** Content viewers (PDF iframe, PPT carousel, HTML5 video player) embedded in ResultsPage. Five backend view endpoints with Range-request video streaming. 39 backend + 27 Vitest + 5 Playwright tests added. Zero new npm dependencies.
 **Phase 4:** Quiz Agent (separate LangGraph workflow), one-attempt quizzes, Bloom's taxonomy, difficulty distribution.
 **Infrastructure:** GitHub Actions CI, Dependabot planned alongside Phase 2.
 
@@ -246,4 +266,4 @@ These inform strategy agent decisions about feature prioritisation and technical
 | `PM-Docs/University_Pitch_Strategy.md` | Sales playbook, engagement model, pre-demo pack |
 | `PM-Docs/Next_Steps_Roadmap.md` | Near-term execution priorities |
 | `PROGRESS.md` | Session-level engineering progress |
-| `docs/adr/` | Architecture Decision Records |
+| `docs/adr/` | Architecture Decision Records (10 ADRs: pipeline, routing, video, auth, frontend) |

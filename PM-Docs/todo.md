@@ -37,3 +37,4 @@
 14. ruff upgrade and codebase linting
 15. github actions
 16. caching for AI agents/vector databases and software dependencies (e.g. model files, ffmpeg binaries) to speed up setup and execution
+17. user authentication and role-based access control for admin dashboard and quiz management and also login through google.

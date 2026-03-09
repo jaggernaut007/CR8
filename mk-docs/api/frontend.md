@@ -14,6 +14,7 @@ Route logic was extracted from `app.py` into focused sub-modules during the Wave
 | `frontend/middleware.py` | `AuthMiddleware`, `SecurityHeadersMiddleware`, `get_current_user()` dependency, rate limiter, session store |
 | `frontend/auth_routes.py` | `/api/auth/*` — JWT register/login/refresh/me/logout + legacy session login |
 | `frontend/job_routes.py` | `/api/upload`, `/api/start`, `/api/progress/{job_id}`, `/api/cancel/{job_id}`, `/api/download/{job_id}/{type}`, `/api/jobs`, `/api/jobs/{job_id}` |
+| `frontend/view_routes.py` | `/api/view/*` — inline PDF, slide image carousel, MP4 video streaming for the React SPA content viewers |
 | `frontend/quiz_routes.py` | `/api/quiz/*` — stubs returning 501 (reserved for Phase 4) |
 
 ## Endpoints
@@ -49,6 +50,44 @@ Route logic was extracted from `app.py` into focused sub-modules during the Wave
 | `/api/download/{job_id}/{type}` | GET | Yes | Download output files (pdf, ppt, scripts, videos) |
 | `/api/jobs` | GET | Yes | List jobs for the current user (requires JWT + `DATABASE_URL`) |
 | `/api/jobs/{job_id}` | GET | Yes | Get a single job record from the database |
+
+### View Routes (`/api/view`)
+
+Content viewer endpoints serve generated artifacts inline for the React SPA. All require a completed job (`status == complete`). The `job_id` must match the 8-character hex format enforced by `JOB_ID_RE`.
+
+| Endpoint | Method | Auth required | Description |
+|----------|--------|---------------|-------------|
+| `/api/view/{job_id}/pdf` | GET | Yes | Serve generated PDF inline (`Content-Disposition: inline`) for iframe embedding |
+| `/api/view/{job_id}/slides` | GET | Yes | JSON `{slides: [...], total: N}` — list of `/api/view/{job_id}/slide/{i}` URLs for each existing slide PNG |
+| `/api/view/{job_id}/slide/{index}` | GET | Yes | Serve individual slide PNG by 1-based index |
+| `/api/view/{job_id}/videos` | GET | Yes | JSON `{videos: [{name, url}, ...]}` — one entry per MP4 in the job's video directory |
+| `/api/view/{job_id}/video/{index}` | GET | Yes | Stream MP4 by 0-based index; Starlette `FileResponse` handles HTTP Range requests for HTML5 seeking |
+
+#### Slide listing response
+
+```json
+{
+  "slides": [
+    "/api/view/abc12345/slide/1",
+    "/api/view/abc12345/slide/2"
+  ],
+  "total": 2
+}
+```
+
+#### Video listing response
+
+```json
+{
+  "videos": [
+    {"name": "topic one", "url": "/api/view/abc12345/video/0"},
+    {"name": "topic two", "url": "/api/view/abc12345/video/1"}
+  ]
+}
+```
+
+!!! warning "Incomplete jobs"
+    All view endpoints return `404` if the job does not exist, is still running, or has not produced the requested artifact type. The React SPA handles this gracefully by showing an empty state rather than an error.
 
 ### Quiz Routes (`/api/quiz`)
 
@@ -115,9 +154,9 @@ When `DATABASE_URL` is not set (local dev without Neon), auth routes that requir
 | Header | Value |
 |--------|-------|
 | `X-Content-Type-Options` | `nosniff` |
-| `X-Frame-Options` | `DENY` |
+| `X-Frame-Options` | `SAMEORIGIN` (allows same-origin `<iframe>` for the PDF viewer) |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` |
-| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'` |
+| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; media-src 'self'; frame-src 'self'` |
 
 ## CORS
 

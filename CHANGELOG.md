@@ -7,6 +7,36 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.5.3] — 2026-03-09 — Content Viewers (PDF iframe, PPT carousel, HTML5 video player)
+
+### Added — Backend View Endpoints (`frontend/view_routes.py`)
+- `GET /api/view/{job_id}/pdf` — serve generated PDF inline (`Content-Disposition: inline`) for iframe embedding
+- `GET /api/view/{job_id}/slides` — JSON listing of slide image URLs and total count
+- `GET /api/view/{job_id}/slide/{index}` — serve individual slide PNG by 1-based index
+- `GET /api/view/{job_id}/videos` — JSON listing of video display names and stream URLs
+- `GET /api/view/{job_id}/video/{index}` — stream MP4 by 0-based index; Starlette `FileResponse` handles HTTP Range requests natively for HTML5 seeking
+- All view endpoints validate `job_id` format and require job status `complete`
+
+### Added — React Viewer Components
+- `ContentTabs` — tab bar switching between PDF / Slides / Video panels
+- `PdfViewer` — iframe embedding browser-native PDF rendering (zero new npm deps)
+- `PptCarousel` — slide image carousel with prev/next navigation, slide counter, and keyboard arrow key navigation
+- `VideoPlayer` — HTML5 `<video>` element with topic selector dropdown
+- `ResultsPage` — viewer panels displayed above download buttons
+
+### Changed — Security Headers
+- `SecurityHeadersMiddleware`: `X-Frame-Options` changed from `DENY` to `SAMEORIGIN` (allows same-origin iframe for PDF viewer)
+- `Content-Security-Policy` extended with `media-src 'self'` (HTML5 video) and `frame-src 'self'` (PDF iframe)
+
+### Test Suite
+- 39 new pytest tests in `frontend/tests/test_view_routes.py`; backend total: 795 → 834
+- 27 new Vitest component tests (ContentTabs, PdfViewer, PptCarousel, VideoPlayer + keyboard nav); Vitest total: 42 → 69
+- 5 new Playwright E2E tests in `frontend/react-app/e2e/results.spec.ts`; Playwright total: 5 → 10
+
+Total: **834 pytest** + **69 Vitest** + **10 Playwright E2E** = 913 tests
+
+---
+
 ## [0.5.2] — 2026-03-09 — React SPA Shell (Vite + Tailwind v4 + Tanstack Query + Vitest)
 
 ### Added — React SPA Frontend

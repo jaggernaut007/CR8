@@ -4,7 +4,7 @@
 
 ## Current Status
 **Last updated:** 2026-03-09
-**Overall project phase:** v0.5.3 in progress — Content Viewers (PDF iframe, PPT carousel, video player)
+**Overall project phase:** v0.5.3 complete — Content Viewers (PDF iframe, PPT carousel, video player)
 **Current version:** v0.5.3
 
 ## What's Working
@@ -23,7 +23,7 @@
 - **Video error/warning surfacing** — `ProgressCapture` captures `[Video] ERROR:` and `[Video] WARNING:` lines; UI shows yellow warning box on completion
 - **Configurable login password** — `AUTH_PASSWORD` env var (default: `CR8-AI`); no longer hardcoded
 - **Unified video provider validation** — `_validate_video_provider()` shared between CLI and web
-- 802-test suite — all passing, ruff clean, pytest-xdist parallel (~42s)
+- 834-test suite — all passing, ruff clean, pytest-xdist parallel (~42s)
 - **Video slides from generated PPT** (was: original PDF) — fixed `_get_slide_images()` bug
 - **Two-phase video pipeline** — sequential TTS (shared engine) → parallel ffmpeg composition
 - **GPU acceleration** — MPS/CUDA for TTS, hardware H.264 encoding (VideoToolbox/NVENC/QSV/AMF), per-worker thread control
@@ -44,7 +44,7 @@
 ## v0.5.3 Sprint (2026-03-09 Session)
 > Content Viewers — inline PDF, PPT slide carousel, HTML5 video player
 
-### Wave 1: Backend View Endpoints (in progress)
+### Wave 1: Backend View Endpoints (COMPLETE)
 - `frontend/view_routes.py` — 5 new endpoints:
   - `GET /api/view/{job_id}/pdf` — inline PDF for iframe (`Content-Disposition: inline`)
   - `GET /api/view/{job_id}/slides` — slide image listing JSON
@@ -52,20 +52,25 @@
   - `GET /api/view/{job_id}/videos` — video listing JSON
   - `GET /api/view/{job_id}/video/{index}` — MP4 streaming with Range support
 - `SecurityHeadersMiddleware` update — `SAMEORIGIN`, `media-src 'self'`, `frame-src 'self'`
-- `frontend/tests/test_view_routes.py` — TDD (tests first)
+- `frontend/tests/test_view_routes.py` — 39 new pytest tests (795 → 834 backend total)
 
-### Wave 2: React Viewer Components (planned)
+### Wave 2: React Viewer Components (COMPLETE)
 - `PdfViewer` — iframe-based, browser native PDF rendering
 - `PptCarousel` — slide image navigation with prev/next + counter
 - `VideoPlayer` — HTML5 `<video>` with topic selector dropdown
 - `ContentTabs` — tab bar switching between PDF/Slides/Video
-- ResultsPage integration with viewers above downloads
+- `ResultsPage` — viewer panels integrated above download buttons
+- 24 new Vitest component tests (42 → 66 Vitest total)
 
-### Wave 3: Polish + E2E (planned)
-- Keyboard navigation (arrow keys for PPT carousel)
-- Edge cases (missing formats, incomplete jobs)
-- Playwright E2E tests for content viewers
-- Vitest component tests for viewer components
+### Wave 3: Polish + E2E (COMPLETE)
+- Keyboard navigation — arrow keys for PPT carousel
+- 5 new Playwright E2E tests in `frontend/react-app/e2e/results.spec.ts` (5 → 10 total)
+- 3 new Vitest keyboard navigation tests (66 → 69 Vitest total)
+
+### Test Counts (v0.5.3 final)
+- **834 pytest** backend tests (was 795, +39 view route tests)
+- **69 Vitest** component tests (was 42, +27 viewer component + keyboard nav tests)
+- **10 Playwright** E2E tests (was 5, +5 content viewer tests)
 
 ---
 
@@ -202,9 +207,8 @@ CPU service (europe-west2, 2 vCPU, 4 GiB)
 - Main Dockerfile no longer includes video deps — video must route to a remote service; local video requires a different Dockerfile configuration
 
 ## Next Steps (Prioritised)
-1. **v0.5.3** — Content viewers (PDF iframe, PPT carousel, video player) ← **IN PROGRESS**
-2. **v0.5.4** — Quiz Agent + Quiz UI (edX-style, one-attempt, red/green feedback)
-3. **v0.6** — Admin dashboard + feedback loop + structured logging + RBAC + audit logging
+1. **v0.5.4** — Quiz Agent + Quiz UI (edX-style, one-attempt, red/green feedback) ← **NEXT**
+2. **v0.6** — Admin dashboard + feedback loop + structured logging + RBAC + audit logging
 
 ## Recent Decisions
 | Date | Decision | Rationale | ADR |
@@ -227,5 +231,5 @@ CPU service (europe-west2, 2 vCPU, 4 GiB)
 ## Environment Notes
 - Dev server: `make dev` → http://localhost:8080
 - Docs preview: `make docs-serve` → http://localhost:8000
-- Tests: `make test` → 795 pytest + 42 Vitest + 5 Playwright E2E
+- Tests: `make test` → 834 pytest + 69 Vitest + 10 Playwright E2E
 - Requires: `.env` file with OPENAI_API_KEY, TAVILY_API_KEY (copy from `.env.example`)
