@@ -86,7 +86,7 @@ Total: **1063 pytest** + **124 Vitest** + **17 Playwright E2E** = **1204 tests**
 - PPT gap analysis builder with 6 slide types and CR8 design tokens
 - Slide-synced video script generation (`SCRIPT_FROM_SLIDES` prompt)
 
-## v0.5.2 (2026-03-09)
+## v0.5.5 (2026-03-09)
 
 ### Feat
 
