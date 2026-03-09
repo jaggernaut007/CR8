@@ -182,14 +182,21 @@ function QuizSection({ jobId, navigate }: { jobId: string; navigate: (path: stri
         </button>
       ) : (
         <div className="space-y-2">
-          {quizzes.map((q) => (
+          {quizzes.map((q, i) => (
             <Link
               key={q.id}
               to={`/quiz/${q.id}`}
               className="glass flex items-center justify-between p-4 transition hover:glass-hover"
               data-testid="quiz-link"
             >
-              <span className="text-sm font-medium text-text-primary">{q.title}</span>
+              <div>
+                <span className="text-sm font-medium text-text-primary">{q.title}</span>
+                {quizzes.length > 1 && (
+                  <span className="ml-2 text-xs text-text-muted">
+                    (Attempt {i + 1})
+                  </span>
+                )}
+              </div>
               <span className="text-xs text-text-muted">Take Quiz</span>
             </Link>
           ))}

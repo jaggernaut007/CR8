@@ -31,10 +31,24 @@ Generate a quiz from a completed pipeline job.
 }
 ```
 
+**Idempotency:**
+
+If a quiz already exists for the job, the endpoint returns the existing quiz immediately rather than generating a new one. The response includes `"existing": true` to indicate this path was taken.
+
+```json
+{
+  "quiz_id": "uuid-string",
+  "question_count": 0,
+  "existing": true
+}
+```
+
 **Error responses:**
 
 | Status | Reason |
 |--------|--------|
+| 200 | Existing quiz returned (idempotent — `"existing": true` in body) |
+| 201 | New quiz generated |
 | 401 | Authentication required |
 | 400 | Job not complete / no topic data |
 | 404 | Job not found or not owned by user |

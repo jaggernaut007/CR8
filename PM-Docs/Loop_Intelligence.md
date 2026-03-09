@@ -15,8 +15,8 @@ This document is the **single source of strategic truth** for CR8. It serves two
 
 **Update cadence:** Refresh after each minor version bump (0.4 → 0.5 → 0.6). Keep under 400 lines.
 
-**Last Updated**: 2026-03-09 (post-v0.5.4 — Quiz Agent, quiz platform, Bloom's taxonomy MCQs)
-**Previous Version**: Loop Intelligence update 2026-03-09 (v0.5.3)
+**Last Updated**: 2026-03-09 (post-v0.5.4 — E2E bug fixes: job normalisation, view route auth exemption, DB result persistence, idempotent quiz generation)
+**Previous Version**: Loop Intelligence update 2026-03-09 (post-v0.5.4 Quiz Agent)
 
 ---
 
@@ -112,7 +112,7 @@ Five new API endpoints: start quiz, get question, submit answer, get results, li
 - **Neon PostgreSQL** — 8 tables (users, jobs, quizzes, quiz_questions, quiz_attempts, quiz_responses, chat_sessions, chat_messages), async via asyncpg. Schema includes Bloom's taxonomy, difficulty levels, one-attempt-only constraint, and pre-provisioned chat tables for v0.5.1. Post-v0.5.3: `ON DELETE CASCADE` on jobs FK, index on quiz_questions ordered lookup.
 - **Dual auth** — JWT (PyJWT + bcrypt) for API consumers + legacy session auth for existing web UI
 - **Security** — SecurityHeadersMiddleware (CSP, X-Frame-Options, etc.), CORS locked to configured origins, AuthMiddleware on all non-public paths. Rate limiting covers both login and registration. Job ownership enforced on GET /api/jobs/{id}. Settings validator rejects weak JWT secrets at startup.
-- **Pipeline resilience** — Tavily search failures return empty results instead of crashing the Research agent. MoviePy clips released on composition failure. GPU service submit validates response before polling begins.
+- **Pipeline resilience** — Tavily search failures return empty results instead of crashing the Research agent. MoviePy clips released on composition failure. GPU service submit validates response before polling begins. Content viewer routes now survive server restarts by reading file paths from the database. Idempotent quiz generation prevents duplicate quizzes from repeated button presses.
 
 ---
 

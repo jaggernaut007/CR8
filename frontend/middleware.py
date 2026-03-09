@@ -167,8 +167,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if request.url.path in _PUBLIC_PATHS:
             return await call_next(request)
 
-        # Allow static assets (SPA JS/CSS/images)
-        if request.url.path.startswith(("/static/", "/assets/")):
+        # Allow static assets (SPA JS/CSS/images) and view routes
+        # (view routes use the unguessable short_id as a capability token;
+        # iframes, <video>, and <img> tags can't send Bearer headers)
+        if request.url.path.startswith(("/static/", "/assets/", "/api/view/")):
             return await call_next(request)
 
         user = await get_current_user(request)

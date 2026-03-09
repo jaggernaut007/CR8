@@ -49,20 +49,53 @@ Route logic was extracted from `app.py` into focused sub-modules during the Wave
 | `/api/progress/{job_id}` | GET | Yes | Poll progress: `{status, stage, percent, logs, elapsed, warnings}` |
 | `/api/cancel/{job_id}` | POST | Yes | Cancel a running job |
 | `/api/download/{job_id}/{type}` | GET | Yes | Download output files (pdf, ppt, scripts, videos) |
-| `/api/jobs` | GET | Yes | List jobs for the current user (requires JWT + `DATABASE_URL`); `limit` capped at 100 |
-| `/api/jobs/{job_id}` | GET | Yes | Get a single job from the database; returns 404 if job does not belong to the authenticated user |
+| `/api/jobs` | GET | Yes | List jobs for the current user (requires JWT + `DATABASE_URL`); `limit` capped at 100; response fields normalised via `_normalize_job()` |
+| `/api/jobs/{job_id}` | GET | Yes | Get a single job by 8-char hex `short_id` (falls back to UUID lookup); returns 404 if job does not belong to the authenticated user; response normalised via `_normalize_job()` |
+
+#### Job response shape (normalised)
+
+`GET /api/jobs` and `GET /api/jobs/{job_id}` both return job objects in the shape the React frontend expects, produced by the `_normalize_job()` helper in `frontend/job_routes.py`:
+
+```json
+{
+  "id": "abc12345",
+  "filename": "syllabus.pdf",
+  "status": "complete",
+  "stage": null,
+  "percent": 100,
+  "created_at": "2026-03-09T10:00:00",
+  "formats": ["pdf", "ppt"]
+}
+```
+
+Field mapping from DB columns:
+
+| Response field | DB column | Notes |
+|----------------|-----------|-------|
+| `id` | `short_id` (falls back to `id`) | 8-char hex identifier used in URLs |
+| `filename` | first element of `file_names` | `"unknown"` if list is empty |
+| `status` | `status` | — |
+| `stage` | `current_stage` | `null` if absent |
+| `percent` | `progress_pct` | — |
+| `formats` | `output_formats` | Comma-separated string split into list |
 
 ### View Routes (`/api/view`)
 
 Content viewer endpoints serve generated artifacts inline for the React SPA. All require a completed job (`status == complete`). The `job_id` must match the 8-character hex format enforced by `JOB_ID_RE`.
 
+!!! note "Auth exemption for browser-native viewers"
+    `/api/view/` paths are exempted from `AuthMiddleware`. Browser elements such as `<iframe>`, `<video>`, and `<img>` cannot send `Authorization: Bearer` headers. The unguessable 8-character `short_id` acts as a capability token — knowledge of the ID is sufficient for content access. All other API routes still enforce JWT or session auth.
+
+!!! note "DB fallback for completed jobs"
+    The view route handler `_get_completed_result()` checks in-memory `ProgressCapture` state first. If the job is not found in memory (e.g. after a server restart), it falls back to the `result_meta` JSONB column in the database. File paths (`pdf_path`, `ppt_path`, `video_dir`, `slide_images`) are stored to `result_meta` on job completion so that view routes continue to work across restarts.
+
 | Endpoint | Method | Auth required | Description |
 |----------|--------|---------------|-------------|
-| `/api/view/{job_id}/pdf` | GET | Yes | Serve generated PDF inline (`Content-Disposition: inline`) for iframe embedding |
-| `/api/view/{job_id}/slides` | GET | Yes | JSON `{slides: [...], total: N}` — list of `/api/view/{job_id}/slide/{i}` URLs for each existing slide PNG |
-| `/api/view/{job_id}/slide/{index}` | GET | Yes | Serve individual slide PNG by 1-based index |
-| `/api/view/{job_id}/videos` | GET | Yes | JSON `{videos: [{name, url}, ...]}` — one entry per MP4 in the job's video directory |
-| `/api/view/{job_id}/video/{index}` | GET | Yes | Stream MP4 by 0-based index; Starlette `FileResponse` handles HTTP Range requests for HTML5 seeking |
+| `/api/view/{job_id}/pdf` | GET | No (short_id capability) | Serve generated PDF inline (`Content-Disposition: inline`) for iframe embedding |
+| `/api/view/{job_id}/slides` | GET | No (short_id capability) | JSON `{slides: [...], total: N}` — list of `/api/view/{job_id}/slide/{i}` URLs for each existing slide PNG |
+| `/api/view/{job_id}/slide/{index}` | GET | No (short_id capability) | Serve individual slide PNG by 1-based index |
+| `/api/view/{job_id}/videos` | GET | No (short_id capability) | JSON `{videos: [{name, url}, ...]}` — one entry per MP4 in the job's video directory |
+| `/api/view/{job_id}/video/{index}` | GET | No (short_id capability) | Stream MP4 by 0-based index; Starlette `FileResponse` handles HTTP Range requests for HTML5 seeking |
 
 #### Slide listing response
 
@@ -92,14 +125,15 @@ Content viewer endpoints serve generated artifacts inline for the React SPA. All
 
 ### Quiz Routes (`/api/quiz`)
 
-All quiz endpoints return `501 Not Implemented` — the quiz platform is reserved for Phase 4.
+All quiz endpoints require JWT authentication. See the [Quiz API reference](quiz.md) for full request/response documentation.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/quiz/` | GET | List quizzes (stub) |
-| `/api/quiz/{quiz_id}` | GET | Get a quiz (stub) |
-| `/api/quiz/{quiz_id}/start` | POST | Start a quiz attempt (stub) |
-| `/api/quiz/{quiz_id}/submit` | POST | Submit quiz answers (stub) |
+| `POST /api/quiz/generate` | POST | Generate a quiz for a completed job; returns existing quiz if one already exists (idempotent) |
+| `GET /api/quiz/{quiz_id}` | GET | Fetch quiz with questions (answer fields hidden until attempt submitted) |
+| `POST /api/quiz/{quiz_id}/submit` | POST | Submit answers; one attempt per user enforced |
+| `GET /api/quiz/{quiz_id}/results` | GET | Detailed score + per-question breakdown |
+| `GET /api/quiz/by-job/{job_id}` | GET | List all quizzes for a specific job |
 
 ## Authentication
 

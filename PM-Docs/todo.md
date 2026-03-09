@@ -39,3 +39,5 @@
 16. caching for AI agents/vector databases and software dependencies (e.g. model files, ffmpeg binaries) to speed up setup and execution
 17. user authentication and role-based access control for admin dashboard and quiz management and also login through google.
 18. UI: Everystage has an eta and overall eta is present as well. We can also show the eta for each stage. This will help the users to understand how much time is left for the completion of the task.
+19. description on what its doing during progress. high level description of what the agent is doing during the progress. This will help the users to understand the process jsut be sure that its working well.
+20. Add estimated time for quiz generation and video generation. This will help the users to understand how much time is left for the completion of the task.

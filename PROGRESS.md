@@ -4,8 +4,38 @@
 
 ## Current Status
 **Last updated:** 2026-03-09
-**Overall project phase:** v0.5.4 complete — Quiz Agent + Quiz UI (edX-style, one-attempt, Bloom's taxonomy)
+**Overall project phase:** v0.5.4 complete — post-release E2E bug fixes applied (job normalisation, view route auth, DB result persistence, quiz idempotency)
 **Current version:** v0.5.4
+
+## Post-v0.5.4 E2E Bug Fix Session (2026-03-09)
+> Fixes discovered during end-to-end testing of the React SPA against the live FastAPI server.
+
+### job_routes.py — Normalisation + Short ID lookup (COMPLETE)
+- `_normalize_job()` helper transforms DB rows to React-expected shape: `output_formats` → `formats[]`, `file_names` → `filename`, `short_id` → `id`, `progress_pct` → `percent`, `current_stage` → `stage`
+- `list_jobs` and `get_job` apply `_normalize_job()` before returning responses
+- `GET /api/jobs/{job_id}` now tries `get_job_by_short_id()` for 8-char hex IDs before falling back to UUID lookup; fixes React frontend URL routing with `short_id`
+- Pipeline result persistence stores `pdf_path`, `ppt_path`, `video_dir`, `slide_images` in `result_meta` JSONB column so view routes survive server restarts
+
+### middleware.py — View route auth exemption (COMPLETE)
+- `/api/view/` paths added to `AuthMiddleware` bypass (alongside `/static/` and `/assets/`)
+- Rationale: browser `<iframe>`, `<video>`, `<img>` elements cannot send `Authorization: Bearer` headers; the unguessable 8-char `short_id` acts as a capability token
+
+### view_routes.py — Async DB fallback (COMPLETE)
+- `_get_completed_result()` converted from sync to `async def`
+- Primary path: in-memory `ProgressCapture` (jobs completed this session)
+- Fallback path: `result_meta` JSONB from database (jobs from previous sessions / post-restart)
+- Handles `result_meta` as either `str` (JSON-encoded) or `dict` depending on asyncpg serialisation
+- All view route handlers updated to `await _get_completed_result(...)`
+
+### quiz_routes.py — Idempotent generation (COMPLETE)
+- `POST /api/quiz/generate` checks for existing quizzes via `get_quizzes_for_job()` before running the quiz LangGraph workflow
+- Returns `{quiz_id, question_count: 0, existing: true}` (HTTP 200) when a quiz already exists
+- Prevents duplicate quizzes from multiple button presses or page refreshes
+
+### ResultsPage.tsx — Attempt label (COMPLETE)
+- Quiz list entries show `"(Attempt N)"` suffix when multiple attempts exist for a job
+
+---
 
 ## What's Working
 - Full 3-agent pipeline end-to-end (Ingest → Research → Generate)
@@ -45,6 +75,12 @@
 - **research-assistant agent now security-aware** — mandatory security assessment on new dependencies (CVE scan, license audit, maintenance health, dependency tree, supply chain risk); Sequential Thinking for evaluating trade-offs
 - **RESEARCH-TEMPLATE.md security section** — standardised Security Assessment table with SAFE/WARNING/BLOCK verdict; research notes without a security section are now considered incomplete
 - LangSmith tracing opt-in with metadata (job_id, output_formats, file_count)
+- **Job response normalisation** — `_normalize_job()` maps DB columns to React-expected field names (`short_id` → `id`, `output_formats` → `formats[]`, etc.) for `GET /api/jobs` and `GET /api/jobs/{job_id}`
+- **Short ID routing** — `GET /api/jobs/{job_id}` resolves 8-char hex `short_id` via `get_job_by_short_id()`, matching how the React frontend constructs URLs
+- **Result persistence for view routes** — pipeline `pdf_path`, `ppt_path`, `video_dir`, `slide_images` stored in `result_meta` JSONB on job completion; view routes read from DB when in-memory state is absent (post-restart)
+- **View route auth exemption** — `/api/view/` paths bypass `AuthMiddleware`; `short_id` acts as capability token for browser-native viewers
+- **Async DB fallback in view routes** — `_get_completed_result()` is async; tries in-memory first, falls back to DB `result_meta`; handles asyncpg string or dict serialisation
+- **Idempotent quiz generation** — `POST /api/quiz/generate` returns existing quiz if one already exists for the job (no duplicate quizzes on repeated calls)
 - SECURITY.md vulnerability disclosure policy
 - `slide_images` field is `NotRequired[list[str]]` in `PipelineState` — correctly optional
 - `docs/adr/ADR-001-three-tier-video-fallback.md` — architecture decision record

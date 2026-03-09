@@ -93,6 +93,18 @@ async def generate_quiz(request: Request):
     if job_err:
         return job_err
 
+    # Return existing quiz if one already exists for this job
+    from backend.services.db_client import get_quizzes_for_job
+
+    existing_quizzes = await get_quizzes_for_job(pool, str(job["id"]))
+    if existing_quizzes:
+        quiz = existing_quizzes[0]
+        logger.info("Returning existing quiz %s for job %s", quiz["id"], req.job_id)
+        return JSONResponse(
+            {"quiz_id": str(quiz["id"]), "question_count": 0, "existing": True},
+            status_code=200,
+        )
+
     return await _run_quiz_generation(req, user, pool, job, job.get("topics", []))
 
 

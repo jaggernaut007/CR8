@@ -27,6 +27,30 @@ PROJECT_ROOT = os.path.join(os.path.dirname(__file__), "..")
 UPLOAD_DIR = os.path.join(PROJECT_ROOT, "uploads")
 
 
+def _normalize_job(row: dict) -> dict:
+    """Transform a DB job row into the shape the React frontend expects.
+
+    Renames ``output_formats`` → ``formats`` (as a list), ``file_names`` →
+    ``filename`` (first element), ``short_id`` → ``id``, and maps progress
+    fields to their frontend names.
+    """
+    formats_raw = row.get("output_formats", "pdf")
+    formats = formats_raw.split(",") if isinstance(formats_raw, str) else list(formats_raw or ["pdf"])
+
+    file_names = row.get("file_names") or []
+    filename = file_names[0] if file_names else "unknown"
+
+    return {
+        "id": str(row.get("short_id", row.get("id", ""))),
+        "filename": filename,
+        "status": row.get("status", "pending"),
+        "stage": row.get("current_stage") or None,
+        "percent": row.get("progress_pct", 0),
+        "created_at": str(row.get("created_at", "")),
+        "formats": formats,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -247,11 +271,18 @@ async def _maybe_persist_result(request: Request, job_id: str, capture) -> None:
     if not job:
         return
 
+    # Build result_meta from top-level output paths so view routes
+    # can serve files after a server restart (DB fallback).
+    result_meta = result.get("result_meta") or {}
+    for key in ("pdf_path", "ppt_path", "video_dir", "slide_images"):
+        if key in result:
+            result_meta[key] = result[key]
+
     await update_job_result(
         pool,
         str(job["id"]),
         "complete",
-        result.get("result_meta"),
+        result_meta or None,
         pipeline_data={
             "topics": result.get("topics"),
             "gap_summary": result.get("gap_summary"),
@@ -402,7 +433,7 @@ async def list_jobs(request: Request):
     except ValueError:
         return JSONResponse({"error": "Invalid limit or offset"}, status_code=400)
     jobs = await dbc.list_jobs(pool, user_id, limit=limit, offset=offset)
-    return {"jobs": jobs, "total": len(jobs)}
+    return {"jobs": [_normalize_job(j) for j in jobs], "total": len(jobs)}
 
 
 @router.get("/jobs/{job_id}")
@@ -431,7 +462,11 @@ async def get_job(request: Request, job_id: str):
 
     from backend.services import db_client as dbc
 
-    job = await dbc.get_job(pool, job_id)
+    # Try short_id first (8-char hex from frontend), fall back to UUID
+    if JOB_ID_RE.match(job_id):
+        job = await dbc.get_job_by_short_id(pool, job_id)
+    else:
+        job = await dbc.get_job(pool, job_id)
     if not job or str(job.get("user_id", "")) != user_id:
         return JSONResponse({"error": "Job not found"}, status_code=404)
-    return job
+    return _normalize_job(job)

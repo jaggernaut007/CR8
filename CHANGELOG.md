@@ -55,6 +55,20 @@ Total: **1063 pytest** + **124 Vitest** + **17 Playwright E2E** = **1204 tests**
 
 ---
 
+## Unreleased — E2E Bug Fixes (Post-v0.5.4 Session)
+
+### Bug Fixes
+
+- `frontend/job_routes.py`: Added `_normalize_job()` helper to transform DB job rows into the shape the React frontend expects — renames `output_formats` → `formats[]`, `file_names` → `filename` (first element), maps `short_id`/`progress_pct`/`current_stage` to their frontend field names. `list_jobs` and `get_job` both apply the transform.
+- `frontend/job_routes.py`: `GET /api/jobs/{job_id}` now resolves 8-character hex IDs via `get_job_by_short_id()` before falling back to UUID lookup. Fixes the React frontend's use of `short_id` in URLs.
+- `frontend/job_routes.py`: Pipeline result persistence now extracts `pdf_path`, `ppt_path`, `video_dir`, and `slide_images` from the top-level result dict and stores them in the `result_meta` JSONB column, so view routes can serve files after a server restart.
+- `frontend/middleware.py`: `AuthMiddleware` now exempts `/api/view/` paths from the auth check. Iframes, `<video>`, and `<img>` tags cannot send Bearer headers; the unguessable `short_id` acts as a capability token for content viewer access.
+- `frontend/view_routes.py`: `_get_completed_result()` is now `async` and includes a DB fallback — checks in-memory `ProgressCapture` first, then queries `result_meta` from the database for jobs that survived a server restart. Handles `result_meta` arriving as a JSON string or dict from asyncpg. All view route handlers updated to `await` the result.
+- `frontend/quiz_routes.py`: `POST /api/quiz/generate` now checks for an existing quiz before triggering generation. If a quiz already exists for the job, the existing `quiz_id` is returned immediately (HTTP 200 with `"existing": true`) rather than generating a duplicate.
+- `frontend/react-app/src/pages/ResultsPage.tsx`: Quiz list entries now display an `"(Attempt N)"` label when multiple quiz attempts exist for a job, making it clear which attempt is which.
+
+---
+
 ## Unreleased — Security Hardening + Crash Fixes (Code Review Wave)
 
 ### Security

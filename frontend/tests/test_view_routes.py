@@ -122,27 +122,31 @@ def incomplete_job():
 # ---------------------------------------------------------------------------
 
 class TestViewAuth:
-    """View endpoints require authentication."""
+    """View endpoints are public (auth exempted for iframe/video/img tags).
 
-    def test_pdf_view_requires_auth(self, client):
+    The short_id acts as a capability token. Unauthenticated requests
+    should reach the route handler and get 404 (not 401) for missing jobs.
+    """
+
+    def test_pdf_view_no_auth_needed(self, client):
         resp = client.get("/api/view/ab12cd34/pdf")
-        assert resp.status_code == 401
+        assert resp.status_code == 404
 
-    def test_slides_list_requires_auth(self, client):
+    def test_slides_list_no_auth_needed(self, client):
         resp = client.get("/api/view/ab12cd34/slides")
-        assert resp.status_code == 401
+        assert resp.status_code == 404
 
-    def test_slide_image_requires_auth(self, client):
+    def test_slide_image_no_auth_needed(self, client):
         resp = client.get("/api/view/ab12cd34/slide/1")
-        assert resp.status_code == 401
+        assert resp.status_code == 404
 
-    def test_videos_list_requires_auth(self, client):
+    def test_videos_list_no_auth_needed(self, client):
         resp = client.get("/api/view/ab12cd34/videos")
-        assert resp.status_code == 401
+        assert resp.status_code == 404
 
-    def test_video_stream_requires_auth(self, client):
+    def test_video_stream_no_auth_needed(self, client):
         resp = client.get("/api/view/ab12cd34/video/0")
-        assert resp.status_code == 401
+        assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------

@@ -45,20 +45,45 @@ def _safe_path(path: str) -> str | None:
     return None
 
 
-def _get_completed_result(request: Request, job_id: str) -> dict | None:
+async def _get_completed_result(request: Request, job_id: str) -> dict | None:
     """Return the pipeline result dict for a completed job, or None.
 
+    Checks in-memory job state first, then falls back to the database
+    ``result_meta`` column for jobs that survived a server restart.
+
     Args:
-        request: FastAPI request (accesses ``app.state.jobs``).
+        request: FastAPI request (accesses ``app.state.jobs`` and ``db_pool``).
         job_id: 8-char hex job identifier.
 
     Returns:
         Result dict if job is complete, else None.
     """
+    # 1. Try in-memory state (hot path — job completed this session)
     capture = request.app.state.jobs.get(job_id)
-    if not capture or capture.status != "complete" or not capture.result:
+    if capture and capture.status == "complete" and capture.result:
+        return capture.result
+
+    # 2. Fall back to database result_meta
+    pool = getattr(request.app.state, "db_pool", None)
+    if not pool:
         return None
-    return capture.result
+    try:
+        from backend.services import db_client as dbc
+
+        job = await dbc.get_job_by_short_id(pool, job_id)
+        if not job or job.get("status") != "complete":
+            return None
+        result_meta = job.get("result_meta")
+        # asyncpg may return JSONB as str or dict depending on how it was stored
+        if isinstance(result_meta, str):
+            import json
+            result_meta = json.loads(result_meta)
+        if isinstance(result_meta, dict):
+            logger.info("Loaded result_meta from DB for job=%s", job_id)
+            return result_meta
+    except Exception:
+        logger.exception("DB lookup failed for view route: job=%s", job_id)
+    return None
 
 
 def _validate_job_id(job_id: str) -> JSONResponse | None:
@@ -108,7 +133,7 @@ async def view_pdf(request: Request, job_id: str):
     if error:
         return error
 
-    result = _get_completed_result(request, job_id)
+    result = await _get_completed_result(request, job_id)
     if not result:
         return JSONResponse({"error": "Job not found or not complete"}, status_code=404)
 
@@ -144,7 +169,7 @@ async def list_slides(request: Request, job_id: str):
     if error:
         return error
 
-    result = _get_completed_result(request, job_id)
+    result = await _get_completed_result(request, job_id)
     if not result:
         return JSONResponse({"error": "Job not found or not complete"}, status_code=404)
 
@@ -180,7 +205,7 @@ async def view_slide(request: Request, job_id: str, index: int):
     if error:
         return error
 
-    result = _get_completed_result(request, job_id)
+    result = await _get_completed_result(request, job_id)
     if not result:
         return JSONResponse({"error": "Job not found or not complete"}, status_code=404)
 
@@ -216,7 +241,7 @@ async def list_videos(request: Request, job_id: str):
     if error:
         return error
 
-    result = _get_completed_result(request, job_id)
+    result = await _get_completed_result(request, job_id)
     if not result:
         return JSONResponse({"error": "Job not found or not complete"}, status_code=404)
 
@@ -257,7 +282,7 @@ async def view_video(request: Request, job_id: str, index: int):
     if error:
         return error
 
-    result = _get_completed_result(request, job_id)
+    result = await _get_completed_result(request, job_id)
     if not result:
         return JSONResponse({"error": "Job not found or not complete"}, status_code=404)
 
