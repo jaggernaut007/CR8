@@ -15,6 +15,7 @@ os.environ.setdefault("AUTH_PASSWORD", "CR8-AI")
 
 from frontend.app import app, ProgressCapture
 from frontend.middleware import _sessions, _failed_attempts
+import frontend.view_routes as view_routes_mod
 
 jobs = app.state.jobs
 
@@ -50,6 +51,12 @@ def authed_client():
 def client():
     """Unauthenticated test client."""
     return TestClient(app, raise_server_exceptions=False)
+
+
+@pytest.fixture(autouse=True)
+def _patch_outputs_dir(tmp_path, monkeypatch):
+    """Point _OUTPUTS_DIR at tmp_path so _safe_path allows test files."""
+    monkeypatch.setattr(view_routes_mod, "_OUTPUTS_DIR", str(tmp_path))
 
 
 @pytest.fixture
@@ -157,6 +164,16 @@ class TestViewJobIdValidation:
         resp = authed_client.get("/api/view/tooshort/video/0")
         assert resp.status_code == 400
 
+    def test_slide_image_invalid_job_id(self, authed_client):
+        """Individual slide endpoint also validates job_id format."""
+        resp = authed_client.get("/api/view/BADID!!!/slide/1")
+        assert resp.status_code == 400
+
+    def test_videos_list_invalid_job_id(self, authed_client):
+        """Video list endpoint also validates job_id format."""
+        resp = authed_client.get("/api/view/ZZZZZZZZ/videos")
+        assert resp.status_code == 400
+
 
 # ---------------------------------------------------------------------------
 # Job not found / not complete
@@ -179,6 +196,31 @@ class TestViewJobNotFound:
 
     def test_slides_job_not_complete(self, authed_client, incomplete_job):
         resp = authed_client.get(f"/api/view/{incomplete_job}/slides")
+        assert resp.status_code == 404
+
+    def test_video_job_not_found(self, authed_client):
+        """Video list returns 404 for unknown job IDs."""
+        resp = authed_client.get("/api/view/deadbeef/videos")
+        assert resp.status_code == 404
+
+    def test_video_stream_job_not_found(self, authed_client):
+        """Video stream returns 404 for unknown job IDs."""
+        resp = authed_client.get("/api/view/deadbeef/video/0")
+        assert resp.status_code == 404
+
+    def test_slide_job_not_found(self, authed_client):
+        """Individual slide returns 404 for unknown job IDs."""
+        resp = authed_client.get("/api/view/deadbeef/slide/1")
+        assert resp.status_code == 404
+
+    def test_complete_job_with_null_result(self, authed_client):
+        """Status is complete but result is None — treated as not complete."""
+        job_id = "aabbccdd"
+        capture = ProgressCapture()
+        capture.status = "complete"
+        capture.result = None
+        jobs[job_id] = capture
+        resp = authed_client.get(f"/api/view/{job_id}/pdf")
         assert resp.status_code == 404
 
 
@@ -208,6 +250,16 @@ class TestPdfView:
         capture = ProgressCapture()
         capture.status = "complete"
         capture.result = {}
+        jobs[job_id] = capture
+        resp = authed_client.get(f"/api/view/{job_id}/pdf")
+        assert resp.status_code == 404
+
+    def test_pdf_path_key_present_but_file_missing(self, authed_client):
+        """pdf_path key in result but file does not exist on disk."""
+        job_id = "11223344"
+        capture = ProgressCapture()
+        capture.status = "complete"
+        capture.result = {"pdf_path": "/nonexistent/path/output.pdf"}
         jobs[job_id] = capture
         resp = authed_client.get(f"/api/view/{job_id}/pdf")
         assert resp.status_code == 404
@@ -251,6 +303,30 @@ class TestSlidesList:
         assert data["total"] == 0
         assert data["slides"] == []
 
+    def test_slides_urls_contain_job_id(self, authed_client, completed_job):
+        """Each slide URL must include the job_id so the client can route correctly."""
+        resp = authed_client.get(f"/api/view/{completed_job}/slides")
+        data = resp.json()
+        for url in data["slides"]:
+            assert completed_job in url
+
+    def test_slides_stale_paths_excluded(self, authed_client):
+        """slide_images in result point to files that no longer exist on disk."""
+        job_id = "55667788"
+        capture = ProgressCapture()
+        capture.status = "complete"
+        capture.result = {
+            "slide_images": [
+                "/nonexistent/slide_01.png",
+                "/nonexistent/slide_02.png",
+            ],
+        }
+        jobs[job_id] = capture
+        resp = authed_client.get(f"/api/view/{job_id}/slides")
+        data = resp.json()
+        assert data["total"] == 0
+        assert data["slides"] == []
+
 
 # ---------------------------------------------------------------------------
 # Individual slide image
@@ -283,6 +359,21 @@ class TestSlideImage:
     def test_slide_returns_correct_content(self, authed_client, completed_job):
         resp = authed_client.get(f"/api/view/{completed_job}/slide/1")
         assert resp.content.startswith(b"\x89PNG")
+
+    def test_slide_last_index_valid(self, authed_client, completed_job):
+        """Index equal to total (3) is the last valid slide."""
+        resp = authed_client.get(f"/api/view/{completed_job}/slide/3")
+        assert resp.status_code == 200
+
+    def test_slide_when_all_paths_stale(self, authed_client):
+        """All slide_images paths no longer exist — any index should 404."""
+        job_id = "aa11bb22"
+        capture = ProgressCapture()
+        capture.status = "complete"
+        capture.result = {"slide_images": ["/nonexistent/slide_01.png"]}
+        jobs[job_id] = capture
+        resp = authed_client.get(f"/api/view/{job_id}/slide/1")
+        assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -329,6 +420,49 @@ class TestVideosList:
         data = resp.json()
         assert data["videos"] == []
 
+    def test_videos_video_dir_nonexistent(self, authed_client):
+        """video_dir key present but directory does not exist on disk."""
+        job_id = "ff001122"
+        capture = ProgressCapture()
+        capture.status = "complete"
+        capture.result = {"video_dir": "/nonexistent/video/dir"}
+        jobs[job_id] = capture
+        resp = authed_client.get(f"/api/view/{job_id}/videos")
+        data = resp.json()
+        assert data["videos"] == []
+
+    def test_videos_urls_contain_job_id(self, authed_client, completed_job):
+        """Each video URL must include the job_id for correct routing."""
+        resp = authed_client.get(f"/api/view/{completed_job}/videos")
+        data = resp.json()
+        for video in data["videos"]:
+            assert completed_job in video["url"]
+
+    def test_videos_sorted_by_filename(self, authed_client, completed_job):
+        """Videos are returned sorted — alphabetical order by filename."""
+        resp = authed_client.get(f"/api/view/{completed_job}/videos")
+        data = resp.json()
+        names = [v["name"] for v in data["videos"]]
+        # "Advanced Topics" sorts before "Introduction" alphabetically
+        assert names.index("Advanced Topics") < names.index("Introduction")
+
+    def test_videos_non_mp4_files_excluded(self, authed_client, tmp_path):
+        """Files with extensions other than .mp4 are not listed."""
+        job_id = "cc334455"
+        video_dir = tmp_path / "mixed_videos"
+        video_dir.mkdir()
+        (video_dir / "clip.mp4").write_bytes(b"\x00\x00\x00 ftyp")
+        (video_dir / "thumbnail.jpg").write_bytes(b"\xff\xd8\xff fake jpg")
+        (video_dir / "notes.txt").write_bytes(b"text content")
+        capture = ProgressCapture()
+        capture.status = "complete"
+        capture.result = {"video_dir": str(video_dir)}
+        jobs[job_id] = capture
+        resp = authed_client.get(f"/api/view/{job_id}/videos")
+        data = resp.json()
+        assert len(data["videos"]) == 1
+        assert data["videos"][0]["name"] == "clip"
+
 
 # ---------------------------------------------------------------------------
 # Video streaming
@@ -357,6 +491,16 @@ class TestVideoStream:
         resp = authed_client.get(f"/api/view/{completed_job}/video/-1")
         assert resp.status_code in (400, 404, 422)
 
+    def test_video_stream_nonexistent_video_dir(self, authed_client):
+        """video_dir present in result but directory missing — index 0 is out of range."""
+        job_id = "dd556677"
+        capture = ProgressCapture()
+        capture.status = "complete"
+        capture.result = {"video_dir": "/nonexistent/videos"}
+        jobs[job_id] = capture
+        resp = authed_client.get(f"/api/view/{job_id}/video/0")
+        assert resp.status_code == 404
+
 
 # ---------------------------------------------------------------------------
 # Security headers (CSP + X-Frame-Options updates)
@@ -378,3 +522,46 @@ class TestSecurityHeaders:
         resp = authed_client.get(f"/api/view/{completed_job}/pdf")
         csp = resp.headers.get("Content-Security-Policy", "")
         assert "frame-src 'self'" in csp
+
+
+# ---------------------------------------------------------------------------
+# Path traversal protection
+# ---------------------------------------------------------------------------
+
+class TestPathTraversal:
+    """_safe_path blocks file access outside the outputs directory."""
+
+    def test_pdf_path_traversal_blocked(self, authed_client):
+        """Pipeline path pointing outside outputs/ is blocked."""
+        job_id = "ff112233"
+        capture = ProgressCapture()
+        capture.status = "complete"
+        capture.result = {"pdf_path": "/etc/passwd"}
+        jobs[job_id] = capture
+        resp = authed_client.get(f"/api/view/{job_id}/pdf")
+        assert resp.status_code == 404
+
+    def test_slide_path_traversal_blocked(self, authed_client, tmp_path):
+        """Slide images outside outputs/ are blocked."""
+        job_id = "ee223344"
+        capture = ProgressCapture()
+        capture.status = "complete"
+        evil_path = "/etc/shadow"
+        capture.result = {"slide_images": [evil_path]}
+        jobs[job_id] = capture
+        resp = authed_client.get(f"/api/view/{job_id}/slide/1")
+        assert resp.status_code == 404
+
+    def test_video_path_traversal_blocked(self, authed_client, tmp_path):
+        """Video dir outside outputs/ is blocked even if files exist."""
+        # Create a video outside the outputs dir
+        evil_dir = tmp_path / ".." / "evil_videos"
+        evil_dir.mkdir(parents=True, exist_ok=True)
+        (evil_dir / "steal.mp4").write_bytes(b"fake mp4")
+        job_id = "dd445566"
+        capture = ProgressCapture()
+        capture.status = "complete"
+        capture.result = {"video_dir": str(evil_dir)}
+        jobs[job_id] = capture
+        resp = authed_client.get(f"/api/view/{job_id}/video/0")
+        assert resp.status_code == 404

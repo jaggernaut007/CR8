@@ -18,12 +18,32 @@ from frontend.middleware import JOB_ID_RE
 
 logger = logging.getLogger(__name__)
 
+_OUTPUTS_DIR = os.path.realpath(
+    os.path.join(os.path.dirname(__file__), "..", "outputs")
+)
+
 router = APIRouter(prefix="/api/view", tags=["viewers"])
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _safe_path(path: str) -> str | None:
+    """Return the resolved path only if it is inside the outputs directory.
+
+    Args:
+        path: Absolute or relative path to validate.
+
+    Returns:
+        Resolved path if safe, None if it escapes the outputs directory.
+    """
+    resolved = os.path.realpath(path)
+    if resolved.startswith(_OUTPUTS_DIR + os.sep) or resolved == _OUTPUTS_DIR:
+        return resolved
+    logger.warning("Path traversal guard blocked path: %s", path)
+    return None
+
 
 def _get_completed_result(request: Request, job_id: str) -> dict | None:
     """Return the pipeline result dict for a completed job, or None.
@@ -93,12 +113,13 @@ async def view_pdf(request: Request, job_id: str):
         return JSONResponse({"error": "Job not found or not complete"}, status_code=404)
 
     pdf_path = result.get("pdf_path", "")
-    if not pdf_path or not os.path.exists(pdf_path):
+    safe = _safe_path(pdf_path) if pdf_path else None
+    if not safe or not os.path.exists(safe):
         return JSONResponse({"error": "PDF not found"}, status_code=404)
 
     logger.info("Serving PDF inline: job=%s", job_id)
     return FileResponse(
-        pdf_path,
+        safe,
         media_type="application/pdf",
         headers={"Content-Disposition": "inline"},
     )
@@ -170,7 +191,10 @@ async def view_slide(request: Request, job_id: str, index: int):
         return JSONResponse({"error": "Slide not found"}, status_code=404)
 
     slide_path = existing[index - 1]
-    return FileResponse(slide_path, media_type="image/png")
+    safe = _safe_path(slide_path)
+    if not safe:
+        return JSONResponse({"error": "Slide not found"}, status_code=404)
+    return FileResponse(safe, media_type="image/png")
 
 
 # ---------------------------------------------------------------------------
@@ -244,5 +268,8 @@ async def view_video(request: Request, job_id: str, index: int):
         return JSONResponse({"error": "Video not found"}, status_code=404)
 
     video_path = os.path.join(video_dir, mp4_files[index])
+    safe = _safe_path(video_path)
+    if not safe:
+        return JSONResponse({"error": "Video not found"}, status_code=404)
     logger.info("Streaming video: job=%s index=%d file=%s", job_id, index, mp4_files[index])
-    return FileResponse(video_path, media_type="video/mp4")
+    return FileResponse(safe, media_type="video/mp4")
