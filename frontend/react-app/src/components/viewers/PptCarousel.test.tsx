@@ -100,4 +100,50 @@ describe("PptCarousel", () => {
       expect(screen.getByLabelText("Next slide")).toBeDisabled();
     });
   });
+
+  it("navigates with ArrowRight key", async () => {
+    mockFetchSlides.mockResolvedValue({
+      slides: ["/api/view/abc12345/slide/1", "/api/view/abc12345/slide/2"],
+      total: 2,
+    });
+    renderWithProviders(<PptCarousel jobId="abc12345" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("slide-counter")).toHaveTextContent("1 / 2");
+    });
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(screen.getByTestId("slide-counter")).toHaveTextContent("2 / 2");
+  });
+
+  it("navigates with ArrowLeft key", async () => {
+    mockFetchSlides.mockResolvedValue({
+      slides: ["/api/view/abc12345/slide/1", "/api/view/abc12345/slide/2"],
+      total: 2,
+    });
+    renderWithProviders(<PptCarousel jobId="abc12345" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("slide-counter")).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    fireEvent.keyDown(window, { key: "ArrowLeft" });
+    expect(screen.getByTestId("slide-counter")).toHaveTextContent("1 / 2");
+  });
+
+  it("does not go below slide 1 with ArrowLeft", async () => {
+    mockFetchSlides.mockResolvedValue({
+      slides: ["/api/view/abc12345/slide/1", "/api/view/abc12345/slide/2"],
+      total: 2,
+    });
+    renderWithProviders(<PptCarousel jobId="abc12345" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("slide-counter")).toHaveTextContent("1 / 2");
+    });
+
+    fireEvent.keyDown(window, { key: "ArrowLeft" });
+    expect(screen.getByTestId("slide-counter")).toHaveTextContent("1 / 2");
+  });
 });
