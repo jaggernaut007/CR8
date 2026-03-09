@@ -52,4 +52,49 @@ describe("ContentTabs", () => {
     const slidesTab = screen.getByText("Slides");
     expect(slidesTab).toHaveAttribute("aria-selected", "true");
   });
+
+  // --- Additional edge cases ---
+
+  it("inactive tab has aria-selected false", () => {
+    const onTabChange = vi.fn();
+    renderWithProviders(
+      <ContentTabs activeTab="ppt" onTabChange={onTabChange} formats={["pdf", "ppt"]} />,
+    );
+    const pdfTab = screen.getByText("PDF Guide");
+    expect(pdfTab).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("tabs have role='tab'", () => {
+    const onTabChange = vi.fn();
+    renderWithProviders(
+      <ContentTabs activeTab="pdf" onTabChange={onTabChange} formats={["pdf", "ppt"]} />,
+    );
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs.length).toBeGreaterThan(0);
+  });
+
+  it("still shows PDF tab when formats array is empty", () => {
+    const onTabChange = vi.fn();
+    renderWithProviders(
+      <ContentTabs activeTab="pdf" onTabChange={onTabChange} formats={[]} />,
+    );
+    expect(screen.getByText("PDF Guide")).toBeInTheDocument();
+  });
+
+  it("hides video tab when video not in formats", () => {
+    const onTabChange = vi.fn();
+    renderWithProviders(
+      <ContentTabs activeTab="pdf" onTabChange={onTabChange} formats={["pdf", "ppt"]} />,
+    );
+    expect(screen.queryByText("Video")).not.toBeInTheDocument();
+  });
+
+  it("calls onTabChange with correct key for video tab", () => {
+    const onTabChange = vi.fn();
+    renderWithProviders(
+      <ContentTabs activeTab="pdf" onTabChange={onTabChange} formats={["pdf", "video"]} />,
+    );
+    fireEvent.click(screen.getByText("Video"));
+    expect(onTabChange).toHaveBeenCalledWith("video");
+  });
 });

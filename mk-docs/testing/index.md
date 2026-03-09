@@ -2,9 +2,9 @@
 
 CR8 has a comprehensive automated test suite covering the full stack across three layers:
 
-- **795 pytest tests** (backend + FastAPI endpoints + GPU/CPU video services) — zero real API calls
-- **42 Vitest component tests** (React SPA pages and shared components)
-- **5 Playwright E2E tests** (auth flow: login, protected route guard, logout, token persistence)
+- **834 pytest tests** (backend + FastAPI endpoints + GPU/CPU video services) — zero real API calls
+- **69 Vitest component tests** (React SPA pages, shared components, and content viewers)
+- **10 Playwright E2E tests** (auth flow + content viewer tests)
 
 All pipeline agents, eval harness, structural checks, services, LangGraph graph integration, all FastAPI endpoints, GCS/GPU/CPU-video service clients, both video microservice workers, and all frontend auth and quiz routes are covered. All pytest tests run with **zero real API calls** — all LLMs, web search, ChromaDB, GCS, and video services are mocked where needed.
 
@@ -117,7 +117,7 @@ Run E2E tests with `make e2e` (requires the dev server and React build to be run
 | `cpu_video_service/tests/test_worker.py` | 37 | Full job lifecycle, cancellation flow (during TTS and compose), ETA estimation, error handling, GCS status upload |
 | `cpu_video_service/tests/test_gcs_client.py` | 22 | `download_manifest()`, `download_slides()`, `upload_videos()`, `upload_status()` with mocked `google.cloud.storage` |
 
-**Total: 795 pytest (0 real API calls) + 42 Vitest + 5 Playwright E2E = 842 tests across all layers**
+**Total: 834 pytest (0 real API calls) + 69 Vitest + 10 Playwright E2E = 913 tests across all layers**
 
 ---
 
@@ -284,7 +284,10 @@ All test files share a common fixture set:
 | CPU video worker lifecycle, cancellation, ETA, error handling | Yes — 37 tests in `cpu_video_service/tests/test_worker.py` |
 | CPU video GCS client (manifest, slides, upload, status) | Yes — 22 tests in `cpu_video_service/tests/test_gcs_client.py` |
 | React SPA pages (render, form interaction, query integration) | Yes — 42 Vitest tests in `frontend/react-app/` |
+| Content viewer components (PdfViewer, PptCarousel, VideoPlayer, ContentTabs, keyboard nav) | Yes — 27 Vitest tests in `frontend/react-app/` |
 | React SPA auth flow E2E (login, logout, guard, persistence) | Yes — 5 Playwright tests in `frontend/react-app/e2e/` |
+| Content viewer E2E (PDF iframe, slide carousel, video player) | Yes — 5 Playwright tests in `frontend/react-app/e2e/results.spec.ts` |
+| View routes (PDF inline, slide listing, slide serve, video listing, video streaming) | Yes — 39 pytest tests in `frontend/tests/test_view_routes.py` |
 | JWT-aware fetch client (token attachment, 401 auto-refresh) | Yes — Vitest tests in `api/client.ts` tests |
 
 ## Known Gaps

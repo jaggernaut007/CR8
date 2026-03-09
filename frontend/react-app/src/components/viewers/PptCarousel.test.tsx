@@ -146,4 +146,61 @@ describe("PptCarousel", () => {
     fireEvent.keyDown(window, { key: "ArrowLeft" });
     expect(screen.getByTestId("slide-counter")).toHaveTextContent("1 / 2");
   });
+
+  // --- Additional edge cases ---
+
+  it("navigates with ArrowDown key", async () => {
+    mockFetchSlides.mockResolvedValue({
+      slides: ["/api/view/abc12345/slide/1", "/api/view/abc12345/slide/2"],
+      total: 2,
+    });
+    renderWithProviders(<PptCarousel jobId="abc12345" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("slide-counter")).toHaveTextContent("1 / 2");
+    });
+
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    expect(screen.getByTestId("slide-counter")).toHaveTextContent("2 / 2");
+  });
+
+  it("navigates with ArrowUp key", async () => {
+    mockFetchSlides.mockResolvedValue({
+      slides: ["/api/view/abc12345/slide/1", "/api/view/abc12345/slide/2"],
+      total: 2,
+    });
+    renderWithProviders(<PptCarousel jobId="abc12345" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("slide-counter")).toBeInTheDocument();
+    });
+
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    expect(screen.getByTestId("slide-counter")).toHaveTextContent("1 / 2");
+  });
+
+  it("does not exceed total slides with ArrowRight on last slide", async () => {
+    mockFetchSlides.mockResolvedValue({
+      slides: ["/api/view/abc12345/slide/1"],
+      total: 1,
+    });
+    renderWithProviders(<PptCarousel jobId="abc12345" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("slide-counter")).toHaveTextContent("1 / 1");
+    });
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(screen.getByTestId("slide-counter")).toHaveTextContent("1 / 1");
+  });
+
+  it("shows no slides message on fetch error", async () => {
+    mockFetchSlides.mockRejectedValue(new Error("Network error"));
+    renderWithProviders(<PptCarousel jobId="abc12345" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("No slides available")).toBeInTheDocument();
+    });
+  });
 });

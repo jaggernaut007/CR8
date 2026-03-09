@@ -93,4 +93,46 @@ describe("VideoPlayer", () => {
 
     expect(screen.queryByTestId("video-selector")).not.toBeInTheDocument();
   });
+
+  // --- Additional edge cases ---
+
+  it("shows no videos message on fetch error", async () => {
+    mockFetchVideos.mockRejectedValue(new Error("Network error"));
+    renderWithProviders(<VideoPlayer jobId="abc12345" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("No videos available")).toBeInTheDocument();
+    });
+  });
+
+  it("video element has controls attribute", async () => {
+    mockFetchVideos.mockResolvedValue({
+      videos: [{ name: "Introduction", url: "/api/view/abc12345/video/0" }],
+    });
+    renderWithProviders(<VideoPlayer jobId="abc12345" />);
+
+    await waitFor(() => {
+      const video = document.querySelector("video");
+      expect(video).toHaveAttribute("controls");
+    });
+  });
+
+  it("does not show video name label for multiple videos", async () => {
+    mockFetchVideos.mockResolvedValue({
+      videos: [
+        { name: "Introduction", url: "/api/view/abc12345/video/0" },
+        { name: "Advanced Topics", url: "/api/view/abc12345/video/1" },
+      ],
+    });
+    renderWithProviders(<VideoPlayer jobId="abc12345" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("video-selector")).toBeInTheDocument();
+    });
+
+    // The name label under the video element is only shown for single videos
+    const videoPlayer = screen.getByTestId("video-player");
+    const nameLabel = videoPlayer.querySelector("p");
+    expect(nameLabel).not.toBeInTheDocument();
+  });
 });
