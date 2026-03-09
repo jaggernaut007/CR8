@@ -27,3 +27,6 @@ site/
 frontend/static/
 frontend/react-app/dist/
 frontend/react-app/node_modules/
+frontend/react-app/test-results/
+.playwright-mcp/
+*.zip
