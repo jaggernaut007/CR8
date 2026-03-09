@@ -206,12 +206,52 @@ async def progress(request: Request, job_id: str):
     capture = jobs.get(job_id)
     if not capture:
         return JSONResponse({"error": "Job not found"}, status_code=404)
+
+    await _maybe_persist_result(request, job_id, capture)
+
     return capture.get_state()
 
 
-# ---------------------------------------------------------------------------
-# Cancel
-# ---------------------------------------------------------------------------
+async def _maybe_persist_result(request: Request, job_id: str, capture) -> None:
+    """Persist pipeline result data to DB on first completion detection.
+
+    Args:
+        request: FastAPI request (for DB pool access).
+        job_id: Job identifier (short_id from URL).
+        capture: ProgressCapture instance.
+    """
+    if capture.status != "complete" or capture._db_persisted:
+        return
+    pool = getattr(request.app.state, "db_pool", None)
+    user = getattr(request.state, "user", None)
+    if not pool or not user:
+        return
+
+    capture._db_persisted = True
+    result = capture.result or {}
+
+    from backend.services.db_client import get_job_by_short_id, update_job_result
+
+    job = await get_job_by_short_id(pool, job_id)
+    if not job:
+        return
+
+    await update_job_result(
+        pool,
+        str(job["id"]),
+        "complete",
+        result.get("result_meta"),
+        pipeline_data={
+            "topics": result.get("topics"),
+            "gap_summary": result.get("gap_summary"),
+            "modules_md": result.get("modules_md"),
+            "curriculum_scope": result.get("curriculum_scope"),
+        },
+    )
+    logger.info("Persisted pipeline result to DB: job_id=%s", job_id)
+
+
+# --- Cancel endpoint ------------------------------------------------------
 
 @router.post("/cancel/{job_id}")
 async def cancel(request: Request, job_id: str):

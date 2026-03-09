@@ -174,7 +174,7 @@ All instances scale to zero ($0 when idle).
 **v0.5.1: Foundation** — DB + JWT + API restructure + test optimization (Jinja2 still works) **[COMPLETE]**
 **v0.5.2: React SPA Shell** — Login + Dashboard + Upload + Progress (replaces Jinja2) **[COMPLETE]**
 **v0.5.3: Results + Content Viewers** — PDF viewer, PPT carousel, video player **[COMPLETE]**
-**v0.5.4: Quiz Agent + Quiz UI** — edX-style quiz, red/green results
+**v0.5.4: Quiz Agent + Quiz UI** — edX-style quiz, red/green results **[COMPLETE]**
 
 ### Agent & MCP Checkpoints Per Phase
 

@@ -100,9 +100,10 @@
     "files": ["backend/services/tts_engine.py", "backend/services/script_parser.py", "backend/services/video_builder.py", "backend/services/file_parser.py"]
   },
   "quiz_platform": {
-    "description": "Interactive quiz platform with React frontend + Neon PostgreSQL + JWT auth",
-    "status": "planned",
-    "files": []
+    "description": "On-demand MCQ quiz generation (Bloom's taxonomy, 30/50/20 difficulty, 40% gap targeting), one-attempt scoring with per-question feedback, React quiz UI with QuestionCard/ScoreSummary components. Standalone LangGraph workflow using GPT-5-mini.",
+    "status": "complete",
+    "tests": "passing",
+    "files": ["backend/pipeline/agent_quiz.py", "backend/pipeline/quiz_graph.py", "backend/pipeline/quiz_state.py", "backend/prompts/quiz.py", "frontend/quiz_routes.py", "frontend/quiz_models.py", "frontend/react-app/src/pages/QuizPage.tsx", "frontend/react-app/src/pages/QuizResultsPage.tsx", "frontend/react-app/src/components/quiz/"]
   },
   "admin_dashboard": {
     "description": "Admin dashboard with analytics, feedback loop, and data tracking",

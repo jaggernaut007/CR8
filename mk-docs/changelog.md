@@ -2,6 +2,58 @@
 
 > **See also**: [Services Reference](services/index.md) and [Prompt Templates](agents/prompts.md) — Complete technical reference for all builders, prompts, and eval checks.
 
+## v0.5.4 — Quiz Agent + Quiz UI (2026-03-09)
+
+**Summary**: Adds a dedicated Quiz Agent LangGraph pipeline and a full edX-style quiz experience in the React SPA. The 4 previous 501 stub routes in `quiz_routes.py` are replaced with 5 real endpoints. The quiz flow is one-attempt, enforced at both the API and database layers. Questions carry Bloom's taxonomy labels and difficulty ratings. Test suite grew from 928 pytest / 81 Vitest / 10 E2E to **1063 pytest / 124 Vitest / 17 E2E = 1204 total**.
+
+### Added — Quiz Pipeline
+
+| File | Description |
+|------|-------------|
+| `backend/prompts/quiz.py` | `GENERATE_QUIZ` prompt — instructs LLM to produce MCQs with Bloom's level, difficulty, correct index, four distractors |
+| `backend/pipeline/quiz_state.py` | `QuizState` TypedDict: `job_id`, `topics`, `quiz_id`, `questions`, `error` |
+| `backend/pipeline/agent_quiz.py` | LangGraph node: calls LLM generator, parses questions, persists via db_client |
+| `backend/pipeline/quiz_graph.py` | Standalone LangGraph graph (separate from main pipeline); single node: `agent_quiz` |
+
+### Added — Quiz API (`frontend/quiz_routes.py`)
+
+Replaces the 4 previous 501 stub routes with 5 real endpoints:
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/quiz/start` | Trigger quiz generation for a completed job; returns `{quiz_id}` |
+| `GET /api/quiz/{quiz_id}/question/{n}` | Fetch the nth question (0-based); question text and options |
+| `POST /api/quiz/{quiz_id}/answer` | Submit answer; returns `{correct, explanation}` for immediate feedback |
+| `GET /api/quiz/{quiz_id}/results` | Final score and per-question breakdown |
+| `GET /api/quiz/attempts` | List all quiz attempts for the authenticated user |
+
+`frontend/quiz_models.py` — Pydantic models: `StartQuizRequest`, `SubmitAnswerRequest`, `QuizQuestion`, `QuizResult`, `AttemptSummary`.
+
+### Added — Database
+- 8 new async CRUD functions in `backend/services/db_client.py`: `create_quiz`, `get_quiz`, `list_quizzes`, `create_question`, `list_questions`, `create_attempt`, `record_answer`, `get_attempt_results`
+- `update_job_result` gains optional `pipeline_data` parameter
+- `backend/db/schema.sql` — `curriculum_scope TEXT` column added to `quizzes` table
+
+### Added — React Quiz UI
+
+| Component / Page | Description |
+|-----------------|-------------|
+| `src/api/quiz.ts` | API client functions for all 5 quiz endpoints |
+| `src/components/quiz/QuestionCard.tsx` | MCQ card with red/green answer highlighting post-submission |
+| `src/components/quiz/QuizProgressBar.tsx` | Question N of M progress indicator |
+| `src/components/quiz/ScoreSummary.tsx` | Final score with pass/fail styling |
+| `src/pages/QuizPage.tsx` | One-attempt quiz flow: question → answer → next → redirect to results |
+| `src/pages/QuizResultsPage.tsx` | Score breakdown with per-question correct/incorrect review |
+| `src/App.tsx` | 2 new routes: `/quiz/:quizId` and `/quiz/:quizId/results` |
+| `src/pages/ResultsPage.tsx` | `QuizSection` added above download buttons |
+
+### Test Suite
+- 55 new pytest tests: quiz pipeline, db_client CRUD, quiz routes, Pydantic models (853 → 983)
+- 28 new Vitest component tests: QuestionCard, QuizProgressBar, ScoreSummary, QuizPage, QuizResultsPage (81 → 109)
+- 7 new Playwright E2E tests in `e2e/quiz.spec.ts` (10 → 17)
+
+---
+
 ## v0.5.3 — Content Viewers (2026-03-09)
 
 **Summary**: Inline content viewers embedded in the React SPA ResultsPage. Users can preview generated PDF, browse PPT slides, and watch videos without downloading files. Three-wave delivery: backend view endpoints → React viewer components → keyboard navigation + Playwright E2E. Post-wave path traversal security fix (CWE-23). Test suite grew from 795 pytest / 42 Vitest / 5 E2E to **853 pytest / 81 Vitest / 10 E2E = 944 total**.

@@ -3,7 +3,7 @@
 
 ## Frontend Architecture
 
-### Current State (v0.5.3)
+### Current State (v0.5.4)
 The `frontend/` directory contains two layers:
 
 1. **React SPA** (`frontend/react-app/`) — the primary UI, built with React 19 + Vite 7 + Tailwind v4 + Tanstack Query
@@ -31,7 +31,13 @@ otherwise falls back to Jinja2 templates (legacy). The Jinja2 fallback is retain
 | `src/pages/DashboardPage.tsx` | Job history list with status badges |
 | `src/pages/UploadPage.tsx` | Drag-drop file upload + format selection |
 | `src/pages/ProgressPage.tsx` | Pipeline stages + progress bar + ETA polling |
-| `src/pages/ResultsPage.tsx` | Viewer panels (PDF / Slides / Video) above download buttons |
+| `src/pages/ResultsPage.tsx` | Viewer panels (PDF / Slides / Video) above download buttons + QuizSection entry point |
+| `src/pages/QuizPage.tsx` | One-attempt MCQ quiz flow: question → answer → next → redirect to results |
+| `src/pages/QuizResultsPage.tsx` | Score breakdown with per-question correct/incorrect review |
+| `src/api/quiz.ts` | Quiz API: startQuiz, getQuestion, submitAnswer, getResults, listAttempts |
+| `src/components/quiz/QuestionCard.tsx` | MCQ question card with red/green answer highlighting post-submission |
+| `src/components/quiz/QuizProgressBar.tsx` | Question N of M progress indicator |
+| `src/components/quiz/ScoreSummary.tsx` | Final score display with pass/fail styling |
 | `src/index.css` | Tailwind v4 design system (`@theme` + `@utility` directives) |
 
 **Key patterns:**
@@ -52,7 +58,8 @@ wiring, and router mounting only.
 | `frontend/middleware.py` | `AuthMiddleware`, `SecurityHeadersMiddleware`, `get_current_user()` dependency, rate-limiter, session store |
 | `frontend/auth_routes.py` | `/api/auth/*` — JWT register/login/refresh/me/logout + legacy session login |
 | `frontend/job_routes.py` | `/api/upload`, `/api/start`, `/api/progress/{job_id}`, `/api/cancel/{job_id}`, `/api/download/{job_id}/{type}`, `/api/jobs`, `/api/jobs/{job_id}` |
-| `frontend/quiz_routes.py` | `/api/quiz/*` — stubs returning 501 (Phase 4) |
+| `frontend/quiz_routes.py` | `/api/quiz/*` — 5 real endpoints: start quiz, get question, submit answer, get results, list attempts |
+| `frontend/quiz_models.py` | Pydantic models for quiz request/response types |
 | `frontend/view_routes.py` | `/api/view/*` — inline PDF, slide images, video streaming for content viewers |
 
 ### API Endpoints
@@ -81,7 +88,11 @@ wiring, and router mounting only.
 - `GET /api/view/{job_id}/video/{index}` — Stream MP4 video (0-based index, supports Range requests)
 
 **Quiz routes (prefix `/api/quiz`):**
-- All return `501 Not Implemented` — reserved for Phase 4
+- `POST /api/quiz/start` — Trigger quiz generation for a completed job; returns `{quiz_id}`
+- `GET /api/quiz/{quiz_id}/question/{n}` — Fetch the nth question (0-based); returns question text and options
+- `POST /api/quiz/{quiz_id}/answer` — Submit an answer; returns `{correct, explanation}`
+- `GET /api/quiz/{quiz_id}/results` — Final score and per-question breakdown
+- `GET /api/quiz/attempts` — List all quiz attempts for the authenticated user
 
 ### Authentication
 - **Dual auth**: JWT Bearer token (primary) with legacy session cookie fallback (see ADR-002)

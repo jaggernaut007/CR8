@@ -397,3 +397,186 @@ class TestGetQuizzesForJob:
         result = await db_client.get_quizzes_for_job(pool, _JOB_ID)
 
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# Quiz CRUD — v0.5.4
+# ---------------------------------------------------------------------------
+
+_ATTEMPT_ID = str(uuid.uuid4())
+_QUESTION_ID = str(uuid.uuid4())
+
+
+class TestCreateQuizWithUser:
+    @pytest.mark.asyncio
+    async def test_returns_dict_with_id(self):
+        pool = _make_pool()
+        pool.fetchrow.return_value = _make_record(
+            {"id": _QUIZ_ID, "job_id": _JOB_ID, "user_id": _USER_ID, "title": "Test Quiz"}
+        )
+
+        result = await db_client.create_quiz_with_user(pool, _JOB_ID, _USER_ID, "Test Quiz")
+
+        assert result["id"] == _QUIZ_ID
+        assert result["user_id"] == _USER_ID
+
+    @pytest.mark.asyncio
+    async def test_passes_user_id_in_query(self):
+        pool = _make_pool()
+        pool.fetchrow.return_value = _make_record({"id": _QUIZ_ID})
+
+        await db_client.create_quiz_with_user(pool, _JOB_ID, _USER_ID, "Quiz")
+
+        args = pool.fetchrow.call_args[0]
+        assert _USER_ID in args
+
+
+class TestCreateQuizQuestions:
+    @pytest.mark.asyncio
+    async def test_inserts_all_questions(self):
+        pool = _make_pool()
+        questions = [
+            {
+                "question_text": "Q1?",
+                "options": ["A", "B", "C", "D"],
+                "correct_index": 0,
+            },
+            {
+                "question_text": "Q2?",
+                "options": ["A", "B", "C", "D"],
+                "correct_index": 1,
+            },
+        ]
+
+        count = await db_client.create_quiz_questions(pool, _QUIZ_ID, questions)
+
+        assert count == 2
+        assert pool.execute.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_returns_count(self):
+        pool = _make_pool()
+        questions = [
+            {
+                "question_text": "Q?",
+                "options": ["A", "B", "C", "D"],
+                "correct_index": 0,
+            }
+        ]
+
+        count = await db_client.create_quiz_questions(pool, _QUIZ_ID, questions)
+
+        assert count == 1
+
+
+class TestGetQuizById:
+    @pytest.mark.asyncio
+    async def test_returns_quiz_dict(self):
+        pool = _make_pool()
+        pool.fetchrow.return_value = _make_record(
+            {"id": _QUIZ_ID, "title": "Test", "job_id": _JOB_ID}
+        )
+
+        result = await db_client.get_quiz_by_id(pool, _QUIZ_ID)
+
+        assert result is not None
+        assert result["id"] == _QUIZ_ID
+
+    @pytest.mark.asyncio
+    async def test_returns_none_for_missing(self):
+        pool = _make_pool()
+        pool.fetchrow.return_value = None
+
+        result = await db_client.get_quiz_by_id(pool, "nonexistent")
+
+        assert result is None
+
+
+class TestGetQuizQuestions:
+    @pytest.mark.asyncio
+    async def test_returns_ordered_list(self):
+        pool = _make_pool()
+        pool.fetch.return_value = [
+            _make_record({"id": "q1", "sort_order": 0, "question_text": "First?"}),
+            _make_record({"id": "q2", "sort_order": 1, "question_text": "Second?"}),
+        ]
+
+        result = await db_client.get_quiz_questions(pool, _QUIZ_ID)
+
+        assert len(result) == 2
+        assert result[0]["question_text"] == "First?"
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_for_no_questions(self):
+        pool = _make_pool()
+        pool.fetch.return_value = []
+
+        result = await db_client.get_quiz_questions(pool, _QUIZ_ID)
+
+        assert result == []
+
+
+class TestCreateQuizAttempt:
+    @pytest.mark.asyncio
+    async def test_returns_attempt_dict(self):
+        pool = _make_pool()
+        pool.fetchrow.return_value = _make_record(
+            {"id": _ATTEMPT_ID, "quiz_id": _QUIZ_ID, "user_id": _USER_ID}
+        )
+
+        result = await db_client.create_quiz_attempt(pool, _QUIZ_ID, _USER_ID)
+
+        assert result["id"] == _ATTEMPT_ID
+        assert result["quiz_id"] == _QUIZ_ID
+
+
+class TestGetQuizAttempt:
+    @pytest.mark.asyncio
+    async def test_returns_attempt(self):
+        pool = _make_pool()
+        pool.fetchrow.return_value = _make_record(
+            {"id": _ATTEMPT_ID, "quiz_id": _QUIZ_ID, "user_id": _USER_ID, "score": 85.0}
+        )
+
+        result = await db_client.get_quiz_attempt(pool, _QUIZ_ID, _USER_ID)
+
+        assert result is not None
+        assert result["score"] == 85.0
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_attempt(self):
+        pool = _make_pool()
+        pool.fetchrow.return_value = None
+
+        result = await db_client.get_quiz_attempt(pool, _QUIZ_ID, _USER_ID)
+
+        assert result is None
+
+
+class TestCompleteQuizAttempt:
+    @pytest.mark.asyncio
+    async def test_updates_score_and_completed_at(self):
+        pool = _make_pool()
+        pool.execute.return_value = "UPDATE 1"
+
+        await db_client.complete_quiz_attempt(pool, _ATTEMPT_ID, 90.0, 10)
+
+        pool.execute.assert_awaited_once()
+        sql = pool.execute.call_args[0][0]
+        assert "score" in sql
+        assert "completed_at" in sql
+
+
+class TestCreateQuizResponses:
+    @pytest.mark.asyncio
+    async def test_inserts_responses(self):
+        pool = _make_pool()
+        responses = [
+            {"question_id": _QUESTION_ID, "selected_index": 1, "is_correct": True},
+            {"question_id": "q2", "selected_index": 0, "is_correct": False},
+        ]
+
+        count = await db_client.create_quiz_responses(pool, _ATTEMPT_ID, responses)
+
+        assert count == 2
+        assert pool.execute.await_count == 2

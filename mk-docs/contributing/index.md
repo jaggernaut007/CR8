@@ -56,7 +56,7 @@ uv run pytest backend/tests/test_chromadb_store.py::test_two_collections -v
 | `frontend/tests/test_api.py` | 65 | Core FastAPI endpoints: upload (PDF + PPTX), start, progress, cancel, download; video UI |
 | `frontend/tests/test_progress_capture.py` | 55 | Stage parsing, progress %age, thread safety, stage time budgets, GPU progress lines |
 | `frontend/tests/test_auth_routes.py` | 48 | JWT register/login/refresh/me/logout; legacy session login; rate limiting; dual-auth |
-| `frontend/tests/test_quiz_routes.py` | 12 | Quiz stub routes (all return 501) |
+| `frontend/tests/test_quiz_routes.py` | 24 | Quiz API routes: generate, fetch, submit, results, by-job; Pydantic model validation; route helpers |
 
 See the [Testing Guide](../testing/index.md) for full architecture details, shared fixtures, and how to add new tests.
 

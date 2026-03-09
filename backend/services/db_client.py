@@ -7,6 +7,7 @@ returned as plain dicts converted from asyncpg ``Record`` objects.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -167,22 +168,36 @@ async def update_job_result(
     job_id: str,
     status: str,
     result_meta: dict[str, Any] | None,
+    pipeline_data: dict[str, Any] | None = None,
 ) -> None:
-    """Update the final status and result metadata of a job.
+    """Update the final status, result metadata, and pipeline data of a job.
 
     Args:
         pool: asyncpg connection pool.
         job_id: UUID of the job.
         status: Final status (complete, error, cancelled).
         result_meta: JSON-serializable metadata dict or None.
+        pipeline_data: Optional dict with keys topics, gap_summary,
+            modules_md, curriculum_scope to persist from pipeline output.
     """
     logger.info("Updating job result: job_id=%s, status=%s", job_id, status)
+    pd = pipeline_data or {}
+    topics = pd.get("topics")
+    gap_summary = pd.get("gap_summary")
+    modules_md = pd.get("modules_md")
+    curriculum_scope = pd.get("curriculum_scope")
     await pool.execute(
         "UPDATE jobs SET status = $1, result_meta = $2, "
+        "topics = $3, gap_summary = $4, modules_md = $5, "
+        "curriculum_scope = $6, "
         "progress_pct = 100, updated_at = now(), completed_at = now() "
-        "WHERE id = $3",
+        "WHERE id = $7",
         status,
         result_meta,
+        json.dumps(topics) if topics else None,
+        json.dumps(gap_summary) if gap_summary else None,
+        json.dumps(modules_md) if modules_md else None,
+        curriculum_scope,
         job_id,
     )
     logger.info("Job result updated: job_id=%s", job_id)
@@ -291,7 +306,7 @@ async def mark_stale_jobs_as_error(pool: asyncpg.Pool) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Quiz stubs (Phase 4)
+# Quiz CRUD
 # ---------------------------------------------------------------------------
 
 
@@ -321,6 +336,124 @@ async def create_quiz(
     return dict(row)
 
 
+async def create_quiz_with_user(
+    pool: asyncpg.Pool,
+    job_id: str,
+    user_id: str,
+    title: str,
+) -> dict[str, Any]:
+    """Insert a new quiz linked to a job and user.
+
+    Args:
+        pool: asyncpg connection pool.
+        job_id: ID of the parent job.
+        user_id: UUID of the quiz creator.
+        title: Quiz title.
+
+    Returns:
+        Dict with all columns of the new quiz row.
+    """
+    logger.info("Creating quiz: job_id=%s, user_id=%s, title=%s", job_id, user_id, title)
+    row = await pool.fetchrow(
+        "INSERT INTO quizzes (job_id, user_id, title) "
+        "VALUES ($1, $2, $3) RETURNING *",
+        job_id,
+        user_id,
+        title,
+    )
+    logger.info("Quiz created: id=%s", row["id"])
+    return dict(row)
+
+
+async def create_quiz_questions(
+    pool: asyncpg.Pool,
+    quiz_id: str,
+    questions: list[dict[str, Any]],
+) -> int:
+    """Bulk-insert quiz questions for a quiz.
+
+    Args:
+        pool: asyncpg connection pool.
+        quiz_id: UUID of the parent quiz.
+        questions: List of question dicts with fields matching quiz_questions table.
+
+    Returns:
+        Number of questions inserted.
+    """
+    logger.info("Inserting %d questions for quiz: %s", len(questions), quiz_id)
+    count = 0
+    for q in questions:
+        await pool.execute(
+            "INSERT INTO quiz_questions "
+            "(quiz_id, question_text, question_type, options, correct_index, "
+            "difficulty, blooms_level, source_section, feedback_correct, "
+            "feedback_incorrect, topic, sort_order) "
+            "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+            quiz_id,
+            q["question_text"],
+            q.get("question_type", "mcq"),
+            q["options"],
+            q["correct_index"],
+            q.get("difficulty", "medium"),
+            q.get("blooms_level"),
+            q.get("source_section"),
+            q.get("feedback_correct"),
+            q.get("feedback_incorrect"),
+            q.get("topic"),
+            q.get("sort_order", 0),
+        )
+        count += 1
+    logger.info("Inserted %d questions for quiz: %s", count, quiz_id)
+    return count
+
+
+async def get_quiz_by_id(
+    pool: asyncpg.Pool,
+    quiz_id: str,
+) -> dict[str, Any] | None:
+    """Fetch a single quiz by primary key.
+
+    Args:
+        pool: asyncpg connection pool.
+        quiz_id: UUID of the quiz.
+
+    Returns:
+        Quiz dict or None if not found.
+    """
+    logger.info("Fetching quiz: id=%s", quiz_id)
+    row = await pool.fetchrow(
+        "SELECT * FROM quizzes WHERE id = $1",
+        quiz_id,
+    )
+    if row is None:
+        logger.info("No quiz found: id=%s", quiz_id)
+        return None
+    logger.info("Found quiz: id=%s", row["id"])
+    return dict(row)
+
+
+async def get_quiz_questions(
+    pool: asyncpg.Pool,
+    quiz_id: str,
+) -> list[dict[str, Any]]:
+    """Fetch all questions for a quiz, ordered by sort_order.
+
+    Args:
+        pool: asyncpg connection pool.
+        quiz_id: UUID of the quiz.
+
+    Returns:
+        List of question dicts ordered by sort_order ascending.
+    """
+    logger.info("Fetching questions for quiz: %s", quiz_id)
+    rows = await pool.fetch(
+        "SELECT * FROM quiz_questions WHERE quiz_id = $1 ORDER BY sort_order",
+        quiz_id,
+    )
+    logger.info("Found %d questions for quiz: %s", len(rows), quiz_id)
+    return [dict(r) for r in rows]
+
+
 async def get_quizzes_for_job(
     pool: asyncpg.Pool,
     job_id: str,
@@ -341,3 +474,121 @@ async def get_quizzes_for_job(
     )
     logger.info("Found %d quizzes for job: %s", len(rows), job_id)
     return [dict(r) for r in rows]
+
+
+async def create_quiz_attempt(
+    pool: asyncpg.Pool,
+    quiz_id: str,
+    user_id: str,
+) -> dict[str, Any]:
+    """Create a new quiz attempt for a user.
+
+    Args:
+        pool: asyncpg connection pool.
+        quiz_id: UUID of the quiz.
+        user_id: UUID of the user taking the quiz.
+
+    Returns:
+        Dict with all columns of the new attempt row.
+
+    Raises:
+        asyncpg.UniqueViolationError: If user already has an attempt for this quiz.
+    """
+    logger.info("Creating quiz attempt: quiz_id=%s, user_id=%s", quiz_id, user_id)
+    row = await pool.fetchrow(
+        "INSERT INTO quiz_attempts (quiz_id, user_id) "
+        "VALUES ($1, $2) RETURNING *",
+        quiz_id,
+        user_id,
+    )
+    logger.info("Quiz attempt created: id=%s", row["id"])
+    return dict(row)
+
+
+async def get_quiz_attempt(
+    pool: asyncpg.Pool,
+    quiz_id: str,
+    user_id: str,
+) -> dict[str, Any] | None:
+    """Fetch the attempt for a specific quiz and user.
+
+    Args:
+        pool: asyncpg connection pool.
+        quiz_id: UUID of the quiz.
+        user_id: UUID of the user.
+
+    Returns:
+        Attempt dict or None if no attempt exists.
+    """
+    logger.info("Fetching attempt: quiz_id=%s, user_id=%s", quiz_id, user_id)
+    row = await pool.fetchrow(
+        "SELECT * FROM quiz_attempts WHERE quiz_id = $1 AND user_id = $2",
+        quiz_id,
+        user_id,
+    )
+    if row is None:
+        logger.info("No attempt found: quiz_id=%s, user_id=%s", quiz_id, user_id)
+        return None
+    logger.info("Found attempt: id=%s", row["id"])
+    return dict(row)
+
+
+async def complete_quiz_attempt(
+    pool: asyncpg.Pool,
+    attempt_id: str,
+    score: float,
+    total_questions: int,
+) -> None:
+    """Mark a quiz attempt as completed with a score.
+
+    Args:
+        pool: asyncpg connection pool.
+        attempt_id: UUID of the attempt.
+        score: Score as a percentage (0-100).
+        total_questions: Total number of questions in the quiz.
+    """
+    logger.info(
+        "Completing attempt: id=%s, score=%.1f, total=%d",
+        attempt_id, score, total_questions,
+    )
+    await pool.execute(
+        "UPDATE quiz_attempts SET score = $1, total_questions = $2, "
+        "completed_at = now() WHERE id = $3",
+        score,
+        total_questions,
+        attempt_id,
+    )
+    logger.info("Attempt completed: id=%s", attempt_id)
+
+
+async def create_quiz_responses(
+    pool: asyncpg.Pool,
+    attempt_id: str,
+    responses: list[dict[str, Any]],
+) -> int:
+    """Bulk-insert quiz responses for an attempt.
+
+    Args:
+        pool: asyncpg connection pool.
+        attempt_id: UUID of the parent attempt.
+        responses: List of response dicts with question_id, selected_index, is_correct.
+
+    Returns:
+        Number of responses inserted.
+    """
+    logger.info("Inserting %d responses for attempt: %s", len(responses), attempt_id)
+    count = 0
+    for r in responses:
+        await pool.execute(
+            "INSERT INTO quiz_responses "
+            "(attempt_id, question_id, selected_index, is_correct, time_spent_seconds) "
+            "VALUES ($1, $2, $3, $4, $5)",
+            attempt_id,
+            r["question_id"],
+            r["selected_index"],
+            r["is_correct"],
+            r.get("time_spent_seconds", 0),
+        )
+        count += 1
+    logger.info("Inserted %d responses for attempt: %s", count, attempt_id)
+    return count

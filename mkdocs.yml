@@ -92,6 +92,7 @@ nav:
       - "Agent 2: Research": agents/research.md
       - "Agent 3: Generate": agents/generate.md
       - Prompt Templates: agents/prompts.md
+      - "Quiz Agent": agents/quiz.md
   - Services:
       - services/index.md
       - LLM Wrapper: services/llm.md
@@ -132,6 +133,7 @@ nav:
       - Services: api/services.md
       - Configuration: api/configuration.md
       - Frontend Endpoints: api/frontend.md
+      - Quiz API: api/quiz.md
   - Testing:
       - testing/index.md
   - Contributing:

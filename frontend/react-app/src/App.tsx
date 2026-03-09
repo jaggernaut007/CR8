@@ -12,6 +12,8 @@ import DashboardPage from "@/pages/DashboardPage";
 import UploadPage from "@/pages/UploadPage";
 import ProgressPage from "@/pages/ProgressPage";
 import ResultsPage from "@/pages/ResultsPage";
+import QuizPage from "@/pages/QuizPage";
+import QuizResultsPage from "@/pages/QuizResultsPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,6 +38,8 @@ export default function App() {
               <Route path="/upload" element={<UploadPage />} />
               <Route path="/progress/:jobId" element={<ProgressPage />} />
               <Route path="/results/:jobId" element={<ResultsPage />} />
+              <Route path="/quiz/:quizId" element={<QuizPage />} />
+              <Route path="/quiz/:quizId/results" element={<QuizResultsPage />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

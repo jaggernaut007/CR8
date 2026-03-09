@@ -9,6 +9,9 @@
 - `agent_ingest.py` — Agent 1: extracts topics and structure from uploaded PDFs
 - `agent_research.py` — Agent 2: enriches topics with Tavily web search + ChromaDB context
 - `agent_generate.py` — Agent 3: generates learning guide content using OpenAI
+- `quiz_graph.py` — Standalone LangGraph graph for quiz generation (separate from the main pipeline)
+- `quiz_state.py` — `QuizState` TypedDict for the quiz workflow: `job_id`, `topics`, `quiz_id`, `questions`, `error`
+- `agent_quiz.py` — LangGraph node: calls LLM quiz generator, parses MCQs, persists via db_client
 
 ### Services (backend/services/)
 One file per external integration. Never add external API calls anywhere else:
@@ -27,7 +30,7 @@ One file per external integration. Never add external API calls anywhere else:
 
 ### Prompts (backend/prompts/)
 All prompt strings are Python constants — never put prompts inline in agents or services:
-- `ingest.py`, `research.py`, `generate.py`, `ppt.py`, `video.py`
+- `ingest.py`, `research.py`, `generate.py`, `ppt.py`, `video.py`, `quiz.py`
 
 ### Evals (backend/evals/)
 Full evaluation framework with CLI:

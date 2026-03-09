@@ -12,20 +12,44 @@ vi.mock("@/api/jobs", () => ({
   viewVideoUrl: vi.fn((jobId: string, i: number) => `/api/view/${jobId}/video/${i}`),
 }));
 
-import { fetchJob } from "@/api/jobs";
-const mockFetchJob = vi.mocked(fetchJob);
+// Mock quiz API — default to empty quiz list and a no-op generate
+vi.mock("@/api/quiz", () => ({
+  fetchQuizzesByJob: vi.fn(),
+  generateQuiz: vi.fn(),
+}));
 
+import { fetchJob } from "@/api/jobs";
+import { fetchQuizzesByJob, generateQuiz } from "@/api/quiz";
+const mockFetchJob = vi.mocked(fetchJob);
+const mockFetchQuizzesByJob = vi.mocked(fetchQuizzesByJob);
+const mockGenerateQuiz = vi.mocked(generateQuiz);
+
+const mockNavigate = vi.fn();
 vi.mock("react-router", async () => {
   const actual = await vi.importActual("react-router");
   return {
     ...actual,
     useParams: () => ({ jobId: "job-456" }),
+    useNavigate: () => mockNavigate,
   };
 });
+
+const _completeJob = {
+  id: "job-456",
+  filename: "lecture.pdf",
+  status: "complete" as const,
+  stage: null,
+  percent: 100,
+  created_at: "2026-03-01T00:00:00Z",
+  formats: ["pdf", "ppt", "video"],
+};
 
 beforeEach(() => {
   resetMockAuth();
   vi.clearAllMocks();
+  mockFetchQuizzesByJob.mockResolvedValue({ quizzes: [] });
+  mockGenerateQuiz.mockResolvedValue({ quiz_id: "new-quiz-1", question_count: 20 });
+  mockNavigate.mockClear();
 });
 
 describe("ResultsPage", () => {
@@ -46,15 +70,7 @@ describe("ResultsPage", () => {
   });
 
   it("renders complete job with download buttons", async () => {
-    mockFetchJob.mockResolvedValue({
-      id: "job-456",
-      filename: "lecture.pdf",
-      status: "complete",
-      stage: null,
-      percent: 100,
-      created_at: "2026-03-01T00:00:00Z",
-      formats: ["pdf", "ppt", "video"],
-    });
+    mockFetchJob.mockResolvedValue(_completeJob);
 
     renderWithProviders(<ResultsPage />);
 
@@ -146,15 +162,7 @@ describe("ResultsPage", () => {
   });
 
   it("shows format labels in metadata", async () => {
-    mockFetchJob.mockResolvedValue({
-      id: "job-456",
-      filename: "lecture.pdf",
-      status: "complete",
-      stage: null,
-      percent: 100,
-      created_at: "2026-03-01T00:00:00Z",
-      formats: ["pdf", "ppt", "video"],
-    });
+    mockFetchJob.mockResolvedValue(_completeJob);
 
     renderWithProviders(<ResultsPage />);
 
@@ -164,15 +172,7 @@ describe("ResultsPage", () => {
   });
 
   it("shows content tabs for complete job", async () => {
-    mockFetchJob.mockResolvedValue({
-      id: "job-456",
-      filename: "lecture.pdf",
-      status: "complete",
-      stage: null,
-      percent: 100,
-      created_at: "2026-03-01T00:00:00Z",
-      formats: ["pdf", "ppt", "video"],
-    });
+    mockFetchJob.mockResolvedValue(_completeJob);
 
     renderWithProviders(<ResultsPage />);
 
@@ -221,5 +221,194 @@ describe("ResultsPage", () => {
     });
 
     expect(screen.queryByTestId("content-tabs")).not.toBeInTheDocument();
+  });
+});
+
+// ── QuizSection tests ────────────────────────────────────────────────────────
+
+describe("ResultsPage — QuizSection", () => {
+  beforeEach(() => {
+    mockFetchJob.mockResolvedValue(_completeJob);
+  });
+
+  it("renders quiz-section container for complete job", async () => {
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("quiz-section")).toBeInTheDocument();
+    });
+  });
+
+  it("shows generate quiz button when no quizzes exist", async () => {
+    mockFetchQuizzesByJob.mockResolvedValue({ quizzes: [] });
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generate-quiz-btn")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("generate-quiz-btn")).toHaveTextContent("Generate Quiz");
+  });
+
+  it("generate quiz button is enabled by default", async () => {
+    mockFetchQuizzesByJob.mockResolvedValue({ quizzes: [] });
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generate-quiz-btn")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("generate-quiz-btn")).not.toBeDisabled();
+  });
+
+  it("clicking generate quiz calls generateQuiz API", async () => {
+    mockFetchQuizzesByJob.mockResolvedValue({ quizzes: [] });
+    // Pending promise so navigation doesn't interfere with the click assertion
+    mockGenerateQuiz.mockReturnValue(new Promise(() => {}));
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generate-quiz-btn")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("generate-quiz-btn"));
+
+    await waitFor(() => {
+      expect(mockGenerateQuiz).toHaveBeenCalledWith("job-456");
+    });
+  });
+
+  it("shows 'Generating Quiz...' while mutation is pending", async () => {
+    mockFetchQuizzesByJob.mockResolvedValue({ quizzes: [] });
+    // Never resolves — keeps mutation in isPending state
+    mockGenerateQuiz.mockReturnValue(new Promise(() => {}));
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generate-quiz-btn")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("generate-quiz-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generate-quiz-btn")).toHaveTextContent("Generating Quiz...");
+    });
+  });
+
+  it("disables generate button while mutation is pending", async () => {
+    mockFetchQuizzesByJob.mockResolvedValue({ quizzes: [] });
+    mockGenerateQuiz.mockReturnValue(new Promise(() => {}));
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generate-quiz-btn")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("generate-quiz-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generate-quiz-btn")).toBeDisabled();
+    });
+  });
+
+  it("navigates to quiz page on successful generation", async () => {
+    mockFetchQuizzesByJob.mockResolvedValue({ quizzes: [] });
+    mockGenerateQuiz.mockResolvedValue({ quiz_id: "new-quiz-99", question_count: 20 });
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generate-quiz-btn")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("generate-quiz-btn"));
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/quiz/new-quiz-99");
+    });
+  });
+
+  it("shows error message when quiz generation fails", async () => {
+    mockFetchQuizzesByJob.mockResolvedValue({ quizzes: [] });
+    mockGenerateQuiz.mockRejectedValue(new Error("Server error"));
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generate-quiz-btn")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("generate-quiz-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Failed to generate quiz.")).toBeInTheDocument();
+    });
+  });
+
+  it("renders quiz links when quizzes exist", async () => {
+    mockFetchQuizzesByJob.mockResolvedValue({
+      quizzes: [
+        { id: "q1", title: "Week 1 Quiz", created_at: "2026-03-01T00:00:00Z" },
+        { id: "q2", title: "Week 2 Quiz", created_at: "2026-03-05T00:00:00Z" },
+      ],
+    });
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("quiz-link")).toHaveLength(2);
+    });
+
+    expect(screen.getByText("Week 1 Quiz")).toBeInTheDocument();
+    expect(screen.getByText("Week 2 Quiz")).toBeInTheDocument();
+  });
+
+  it("hides generate button when quizzes already exist", async () => {
+    mockFetchQuizzesByJob.mockResolvedValue({
+      quizzes: [{ id: "q1", title: "Existing Quiz", created_at: "2026-03-01T00:00:00Z" }],
+    });
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Existing Quiz")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTestId("generate-quiz-btn")).not.toBeInTheDocument();
+  });
+
+  it("quiz links point to the correct quiz route", async () => {
+    mockFetchQuizzesByJob.mockResolvedValue({
+      quizzes: [{ id: "quiz-abc", title: "My Quiz", created_at: "2026-03-01T00:00:00Z" }],
+    });
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("quiz-link")).toBeInTheDocument();
+    });
+
+    const link = screen.getByTestId("quiz-link");
+    expect(link).toHaveAttribute("href", "/quiz/quiz-abc");
+  });
+
+  it("does not render quiz-section for non-complete jobs", async () => {
+    mockFetchJob.mockResolvedValue({
+      ..._completeJob,
+      status: "running",
+    });
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Job running")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTestId("quiz-section")).not.toBeInTheDocument();
   });
 });

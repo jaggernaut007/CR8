@@ -6,9 +6,10 @@
  */
 
 import { useState } from "react";
-import { useParams, Link } from "react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useParams, Link, useNavigate } from "react-router";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { fetchJob, downloadUrl, type Job } from "@/api/jobs";
+import { fetchQuizzesByJob, generateQuiz } from "@/api/quiz";
 import ContentTabs from "@/components/ContentTabs";
 import PdfViewer from "@/components/viewers/PdfViewer";
 import PptCarousel from "@/components/viewers/PptCarousel";
@@ -42,6 +43,7 @@ function triggerDownload(url: string): void {
 
 export default function ResultsPage() {
   const { jobId } = useParams<{ jobId: string }>();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("pdf");
 
   const { data: job, isLoading, error } = useQuery({
@@ -123,6 +125,11 @@ export default function ResultsPage() {
             </div>
           )}
 
+          {/* Quiz section (only for complete jobs) */}
+          {job.status === "complete" && (
+            <QuizSection jobId={jobId!} navigate={navigate} />
+          )}
+
           {/* Back to dashboard */}
           <Link
             to="/dashboard"
@@ -144,6 +151,57 @@ function availableDownloads(job: Job) {
     if (key === "scripts" || key === "videos") return job.formats.includes("video");
     return false;
   });
+}
+
+function QuizSection({ jobId, navigate }: { jobId: string; navigate: (path: string) => void }) {
+  const { data: quizList } = useQuery({
+    queryKey: ["quizzesByJob", jobId],
+    queryFn: () => fetchQuizzesByJob(jobId),
+  });
+
+  const genMutation = useMutation({
+    mutationFn: () => generateQuiz(jobId),
+    onSuccess: (data) => navigate(`/quiz/${data.quiz_id}`),
+  });
+
+  const quizzes = quizList?.quizzes ?? [];
+
+  return (
+    <div className="mt-6 space-y-3" data-testid="quiz-section">
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary">
+        Quiz
+      </h2>
+      {quizzes.length === 0 ? (
+        <button
+          onClick={() => genMutation.mutate()}
+          disabled={genMutation.isPending}
+          className="glass w-full p-4 text-center text-sm font-medium transition hover:glass-hover disabled:opacity-40"
+          data-testid="generate-quiz-btn"
+        >
+          {genMutation.isPending ? "Generating Quiz..." : "Generate Quiz"}
+        </button>
+      ) : (
+        <div className="space-y-2">
+          {quizzes.map((q) => (
+            <Link
+              key={q.id}
+              to={`/quiz/${q.id}`}
+              className="glass flex items-center justify-between p-4 transition hover:glass-hover"
+              data-testid="quiz-link"
+            >
+              <span className="text-sm font-medium text-text-primary">{q.title}</span>
+              <span className="text-xs text-text-muted">Take Quiz</span>
+            </Link>
+          ))}
+        </div>
+      )}
+      {genMutation.isError && (
+        <div className="badge-error rounded-lg p-3 text-sm">
+          Failed to generate quiz.
+        </div>
+      )}
+    </div>
+  );
 }
 
 function StatusIcon({ status }: { status: string }) {

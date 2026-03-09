@@ -26,10 +26,10 @@
 
 ## Upcoming
 
-6. Create a quiz-based website for the content created by the agent (→ v0.5)
+6. ~~Create a quiz-based website for the content created by the agent~~ **DONE (v0.5.4)**
 7. Create a feedback loop for the agent to improve content based on quiz performance (→ v0.6)
 8. Admin quiz customisation — add/remove questions, difficulty levels, custom feedback (→ v0.6)
-9. Quiz shows wrong/right answers in red/green after completion, one-attempt-only (→ v0.5)
+9. ~~Quiz shows wrong/right answers in red/green after completion, one-attempt-only~~ **DONE (v0.5.4)**
 10. Improve image/graphic generation for PPT slides (AI-generated diagrams, charts from data)
 11. Add template support for PPT (custom .pptx templates for branding)
 12. Multi-file batch processing with combined gap analysis across all documents

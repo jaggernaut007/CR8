@@ -7,6 +7,54 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [0.5.4] — 2026-03-09 — Quiz Agent + Quiz UI (MCQ, Bloom's Taxonomy, One-Attempt)
+
+### Added — Quiz Pipeline (`backend/pipeline/`)
+- `backend/prompts/quiz.py` — `GENERATE_QUIZ` prompt constant; instructs the LLM to produce multiple-choice questions with Bloom's taxonomy level, difficulty rating, correct index, and four distractors per question
+- `backend/pipeline/quiz_state.py` — `QuizState` TypedDict: `job_id`, `topics`, `quiz_id`, `questions`, `error`
+- `backend/pipeline/agent_quiz.py` — LangGraph node that calls the LLM quiz generator, parses questions, and persists them via `db_client`
+- `backend/pipeline/quiz_graph.py` — Standalone LangGraph graph (separate from the main 3-agent pipeline); single node: `agent_quiz`
+
+### Added — Quiz API (`frontend/quiz_routes.py`)
+Replaces the 4 previous 501 stub routes with 5 real endpoints:
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/quiz/start` | Trigger quiz generation for a completed job; returns `{quiz_id}` |
+| `GET /api/quiz/{quiz_id}/question/{n}` | Fetch the nth question (0-based index); returns question text and options |
+| `POST /api/quiz/{quiz_id}/answer` | Submit an answer; returns `{correct, explanation}` for immediate red/green feedback |
+| `GET /api/quiz/{quiz_id}/results` | Final score and per-question breakdown after all questions are answered |
+| `GET /api/quiz/attempts` | List all quiz attempts for the authenticated user |
+
+- `frontend/quiz_models.py` — Pydantic models: `StartQuizRequest`, `SubmitAnswerRequest`, `QuizQuestion`, `QuizResult`, `AttemptSummary`
+
+### Added — Database (`backend/services/db_client.py`, `backend/db/schema.sql`)
+- 8 new async CRUD functions: `create_quiz`, `get_quiz`, `list_quizzes`, `create_question`, `list_questions`, `create_attempt`, `record_answer`, `get_attempt_results`
+- `update_job_result` gains optional `pipeline_data` parameter for structured output metadata
+- `backend/db/schema.sql` — `curriculum_scope TEXT` column added to `quizzes` table
+
+### Added — React Quiz UI (`frontend/react-app/src/`)
+- `src/api/quiz.ts` — `startQuiz()`, `getQuestion()`, `submitAnswer()`, `getResults()`, `listAttempts()` API functions
+- `src/components/quiz/QuestionCard.tsx` — MCQ question card with red/green answer highlighting post-submission
+- `src/components/quiz/QuizProgressBar.tsx` — Question N of M progress indicator
+- `src/components/quiz/ScoreSummary.tsx` — Final score display with pass/fail styling
+- `src/pages/QuizPage.tsx` — Full one-attempt quiz flow: question → answer → next → redirect to results
+- `src/pages/QuizResultsPage.tsx` — Score breakdown with per-question correct/incorrect review
+- `src/App.tsx` — 2 new routes: `/quiz/:quizId` and `/quiz/:quizId/results`
+- `src/pages/ResultsPage.tsx` — `QuizSection` added above download buttons (entry point to start a quiz)
+
+### Added — Playwright E2E Tests
+- `e2e/quiz.spec.ts` — 7 new scenarios: start quiz, fetch question, submit answer, view results, progress bar rendering, score summary, QuizSection on ResultsPage
+
+### Test Suite
+- 135 new pytest tests (quiz pipeline agent, db_client CRUD, quiz routes, Pydantic models, pipeline data persistence, job validation): 928 → 1063
+- 43 new Vitest component tests (QuestionCard, QuizProgressBar, ScoreSummary, QuizPage, QuizResultsPage): 81 → 124
+- 7 new Playwright E2E tests (`quiz.spec.ts`): 10 → 17
+
+Total: **1063 pytest** + **124 Vitest** + **17 Playwright E2E** = **1204 tests**
+
+---
+
 ## Unreleased — Security Hardening + Crash Fixes (Code Review Wave)
 
 ### Security

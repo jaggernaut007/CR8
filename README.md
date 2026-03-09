@@ -41,9 +41,9 @@ Output is saved to `outputs/<timestamp>/`.
 ### Run Tests
 
 ```bash
-make test       # 853 pytest (backend + frontend + GPU/CPU video services)
-make e2e        # 10 Playwright E2E tests
-npx vitest run  # 81 Vitest component tests (from frontend/react-app/)
+make test       # 1063 pytest (backend + frontend + GPU/CPU video services)
+make e2e        # 17 Playwright E2E tests
+npx vitest run  # 124 Vitest component tests (from frontend/react-app/)
 ```
 
 ---
@@ -57,11 +57,12 @@ npx vitest run  # 81 Vitest component tests (from frontend/react-app/)
 - **3-tier video fallback** — GPU Primary (europe-west4) → GPU Fallback (europe-west1) → CPU Video (europe-west2)
 - **React SPA frontend** — React 19 + Vite 7 + Tailwind v4 + Tanstack Query, all pages wired to real API
 - **Content viewers** — Inline PDF iframe, PPT slide carousel with keyboard navigation, HTML5 video player
+- **Quiz platform** — On-demand MCQ generation (Bloom's taxonomy, difficulty distribution, gap targeting), one-attempt scoring with per-question feedback
 - **JWT + session dual auth** — JWT Bearer tokens for the SPA + legacy session cookie for backward compatibility
 - **PDF and PPTX upload** — Drag-drop with magic byte validation
 - **Vector-backed context** — ChromaDB stores curriculum and research for semantic retrieval
 - **Evaluation framework** — L1 structural checks (free) + L2 DeepSeek-V3 judge (~$0.02/run)
-- **944-test suite** — 853 pytest + 81 Vitest + 10 Playwright E2E, zero real API calls
+- **1,204-test suite** — 1063 pytest + 124 Vitest + 17 Playwright E2E, zero real API calls
 
 ---
 
@@ -111,9 +112,9 @@ Software/
 ├── backend/
 │   ├── config.py             # Pydantic-settings configuration
 │   ├── run_pipeline.py       # CLI entry point
-│   ├── pipeline/             # LangGraph agents (ingest, research, generate)
+│   ├── pipeline/             # LangGraph agents (ingest, research, generate, quiz)
 │   ├── services/             # LLM, ChromaDB, file parser, builders, TTS, GPU client
-│   ├── prompts/              # All prompt templates
+│   ├── prompts/              # All prompt templates (pipeline + quiz)
 │   ├── evals/                # Evaluation framework
 │   └── tests/                # Backend tests
 ├── frontend/

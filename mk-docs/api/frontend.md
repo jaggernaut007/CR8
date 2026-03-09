@@ -15,7 +15,8 @@ Route logic was extracted from `app.py` into focused sub-modules during the Wave
 | `frontend/auth_routes.py` | `/api/auth/*` — JWT register/login/refresh/me/logout + legacy session login |
 | `frontend/job_routes.py` | `/api/upload`, `/api/start`, `/api/progress/{job_id}`, `/api/cancel/{job_id}`, `/api/download/{job_id}/{type}`, `/api/jobs`, `/api/jobs/{job_id}` |
 | `frontend/view_routes.py` | `/api/view/*` — inline PDF, slide image carousel, MP4 video streaming for the React SPA content viewers |
-| `frontend/quiz_routes.py` | `/api/quiz/*` — stubs returning 501 (reserved for Phase 4) |
+| `frontend/quiz_routes.py` | `/api/quiz/*` — generate, fetch, submit, results, by-job (see [Quiz API](quiz.md)) |
+| `frontend/quiz_models.py` | Pydantic request models (GenerateQuizRequest, SubmitQuizRequest, AnswerItem) |
 
 ## Endpoints
 

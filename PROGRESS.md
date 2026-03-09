@@ -4,8 +4,8 @@
 
 ## Current Status
 **Last updated:** 2026-03-09
-**Overall project phase:** v0.5.3 complete — post-release security hardening and crash fixes applied
-**Current version:** v0.5.3
+**Overall project phase:** v0.5.4 complete — Quiz Agent + Quiz UI (edX-style, one-attempt, Bloom's taxonomy)
+**Current version:** v0.5.4
 
 ## What's Working
 - Full 3-agent pipeline end-to-end (Ingest → Research → Generate)
@@ -23,7 +23,7 @@
 - **Video error/warning surfacing** — `ProgressCapture` captures `[Video] ERROR:` and `[Video] WARNING:` lines; UI shows yellow warning box on completion
 - **Configurable login password** — `AUTH_PASSWORD` env var (default: `CR8-AI`); no longer hardcoded
 - **Unified video provider validation** — `_validate_video_provider()` shared between CLI and web
-- 853-test suite — all passing, ruff clean, pytest-xdist parallel (~42s)
+- **1204-test suite** — 1063 pytest + 124 Vitest + 17 Playwright E2E, all passing, ruff clean, pytest-xdist parallel (~32s)
 - **Video slides from generated PPT** (was: original PDF) — fixed `_get_slide_images()` bug
 - **Two-phase video pipeline** — sequential TTS (shared engine) → parallel ffmpeg composition
 - **GPU acceleration** — MPS/CUDA for TTS, hardware H.264 encoding (VideoToolbox/NVENC/QSV/AMF), per-worker thread control
@@ -34,6 +34,11 @@
 - MkDocs documentation site (55 pages, Material theme)
 - Agent-readiness scaffolding complete (AGENTS.md, skills, hooks, rules, subagents)
 - **docs-writer agent expanded** — now covers 6 documentation layers (mk-docs, CHANGELOG, Loop Intelligence, AGENTS.md counts, PROGRESS.md, llms.txt); Playwright MCP for visual page verification; Sequential Thinking MCP for planning large updates
+- **Quiz Agent pipeline** — dedicated LangGraph workflow (`quiz_graph.py`) with `quiz_state.py` TypedDict, `agent_quiz.py`, and `backend/prompts/quiz.py` prompt constants; generates MCQs with Bloom's taxonomy labels, difficulty levels, and distractors
+- **Quiz API** — 5 real endpoints in `frontend/quiz_routes.py` replacing 501 stubs: start quiz, get question, submit answer, get results, list attempts; Pydantic models in `frontend/quiz_models.py`
+- **8 new db_client CRUD functions** — `create_quiz`, `get_quiz`, `list_quizzes`, `create_question`, `list_questions`, `create_attempt`, `record_answer`, `get_attempt_results` plus `pipeline_data` param on `update_job_result`
+- **Quiz React UI** — `QuizPage.tsx`, `QuizResultsPage.tsx`, `QuestionCard.tsx`, `QuizProgressBar.tsx`, `ScoreSummary.tsx`, `src/api/quiz.ts`; `App.tsx` routes updated; `ResultsPage.tsx` includes `QuizSection`
+- **`curriculum_scope` schema column** — `TEXT` column added to `quizzes` table in `backend/db/schema.sql`
 - **Security hardening (post-v0.5.3)** — Settings validator rejects weak JWT_SECRET/OPENAI_API_KEY at startup; rate limiting on /register; job ownership enforcement on GET /api/jobs/{id}; formats allowlist on /api/start; pagination cap on /api/jobs; GCS path sanitisation
 - **Crash resilience** — MoviePy clips released in try/finally; Tavily errors return [] instead of crashing Research agent; GPU client validates video_job_id in submit response
 - **Observability** — All pipeline agent exception handlers now call logger.exception(); video_builder uses exc_info=True throughout
@@ -43,6 +48,47 @@
 - SECURITY.md vulnerability disclosure policy
 - `slide_images` field is `NotRequired[list[str]]` in `PipelineState` — correctly optional
 - `docs/adr/ADR-001-three-tier-video-fallback.md` — architecture decision record
+
+## v0.5.4 Sprint (2026-03-09 Session)
+> Quiz Agent + Quiz UI — edX-style MCQ quizzes, one-attempt, Bloom's taxonomy, red/green feedback
+
+### Backend — Quiz Pipeline (COMPLETE)
+- `backend/prompts/quiz.py` — `GENERATE_QUIZ` prompt constant; instructs LLM to produce MCQs with Bloom's level, difficulty, correct index, and four distractors
+- `backend/pipeline/quiz_state.py` — `QuizState` TypedDict: `job_id`, `topics`, `quiz_id`, `questions`, `error`
+- `backend/pipeline/agent_quiz.py` — LangGraph node: calls `generate_quiz()` from LLM service, parses questions, persists via db_client
+- `backend/pipeline/quiz_graph.py` — Standalone LangGraph graph (separate from main pipeline); single-node: `agent_quiz`
+
+### Backend — API + DB (COMPLETE)
+- `frontend/quiz_models.py` — Pydantic request/response models: `StartQuizRequest`, `SubmitAnswerRequest`, `QuizQuestion`, `QuizResult`, `AttemptSummary`
+- `frontend/quiz_routes.py` — 5 real endpoints (replacing 501 stubs):
+  - `POST /api/quiz/start` — trigger quiz generation for a job, returns `quiz_id`
+  - `GET /api/quiz/{quiz_id}/question/{n}` — fetch nth question (0-based)
+  - `POST /api/quiz/{quiz_id}/answer` — submit answer; returns `correct`, `explanation`
+  - `GET /api/quiz/{quiz_id}/results` — final score + per-question breakdown
+  - `GET /api/quiz/attempts` — list all attempts for the current user
+- `backend/services/db_client.py` — 8 new CRUD functions: `create_quiz`, `get_quiz`, `list_quizzes`, `create_question`, `list_questions`, `create_attempt`, `record_answer`, `get_attempt_results`; `update_job_result` gains `pipeline_data` param
+- `backend/db/schema.sql` — `curriculum_scope TEXT` column added to `quizzes` table
+
+### Frontend — React Quiz UI (COMPLETE)
+- `src/api/quiz.ts` — `startQuiz()`, `getQuestion()`, `submitAnswer()`, `getResults()`, `listAttempts()` API functions
+- `src/components/quiz/QuestionCard.tsx` — single MCQ question with red/green answer highlighting after submission
+- `src/components/quiz/QuizProgressBar.tsx` — question N of M progress indicator
+- `src/components/quiz/ScoreSummary.tsx` — final score display with pass/fail styling
+- `src/pages/QuizPage.tsx` — full one-attempt quiz flow: question → answer → next question → redirect to results
+- `src/pages/QuizResultsPage.tsx` — score breakdown with per-question correct/incorrect review
+- `src/App.tsx` — 2 new routes: `/quiz/:quizId` and `/quiz/:quizId/results`
+- `src/pages/ResultsPage.tsx` — `QuizSection` component added above download buttons
+
+### E2E Tests (COMPLETE)
+- `e2e/quiz.spec.ts` — 7 new Playwright E2E scenarios: start quiz, answer question, submit answer, view results, progress bar, score summary, quiz section on ResultsPage
+
+### Test Counts (v0.5.4 final)
+- **1063 pytest** backend tests (was 928, +135 new quiz tests: agent, db_client CRUD, quiz routes, quiz models, pipeline data persistence, job validation)
+- **124 Vitest** component tests (was 81, +43 new quiz component tests)
+- **17 Playwright** E2E tests (was 10, +7 quiz E2E tests)
+- **Total: 1204 tests**
+
+---
 
 ## v0.5.3 Sprint (2026-03-09 Session)
 > Content Viewers — inline PDF, PPT slide carousel, HTML5 video player
@@ -112,7 +158,7 @@
 - `backend/services/ppt_builder.py` — `_ppt_monolithic_fallback()` helper extracted (eliminates ~60 lines of duplication)
 - `backend/services/ppt_builder.py` — Hardcoded `"75%"` fake statistic replaced with `"Data unavailable"`
 
-### Test Counts (unchanged)
+### Test Counts (unchanged from security hardening wave)
 - **853 pytest** + **81 Vitest** + **10 Playwright E2E** — all pass after fixes
 
 ---
@@ -250,12 +296,14 @@ CPU service (europe-west2, 2 vCPU, 4 GiB)
 - Main Dockerfile no longer includes video deps — video must route to a remote service; local video requires a different Dockerfile configuration
 
 ## Next Steps (Prioritised)
-1. **v0.5.4** — Quiz Agent + Quiz UI (edX-style, one-attempt, red/green feedback) ← **NEXT**
-2. **v0.6** — Admin dashboard + feedback loop + structured logging + RBAC + audit logging
+1. **v0.6** — Admin dashboard + feedback loop + structured logging + RBAC + audit logging ← **NEXT**
+2. **v0.6** — Prompt v3, SCORM export, GitHub Actions CI, Dependabot
 
 ## Recent Decisions
 | Date | Decision | Rationale | ADR |
 |------|----------|-----------|-----|
+| 2026-03-09 | Quiz Agent as a separate LangGraph graph | Quiz generation is a distinct workflow from the content pipeline; separate graph keeps `quiz_graph.py` independently testable and deployable | — |
+| 2026-03-09 | One-attempt quiz enforcement at API layer | Business requirement: assessment integrity; enforcement in `quiz_routes.py` via `UNIQUE(quiz_id, user_id)` constraint in DB | — |
 | 2026-03-09 | Content viewers use native browser capabilities | No external PDF.js or video player library — iframe for PDF, `<img>` carousel for PPT, HTML5 `<video>` for MP4. Zero new npm dependencies. | — |
 | 2026-03-09 | Separate view_routes.py module | Content serving is distinct from job CRUD — separate module keeps job_routes.py focused | — |
 | 2026-03-06 | CPU video service as Tier 3 fallback | Infrastructure failures on GPU (cold-start, region outage) should not fail video jobs; a CPU fallback with 8 vCPU / 32 GiB provides adequate throughput at ~20-30 min/job | ADR-001 |
@@ -274,5 +322,5 @@ CPU service (europe-west2, 2 vCPU, 4 GiB)
 ## Environment Notes
 - Dev server: `make dev` → http://localhost:8080
 - Docs preview: `make docs-serve` → http://localhost:8000
-- Tests: `make test` → 853 pytest + 81 Vitest + 10 Playwright E2E
+- Tests: `make test` → 1063 pytest + 124 Vitest + 17 Playwright E2E = 1204 total
 - Requires: `.env` file with OPENAI_API_KEY, TAVILY_API_KEY (copy from `.env.example`)

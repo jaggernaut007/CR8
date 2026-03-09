@@ -2,9 +2,9 @@
 
 CR8 has a comprehensive automated test suite covering the full stack across three layers:
 
-- **853 pytest tests** (backend + FastAPI endpoints + GPU/CPU video services) — zero real API calls
-- **81 Vitest component tests** (React SPA pages, shared components, and content viewers)
-- **10 Playwright E2E tests** (auth flow + content viewer tests)
+- **1063 pytest tests** (backend + FastAPI endpoints + GPU/CPU video services + quiz pipeline) — zero real API calls
+- **124 Vitest component tests** (React SPA pages, shared components, content viewers, and quiz UI)
+- **17 Playwright E2E tests** (auth flow + content viewer + quiz flow)
 
 All pipeline agents, eval harness, structural checks, services, LangGraph graph integration, all FastAPI endpoints, GCS/GPU/CPU-video service clients, both video microservice workers, and all frontend auth and quiz routes are covered. All pytest tests run with **zero real API calls** — all LLMs, web search, ChromaDB, GCS, and video services are mocked where needed.
 
@@ -66,11 +66,11 @@ python3 -m pytest backend/tests/test_eval_harness.py::TestEvalResultSnapshot \
 | `frontend/tests/test_api.py` | 90 | All FastAPI endpoints: auth, upload (PDF + PPTX), start, progress (including `warnings` field), download; PPTX magic byte validation; video UI (Kokoro TTS checkbox enabled, warning box) |
 | `frontend/tests/test_progress_capture.py` | 39 | Stage parsing, progress %age (updated STAGE_WEIGHTS), thread safety, stage time budgets |
 | `frontend/tests/test_auth_routes.py` | 49 | Register (201, 409, 400, 503, email normalisation), JWT login (200, 401, 429), legacy login, refresh (happy/invalid/no-cookie), `/me` (JWT Bearer, legacy session, expired), logout (204, session invalidation), `get_current_user` (expired JWT, malformed header) |
-| `frontend/tests/test_quiz_routes.py` | 12 | All quiz stub endpoints (`GET /api/quiz/`, `GET /api/quiz/{id}`, `POST /api/quiz/{id}/start`, `POST /api/quiz/{id}/submit`) return 501 with `error` key |
+| `frontend/tests/test_quiz_routes.py` | 24 | Quiz generate (auth, db_pool, validation), get quiz (auth, db_pool), submit (auth, body validation), results (auth), by-job (auth), Pydantic models (8 tests), route helpers (_strip_answers, _score_responses, _serialize_attempt) |
 
 ### React SPA Tests (Vitest)
 
-81 component tests run via `npx vitest run` from `frontend/react-app/`.
+109 component tests run via `npx vitest run` from `frontend/react-app/`.
 
 | Scope | Tests | What it covers |
 |-------|-------|----------------|
@@ -117,7 +117,7 @@ Run E2E tests with `make e2e` (requires the dev server and React build to be run
 | `cpu_video_service/tests/test_worker.py` | 37 | Full job lifecycle, cancellation flow (during TTS and compose), ETA estimation, error handling, GCS status upload |
 | `cpu_video_service/tests/test_gcs_client.py` | 22 | `download_manifest()`, `download_slides()`, `upload_videos()`, `upload_status()` with mocked `google.cloud.storage` |
 
-**Total: 853 pytest (0 real API calls) + 81 Vitest + 10 Playwright E2E = 944 tests across all layers**
+**Total: 1063 pytest (0 real API calls) + 124 Vitest + 17 Playwright E2E = 1204 tests across all layers**
 
 ---
 
@@ -265,7 +265,10 @@ All test files share a common fixture set:
 | Legacy session auth (login, session TTL, logout, invalidation) | Yes — `test_auth_routes.py` |
 | `get_current_user()` — JWT Bearer, legacy cookie, expired, malformed | Yes — `test_auth_routes.py` |
 | Rate limiting (5 failures / 15 min per IP) | Yes — `test_auth_routes.py` |
-| Quiz route stubs (all return 501) | Yes — 12 tests in `test_quiz_routes.py` |
+| Quiz API (generate, fetch, submit, results, by-job) | Yes — 24 tests in `test_quiz_routes.py` |
+| Quiz agent (prompt, validation, distribution, gap %, graph) | Yes — 30 tests in `test_quiz_agent.py` |
+| Quiz DB CRUD (8 functions) | Yes — 12 tests in `test_db_client.py` |
+| Quiz React UI (QuestionCard, ProgressBar, ScoreSummary, pages) | Yes — 28 Vitest + 7 E2E |
 | `[SLIDE N]` script parsing edge cases | Yes — 10 tests in `test_script_parser.py` |
 | Kokoro TTS wrapper (`synthesize`, `synthesize_segments`) | Yes — 10 tests with stubbed soundfile |
 | Kokoro two-phase video pipeline (TTS + parallel compose), shared engine, empty slide guard | Yes — 11 tests in `test_video_builder.py` |

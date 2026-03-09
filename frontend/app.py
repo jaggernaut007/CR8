@@ -98,6 +98,7 @@ class ProgressCapture:
         self._cancel_at_boundary = False
         self.video_job_id: str | None = None
         self.gpu_progress: dict | None = None
+        self._db_persisted = False
 
     def is_cancelled(self) -> bool:
         """Check if cancellation has been requested."""

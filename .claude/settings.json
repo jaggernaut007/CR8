@@ -28,7 +28,13 @@
       "WebSearch",
       "WebFetch(domain:docs.gitlab.com)",
       "WebFetch(domain:gitlab-org.gitlab.io)",
-      "Bash(uv run mkdocs build --strict --quiet)"
+      "Bash(uv run mkdocs build --strict --quiet)",
+      "Bash(uv run ruff check pyproject.toml .gitignore frontend/tests/test_api.py docs/adr/ADR-002-dual-auth-strategy.md)",
+      "mcp__Snyk__snyk_code_scan",
+      "Bash(npm run build)",
+      "Bash(npx playwright test)",
+      "Bash(npx vitest run)",
+      "Bash(grep -E \"\\\\.py$\")"
     ],
     "additionalDirectories": [
       "/Users/shreyasjagannath/Library/Caches/ms-playwright/mcp-chrome-b4eaf59"

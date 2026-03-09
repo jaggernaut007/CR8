@@ -15,7 +15,7 @@ This document is the **single source of strategic truth** for CR8. It serves two
 
 **Update cadence:** Refresh after each minor version bump (0.4 → 0.5 → 0.6). Keep under 400 lines.
 
-**Last Updated**: 2026-03-09 (post-v0.5.3 — security hardening, crash fixes, observability improvements)
+**Last Updated**: 2026-03-09 (post-v0.5.4 — Quiz Agent, quiz platform, Bloom's taxonomy MCQs)
 **Previous Version**: Loop Intelligence update 2026-03-09 (v0.5.3)
 
 ---
@@ -34,7 +34,7 @@ Curriculum PDFs → [Ingest Agent] → [Research Agent] → [Generate Agent] →
        └── Feedback Loop → Agent improves future content
 ```
 
-Built with LangGraph, OpenAI, ChromaDB, Tavily, fpdf2, FastAPI, React 19 + Vite 7 + Tailwind v4. Deployed on GCP Cloud Run. 853 backend tests + 81 Vitest + 10 Playwright E2E = 944 tests total.
+Built with LangGraph, OpenAI, ChromaDB, Tavily, fpdf2, FastAPI, React 19 + Vite 7 + Tailwind v4. Deployed on GCP Cloud Run. 1063 backend tests + 124 Vitest + 17 Playwright E2E = 1204 tests total.
 
 ---
 
@@ -59,7 +59,7 @@ CR8 is a **late-prototype / early-product**. The content generation pipeline is 
 | React SPA shell (Vite + Tailwind v4 + Tanstack Query, all pages wired to API) | Complete (v0.5.2) |
 | React component tests (Vitest 42 tests) + Playwright E2E (5 auth flows) | Complete (v0.5.2) |
 | Content viewers (PDF iframe, PPT carousel, HTML5 video player) | Complete (v0.5.3) |
-| Quiz Agent + quiz platform | Not started (v0.5) |
+| Quiz Agent + quiz platform (MCQ, one-attempt, Bloom's taxonomy) | Complete (v0.5.4) |
 | Admin dashboard + analytics | Not started (v0.6) |
 | Feedback loop (quiz → content regeneration) | Not started (v0.6) |
 | Prompt v3 + SCORM export | Not started (v0.6) |
@@ -98,6 +98,14 @@ Three-container deployment on GCP Cloud Run, all scale to zero (~£0 idle):
 - **CPU video service** (europe-west2, 8 vCPU) — slower but always available (~20-30 min)
 
 Video data moves between services via GCS. Service-to-service calls authenticated with OIDC.
+
+### Quiz Platform (v0.5.4)
+
+A dedicated LangGraph workflow (separate from the content pipeline) generates multiple-choice quizzes from completed jobs. Each question carries a Bloom's taxonomy label and difficulty rating. The quiz is one-attempt-only, enforced at the API and database layers.
+
+Students access the quiz from the ResultsPage in the React SPA: one question at a time, immediate red/green feedback per answer, final score summary. All quiz attempts are persisted to Neon PostgreSQL. This is the foundation for the feedback loop (quiz data → content regeneration) planned in v0.6.
+
+Five new API endpoints: start quiz, get question, submit answer, get results, list attempts.
 
 ### Database & Auth (v0.5.1, hardened post-v0.5.3)
 
@@ -140,7 +148,7 @@ Local video generation with open-source TTS. GPU service offload. Security basel
 **Phase 1.5 (COMPLETE):** Test optimization (171s → 42s), pytest-xdist parallelism, SPA catch-all route, configurable upload limits (50MB), `make build-frontend` / `make e2e` / `make test-fast` targets, all docs migrated from pip to uv.
 **Phase 2 (COMPLETE — v0.5.2):** Glassmorphism React SPA (React 19 + Vite 7 + Tailwind v4 + Tanstack Query). Five pages (Login, Dashboard, Upload, Progress, Results) wired to real API. JWT-aware fetch client and AuthContext. Vitest 42 component tests + Playwright 5 E2E tests. Stale Jinja2 tests removed.
 **Phase 3 (COMPLETE — v0.5.3):** Content viewers (PDF iframe, PPT carousel, HTML5 video player) embedded in ResultsPage. Five backend view endpoints with Range-request video streaming. 39 backend + 27 Vitest + 5 Playwright tests added. Zero new npm dependencies.
-**Phase 4:** Quiz Agent (separate LangGraph workflow), one-attempt quizzes, Bloom's taxonomy, difficulty distribution.
+**Phase 4 (COMPLETE — v0.5.4):** Quiz Agent (separate LangGraph workflow), one-attempt quizzes, Bloom's taxonomy, difficulty distribution, React quiz UI with red/green feedback.
 **Infrastructure:** GitHub Actions CI, Dependabot planned alongside Phase 2.
 
 ### v0.6 — Admin Dashboard + Feedback Loop + Prompt v3 + SCORM

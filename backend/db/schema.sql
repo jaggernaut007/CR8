@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     topics JSONB,
     gap_summary JSONB,
     modules_md JSONB,
+    curriculum_scope TEXT,
     error_message TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
