@@ -48,8 +48,8 @@ Replaces the 4 previous 501 stub routes with 5 real endpoints:
 | `src/pages/ResultsPage.tsx` | `QuizSection` added above download buttons |
 
 ### Test Suite
-- 55 new pytest tests: quiz pipeline, db_client CRUD, quiz routes, Pydantic models (853 → 983)
-- 28 new Vitest component tests: QuestionCard, QuizProgressBar, ScoreSummary, QuizPage, QuizResultsPage (81 → 109)
+- 135 new pytest tests: quiz pipeline agent, db_client CRUD (8 functions), quiz routes, Pydantic models, pipeline data persistence, job validation (928 → 1063)
+- 43 new Vitest component tests: QuestionCard, QuizProgressBar, ScoreSummary, QuizPage, QuizResultsPage (81 → 124)
 - 7 new Playwright E2E tests in `e2e/quiz.spec.ts` (10 → 17)
 
 ---

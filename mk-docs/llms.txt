@@ -5,7 +5,7 @@
 > and AI avatar videos.
 
 ## Stack
-Python 3.11+, FastAPI, LangGraph, OpenAI (gpt-5.1/mini/nano), ChromaDB, Tavily, Kokoro TTS, React 19 + Vite 7 + Tailwind v4 + Tanstack Query, pytest (983 backend) + Vitest (109) + Playwright E2E (17)
+Python 3.11+, FastAPI, LangGraph, OpenAI (gpt-5.1/mini/nano), ChromaDB, Tavily, Kokoro TTS, React 19 + Vite 7 + Tailwind v4 + Tanstack Query, pytest (1063 backend) + Vitest (124) + Playwright E2E (17)
 
 ## Key Documentation
 
