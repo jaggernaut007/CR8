@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     # Kokoro TTS (local video generation — no API key needed)
     kokoro_voice: str = "af_heart"
     kokoro_lang: str = "a"
-    video_fps: int = 5                     # static slides — low fps saves ~80% encode time
+    video_fps: int = 2                     # 2 fps for static slides — small file size, smooth playback
 
     # Slide export resolution
     slide_export_dpi: int = 144            # 144 = exactly 1920x1080 for 13.333"x7.5" slides

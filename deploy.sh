@@ -187,7 +187,7 @@ if [[ "${DEPLOY_GPU}" == "true" ]]; then
         --max-instances=1 \
         --no-cpu-throttling \
         --set-secrets="HF_TOKEN=HF_TOKEN:latest" \
-        --set-env-vars="GCS_BUCKET=${GCS_BUCKET},VIDEO_DEVICE=auto,VIDEO_MAX_WORKERS=6,KOKORO_VOICE=af_heart,KOKORO_LANG=a,VIDEO_FPS=24"
+        --set-env-vars="GCS_BUCKET=${GCS_BUCKET},VIDEO_DEVICE=auto,VIDEO_MAX_WORKERS=6,KOKORO_VOICE=af_heart,KOKORO_LANG=a,VIDEO_FPS=2"
 
     GPU_URL=$(gcloud run services describe "${GPU_SERVICE_NAME}" \
         --region="${GPU_REGION}" --format='value(status.url)')
@@ -219,7 +219,7 @@ if [[ "${DEPLOY_GPU}" == "true" ]]; then
         --max-instances=1 \
         --no-cpu-throttling \
         --set-secrets="HF_TOKEN=HF_TOKEN:latest" \
-        --set-env-vars="GCS_BUCKET=${GCS_BUCKET},VIDEO_DEVICE=auto,VIDEO_MAX_WORKERS=6,KOKORO_VOICE=af_heart,KOKORO_LANG=a,VIDEO_FPS=24"
+        --set-env-vars="GCS_BUCKET=${GCS_BUCKET},VIDEO_DEVICE=auto,VIDEO_MAX_WORKERS=6,KOKORO_VOICE=af_heart,KOKORO_LANG=a,VIDEO_FPS=2"
 
     GPU_FALLBACK_URL=$(gcloud run services describe "${GPU_FALLBACK_SERVICE_NAME}" \
         --region="${GPU_FALLBACK_REGION}" --format='value(status.url)')
@@ -250,7 +250,7 @@ if [[ "${DEPLOY_CPU_VIDEO}" == "true" ]]; then
         --min-instances=0 \
         --max-instances=1 \
         --no-cpu-throttling \
-        --set-env-vars="GCS_BUCKET=${GCS_BUCKET},VIDEO_DEVICE=cpu,VIDEO_MAX_WORKERS=6,KOKORO_VOICE=af_heart,KOKORO_LANG=a,VIDEO_FPS=24"
+        --set-env-vars="GCS_BUCKET=${GCS_BUCKET},VIDEO_DEVICE=cpu,VIDEO_MAX_WORKERS=6,KOKORO_VOICE=af_heart,KOKORO_LANG=a,VIDEO_FPS=2"
 
     CPU_VIDEO_URL=$(gcloud run services describe "${CPU_VIDEO_SERVICE_NAME}" \
         --region="${REGION}" --format='value(status.url)')

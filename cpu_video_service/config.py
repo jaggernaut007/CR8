@@ -19,7 +19,7 @@ class CPUVideoSettings(BaseSettings):
     # Kokoro TTS
     kokoro_voice: str = "af_heart"
     kokoro_lang: str = "a"
-    video_fps: int = 24
+    video_fps: int = 2
     video_max_workers: int = 6  # 8 vCPU / 6 = ~1.3 threads per ffmpeg worker
     video_device: str = "cpu"  # always CPU — no GPU detection
 

@@ -16,7 +16,7 @@ class GPUServiceSettings(BaseSettings):
     # Kokoro TTS
     kokoro_voice: str = "af_heart"
     kokoro_lang: str = "a"
-    video_fps: int = 24
+    video_fps: int = 2
     video_max_workers: int = 6
     video_device: str = "auto"  # auto → cuda on Cloud Run GPU
 
