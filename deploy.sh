@@ -2,9 +2,10 @@
 # deploy.sh — Build, push, and deploy CR8 Pipeline to GCP Cloud Run.
 #
 # Usage:
-#   ./deploy.sh <GCP_PROJECT_ID> [REGION]        # deploy both services
-#   ./deploy.sh <GCP_PROJECT_ID> --cpu            # deploy CPU service only
-#   ./deploy.sh <GCP_PROJECT_ID> --gpu            # deploy GPU service only
+#   ./deploy.sh <GCP_PROJECT_ID> [REGION]        # deploy all services
+#   ./deploy.sh <GCP_PROJECT_ID> --cpu            # deploy CPU pipeline only
+#   ./deploy.sh <GCP_PROJECT_ID> --gpu            # deploy GPU services only
+#   ./deploy.sh <GCP_PROJECT_ID> --cpu-video      # deploy CPU video fallback only
 #   ./deploy.sh --setup <GCP_PROJECT_ID> [REGION] # one-time GCP setup
 #
 # Prerequisites:
@@ -17,6 +18,7 @@ set -euo pipefail
 # ── Configuration ─────────────────────────────────────────────────
 CPU_SERVICE_NAME="cr8-pipeline"
 GPU_SERVICE_NAME="cr8-gpu"
+CPU_VIDEO_SERVICE_NAME="cr8-cpu-video"
 REPO_NAME="cr8"
 
 # GPU-enabled regions — europe-west4 (Netherlands) has L4 quota=3
@@ -28,6 +30,7 @@ GPU_FALLBACK_SERVICE_NAME="cr8-gpu-fallback"
 # ── Parse arguments ───────────────────────────────────────────────
 DEPLOY_CPU=true
 DEPLOY_GPU=true
+DEPLOY_CPU_VIDEO=true
 RUN_SETUP=false
 
 if [[ "${1:-}" == "--setup" ]]; then
@@ -35,14 +38,20 @@ if [[ "${1:-}" == "--setup" ]]; then
     PROJECT_ID="${2:?Usage: ./deploy.sh --setup <GCP_PROJECT_ID> [REGION]}"
     REGION="${3:-europe-west2}"
 else
-    PROJECT_ID="${1:?Usage: ./deploy.sh <GCP_PROJECT_ID> [--cpu|--gpu] [REGION]}"
+    PROJECT_ID="${1:?Usage: ./deploy.sh <GCP_PROJECT_ID> [--cpu|--gpu|--cpu-video] [REGION]}"
 
-    # Check for --cpu or --gpu flags
+    # Check for service-specific flags
     if [[ "${2:-}" == "--cpu" ]]; then
         DEPLOY_GPU=false
+        DEPLOY_CPU_VIDEO=false
         REGION="${3:-europe-west2}"
     elif [[ "${2:-}" == "--gpu" ]]; then
         DEPLOY_CPU=false
+        DEPLOY_CPU_VIDEO=false
+        REGION="${3:-europe-west2}"
+    elif [[ "${2:-}" == "--cpu-video" ]]; then
+        DEPLOY_CPU=false
+        DEPLOY_GPU=false
         REGION="${3:-europe-west2}"
     else
         REGION="${2:-europe-west2}"
@@ -55,6 +64,7 @@ GPU_FALLBACK_REGISTRY="${GPU_FALLBACK_REGION}-docker.pkg.dev"
 CPU_IMAGE="${REGISTRY}/${PROJECT_ID}/${REPO_NAME}/${CPU_SERVICE_NAME}"
 GPU_IMAGE="${GPU_REGISTRY}/${PROJECT_ID}/${REPO_NAME}/${GPU_SERVICE_NAME}"
 GPU_FALLBACK_IMAGE="${GPU_FALLBACK_REGISTRY}/${PROJECT_ID}/${REPO_NAME}/${GPU_FALLBACK_SERVICE_NAME}"
+CPU_VIDEO_IMAGE="${REGISTRY}/${PROJECT_ID}/${REPO_NAME}/${CPU_VIDEO_SERVICE_NAME}"
 TAG="$(git rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
 GCS_BUCKET="cr8-jobs-${PROJECT_ID}"
 
@@ -218,6 +228,37 @@ if [[ "${DEPLOY_GPU}" == "true" ]]; then
     echo ""
 fi
 
+# ── Build & Deploy CPU Video Fallback Service ─────────────────────
+if [[ "${DEPLOY_CPU_VIDEO}" == "true" ]]; then
+    echo "==> Configuring Docker for CPU Video Artifact Registry..."
+    gcloud auth configure-docker "${REGISTRY}" --quiet
+
+    echo "==> Building CPU video service Docker image..."
+    docker buildx build --platform linux/amd64 --provenance=false \
+        -f Dockerfile.cpu-video -t "${CPU_VIDEO_IMAGE}:${TAG}" --push .
+
+    echo "==> Deploying CPU video service to Cloud Run (${REGION})..."
+    gcloud run deploy "${CPU_VIDEO_SERVICE_NAME}" \
+        --image="${CPU_VIDEO_IMAGE}:${TAG}" \
+        --region="${REGION}" \
+        --platform=managed \
+        --no-allow-unauthenticated \
+        --port=8080 \
+        --memory=32Gi \
+        --cpu=8 \
+        --timeout=3600 \
+        --min-instances=0 \
+        --max-instances=1 \
+        --no-cpu-throttling \
+        --set-env-vars="GCS_BUCKET=${GCS_BUCKET},VIDEO_DEVICE=cpu,VIDEO_MAX_WORKERS=6,KOKORO_VOICE=af_heart,KOKORO_LANG=a,VIDEO_FPS=24"
+
+    CPU_VIDEO_URL=$(gcloud run services describe "${CPU_VIDEO_SERVICE_NAME}" \
+        --region="${REGION}" --format='value(status.url)')
+    echo ""
+    echo "CPU video service deployed: ${CPU_VIDEO_URL}"
+    echo ""
+fi
+
 # ── Build & Deploy CPU Service ────────────────────────────────────
 if [[ "${DEPLOY_CPU}" == "true" ]]; then
     echo "==> Configuring Docker for CPU Artifact Registry..."
@@ -227,14 +268,16 @@ if [[ "${DEPLOY_CPU}" == "true" ]]; then
     docker buildx build --platform linux/amd64 --provenance=false \
         -f Dockerfile -t "${CPU_IMAGE}:${TAG}" --push .
 
-    # Get GPU service URLs for injection
+    # Get video service URLs for injection
     GPU_URL=$(gcloud run services describe "${GPU_SERVICE_NAME}" \
         --region="${GPU_REGION}" --format='value(status.url)' 2>/dev/null || echo "")
     GPU_FALLBACK_URL=$(gcloud run services describe "${GPU_FALLBACK_SERVICE_NAME}" \
         --region="${GPU_FALLBACK_REGION}" --format='value(status.url)' 2>/dev/null || echo "")
+    CPU_VIDEO_URL=$(gcloud run services describe "${CPU_VIDEO_SERVICE_NAME}" \
+        --region="${REGION}" --format='value(status.url)' 2>/dev/null || echo "")
 
-    if [[ -z "${GPU_URL}" ]]; then
-        echo "WARNING: GPU service not found — CPU service will use local video processing"
+    if [[ -z "${GPU_URL}" && -z "${CPU_VIDEO_URL}" ]]; then
+        echo "WARNING: No video services found — video generation will be unavailable"
     fi
 
     echo "==> Deploying CPU service to Cloud Run (${REGION})..."
@@ -251,7 +294,7 @@ if [[ "${DEPLOY_CPU}" == "true" ]]; then
         --max-instances=1 \
         --no-cpu-throttling \
         --set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest,TAVILY_API_KEY=TAVILY_API_KEY:latest,AUTH_PASSWORD=AUTH_PASSWORD:latest,HF_TOKEN=HF_TOKEN:latest,HEYGEN_API_KEY=HEYGEN_API_KEY:latest,LANGCHAIN_API_KEY=LANGCHAIN_API_KEY:latest" \
-        --set-env-vars="GPU_SERVICE_URL=${GPU_URL},GPU_FALLBACK_URL=${GPU_FALLBACK_URL},GCS_BUCKET=${GCS_BUCKET},OPENAI_MODEL=gpt-5.1,OPENAI_MODEL_PREMIUM=gpt-5.1,OPENAI_MODEL_MINI=gpt-5-mini,OPENAI_MODEL_NANO=gpt-5-nano,CHROMA_PERSIST_DIR=./chroma_db,LANGCHAIN_TRACING_V2=true,LANGCHAIN_PROJECT=cr8-prototype,MAX_WORKERS=12,VIDEO_MAX_WORKERS=6,VIDEO_PROVIDER=kokoro,COOKIE_SECURE=true"
+        --set-env-vars="GPU_SERVICE_URL=${GPU_URL},GPU_FALLBACK_URL=${GPU_FALLBACK_URL},CPU_VIDEO_SERVICE_URL=${CPU_VIDEO_URL},GCS_BUCKET=${GCS_BUCKET},OPENAI_MODEL=gpt-5.1,OPENAI_MODEL_PREMIUM=gpt-5.1,OPENAI_MODEL_MINI=gpt-5-mini,OPENAI_MODEL_NANO=gpt-5-nano,CHROMA_PERSIST_DIR=./chroma_db,LANGCHAIN_TRACING_V2=true,LANGCHAIN_PROJECT=cr8-prototype,MAX_WORKERS=12,VIDEO_MAX_WORKERS=6,VIDEO_PROVIDER=kokoro,COOKIE_SECURE=true"
 
     CPU_URL=$(gcloud run services describe "${CPU_SERVICE_NAME}" \
         --region="${REGION}" --format='value(status.url)')
@@ -268,5 +311,8 @@ fi
 if [[ "${DEPLOY_GPU}" == "true" ]]; then
     echo "GPU URL:         ${GPU_URL:-unknown} (private — CPU service auth only)"
     echo "GPU Fallback:    ${GPU_FALLBACK_URL:-unknown} (europe-west1, private)"
+fi
+if [[ "${DEPLOY_CPU_VIDEO}" == "true" ]]; then
+    echo "CPU Video:       ${CPU_VIDEO_URL:-unknown} (${REGION}, private)"
 fi
 echo "GCS Bucket: gs://${GCS_BUCKET}"
