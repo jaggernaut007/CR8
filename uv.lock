@@ -726,7 +726,7 @@ toml = [
 
 [[package]]
 name = "cr8-prototype"
-version = "0.5.1"
+version = "0.5.5"
 source = { editable = "." }
 dependencies = [
     { name = "asyncpg" },
@@ -737,7 +737,6 @@ dependencies = [
     { name = "google-cloud-storage" },
     { name = "gunicorn" },
     { name = "jinja2" },
-    { name = "kokoro" },
     { name = "langchain" },
     { name = "langchain-openai" },
     { name = "langchain-text-splitters" },
@@ -745,7 +744,6 @@ dependencies = [
     { name = "langsmith" },
     { name = "markdown" },
     { name = "matplotlib" },
-    { name = "moviepy" },
     { name = "pydantic-settings" },
     { name = "pyjwt" },
     { name = "pymupdf" },
@@ -753,7 +751,6 @@ dependencies = [
     { name = "python-multipart" },
     { name = "python-pptx" },
     { name = "requests" },
-    { name = "soundfile" },
     { name = "tavily-python" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -784,6 +781,11 @@ eval = [
     { name = "scipy" },
     { name = "tabulate" },
 ]
+video = [
+    { name = "kokoro" },
+    { name = "moviepy" },
+    { name = "soundfile" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -799,7 +801,7 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.100" },
     { name = "jinja2", specifier = ">=3.1" },
-    { name = "kokoro", specifier = ">=0.9" },
+    { name = "kokoro", marker = "extra == 'video'", specifier = ">=0.9" },
     { name = "langchain", specifier = ">=0.3" },
     { name = "langchain-openai", specifier = ">=0.3" },
     { name = "langchain-text-splitters", specifier = ">=0.3" },
@@ -812,7 +814,7 @@ requires-dist = [
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5,<10.0" },
     { name = "mkdocs-minify-plugin", marker = "extra == 'docs'", specifier = ">=0.8" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.24" },
-    { name = "moviepy", specifier = ">=2.0" },
+    { name = "moviepy", marker = "extra == 'video'", specifier = ">=2.0" },
     { name = "pydantic-settings", specifier = ">=2.0" },
     { name = "pyjwt", specifier = ">=2.8" },
     { name = "pymupdf", specifier = ">=1.24" },
@@ -828,13 +830,13 @@ requires-dist = [
     { name = "requests", specifier = ">=2.31" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5" },
     { name = "scipy", marker = "extra == 'eval'", specifier = ">=1.11" },
-    { name = "soundfile", specifier = ">=0.12" },
+    { name = "soundfile", marker = "extra == 'video'", specifier = ">=0.12" },
     { name = "syrupy", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "tabulate", marker = "extra == 'eval'", specifier = ">=0.9" },
     { name = "tavily-python", specifier = ">=0.5" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
 ]
-provides-extras = ["dev", "eval", "docs"]
+provides-extras = ["video", "dev", "eval", "docs"]
 
 [[package]]
 name = "cryptography"

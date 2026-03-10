@@ -15,7 +15,9 @@ COPY pyproject.toml uv.lock ./
 # Minimal source layout so uv can resolve the package
 COPY backend/__init__.py backend/__init__.py
 
-RUN uv sync --frozen --no-dev --no-editable
+# Install without video extras (kokoro/torch/moviepy ~3.5GB) —
+# video processing is offloaded to the GPU Cloud Run service.
+RUN uv sync --frozen --no-dev --no-editable --no-extra video
 
 
 # ---- Stage 2: Runtime ----

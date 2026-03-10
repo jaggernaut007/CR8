@@ -19,9 +19,6 @@ dependencies = [
     "jinja2>=3.1",
     "markdown>=3.6",
     "requests>=2.31",
-    "kokoro>=0.9",
-    "moviepy>=2.0",
-    "soundfile>=0.12",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.34",
     "python-multipart>=0.0.9",
@@ -33,6 +30,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+video = [
+    "kokoro>=0.9",
+    "moviepy>=2.0",
+    "soundfile>=0.12",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.5",
