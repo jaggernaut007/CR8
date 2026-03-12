@@ -1,0 +1,77 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type 'deploy' to confirm deployment to production"
+        required: true
+        type: string
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: cr8-learning
+  REGION: europe-west2
+  SERVICE: cr8-pipeline
+  REGISTRY: europe-west2-docker.pkg.dev/cr8-learning/cr8/cr8-pipeline
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require confirmation
+        if: inputs.confirm != 'deploy'
+        run: |
+          echo "::error::You must type 'deploy' to confirm. Got: '${{ inputs.confirm }}'"
+          exit 1
+
+  ci:
+    needs: guard
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1000325314523/locations/global/workloadIdentityPools/github-actions/providers/github-oidc
+          service_account: github-deploy@cr8-learning.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build image with Cloud Build
+        run: |
+          gcloud builds submit \
+            --project=${{ env.PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --tag="${{ env.REGISTRY }}:${{ github.sha }}" \
+            --tag="${{ env.REGISTRY }}:latest"
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --project=${{ env.PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --image="${{ env.REGISTRY }}:${{ github.sha }}" \
+            --quiet
+
+      - name: Verify deployment
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE }} \
+            --project=${{ env.PROJECT_ID }} \
+            --region=${{ env.REGION }} \
+            --format="value(status.url)")
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/login")
+          echo "Health check: $URL/login → HTTP $STATUS"
+          [ "$STATUS" -lt 500 ] || exit 1

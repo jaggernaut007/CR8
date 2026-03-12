@@ -1,3 +1,13 @@
+# ---- Stage 0: Frontend ----
+FROM node:22-slim AS frontend
+
+WORKDIR /app/frontend/react-app
+COPY frontend/react-app/package.json frontend/react-app/package-lock.json ./
+RUN npm ci
+COPY frontend/react-app/ ./
+RUN npm run build
+
+
 # ---- Stage 1: Builder ----
 FROM python:3.11-slim AS builder
 
@@ -42,6 +52,9 @@ WORKDIR /app
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
 COPY pyproject.toml ./
+
+# Copy built React SPA into frontend/static/ (enables SPA mode in frontend/app.py)
+COPY --from=frontend /app/frontend/react-app/dist/ ./frontend/static/
 
 # Create directories the app expects
 RUN mkdir -p uploads outputs chroma_db
