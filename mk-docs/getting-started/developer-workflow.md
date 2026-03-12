@@ -162,7 +162,7 @@ Run `/clear` after every commit to reset the Claude Code context window. Long co
 
 ## MCP Servers
 
-Claude Code connects to three MCP (Model Context Protocol) servers that extend agent capabilities beyond the codebase.
+Claude Code connects to MCP (Model Context Protocol) servers that extend agent capabilities beyond the codebase.
 
 ### Available MCPs
 
@@ -171,6 +171,8 @@ Claude Code connects to three MCP (Model Context Protocol) servers that extend a
 | **Context7** | Version-specific library docs (LangGraph, FastAPI, ChromaDB, python-pptx, fpdf2, MoviePy, PyMuPDF, 1000+) | `research-assistant`, `docs-writer` |
 | **Playwright** | Browser automation — navigate, click, snapshot, console/network inspection | `code-reviewer`, `debug-detective`, `docs-writer` |
 | **Sequential Thinking** | Structured step-by-step reasoning with branching and revision | `adr-writer`, `research-assistant`, `docs-writer` |
+| **CodeGrok** | Semantic code search via embeddings — find code by meaning, not keywords (10-100x token savings) | All agents |
+| **code-graph-mcp** | Structural code analysis — call graphs, imports, callers/callees, complexity, dependency maps | `code-reviewer`, `debug-detective`, `research-assistant` |
 
 ### When MCPs are used automatically
 
@@ -181,10 +183,12 @@ You don't need to call MCPs manually — agents invoke them at the right step:
 - **Debugging a UI bug?** `debug-detective` uses Playwright to check console errors and failed network requests.
 - **Writing an ADR?** `adr-writer` uses Sequential Thinking to reason through alternatives before drafting.
 - **Updating docs?** `docs-writer` uses Context7 to verify library API signatures are current. For new or significantly restructured pages, it uses Playwright to confirm the page renders correctly at localhost:8000. Sequential Thinking is available when a large change touches 5+ doc pages.
+- **Understanding codebase structure?** Any agent can use CodeGrok (`get_sources`) to find relevant code by meaning (e.g., "how does video pipeline work?") instead of loading entire files.
+- **Impact analysis before refactoring?** `code-reviewer` uses code-graph-mcp (`find_callers`, `dependency_analysis`, `complexity_analysis`) to understand what will break.
 
 ### Verify MCPs are connected
 
-At session start, run `/mcp` to check all three servers show green. If any are disconnected, re-add them:
+At session start, run `/mcp` to check all servers show green. If any are disconnected, re-add them:
 
 ```bash
 # Context7 (project-scoped)
@@ -197,8 +201,15 @@ claude mcp add playwright -- npx -y @playwright/mcp@latest
 claude mcp add --scope user sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking
 ```
 
+CodeGrok and code-graph-mcp are configured in `.claude/mcp.json` (project-scoped, auto-loaded).
+
+### Code Intelligence: Re-indexing
+
+- **code-graph-mcp**: Auto-reindexes on file changes via file watcher (2-second debounce). No manual action needed.
+- **CodeGrok**: Run `make reindex` after adding/removing files, or after merging branches with structural changes. Uses `learn` tool with `mode=auto` for incremental updates.
+
 !!! tip "MCPs require Node.js >= v18"
-    All three MCP servers run via npx. Ensure Node.js v18+ is installed.
+    Context7, Playwright, and Sequential Thinking run via npx. Ensure Node.js v18+ is installed. CodeGrok and code-graph-mcp are Python-based (3.10+).
 
 ---
 
@@ -460,6 +471,18 @@ The `docs-writer` agent reads your staged files, finds the corresponding `mk-doc
 ```
 
 Then start a fresh session with the session start prompt above.
+
+---
+
+## CI/CD
+
+CR8 uses GitHub Actions for CI and deployment. See the [Deployment Guide](../deployment/gcp-cloud-run.md#cicd-pipeline) for full details.
+
+**CI runs automatically** on every push to `main` and every PR — lint, pytest, and frontend build/vitest in parallel. All must pass.
+
+**Deployment is manual** — go to Actions → Deploy → Run workflow, type `deploy`, and confirm. The workflow builds via Cloud Build, deploys to Cloud Run, and health-checks the live URL.
+
+There are no service account keys in GitHub — authentication uses GCP Workload Identity Federation (OIDC).
 
 ---
 

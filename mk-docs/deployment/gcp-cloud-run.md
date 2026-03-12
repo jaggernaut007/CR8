@@ -87,6 +87,12 @@ echo -n 'sk-your-openai-key' | gcloud secrets create OPENAI_API_KEY \
 echo -n 'tvly-your-tavily-key' | gcloud secrets create TAVILY_API_KEY \
     --data-file=- --replication-policy=automatic
 
+echo -n 'postgresql://user:pass@host/db?sslmode=require' | gcloud secrets create DATABASE_URL \
+    --data-file=- --replication-policy=automatic
+
+echo -n "$(openssl rand -hex 32)" | gcloud secrets create JWT_SECRET \
+    --data-file=- --replication-policy=automatic
+
 # Optional (for video generation)
 echo -n 'your-heygen-key' | gcloud secrets create HEYGEN_API_KEY \
     --data-file=- --replication-policy=automatic
@@ -269,6 +275,8 @@ Injected from Secret Manager via `--set-secrets`:
 |--------|----------|-------------|
 | `OPENAI_API_KEY` | Yes | OpenAI API key |
 | `TAVILY_API_KEY` | Yes | Tavily web search key |
+| `DATABASE_URL` | Yes | Neon Postgres connection string (auth/jobs/quiz) |
+| `JWT_SECRET` | Yes | 32+ byte hex string for JWT token signing |
 | `HEYGEN_API_KEY` | No | HeyGen video generation key |
 
 ---
@@ -356,12 +364,82 @@ gcloud run services logs tail cr8-pipeline --region=europe-west2
 
 ---
 
+## CI/CD Pipeline
+
+CR8 uses **GitHub Actions** for continuous integration and deployment, with **GCP Workload Identity Federation** for keyless authentication (no service account JSON keys).
+
+### How It Works
+
+```
+PR or push to main
+  └── CI workflow (.github/workflows/ci.yml)
+        ├── lint (ruff check .)
+        ├── test (pytest)
+        └── frontend (npm build + vitest)
+
+Manual trigger (Actions → Deploy → Run workflow)
+  └── Deploy workflow (.github/workflows/deploy.yml)
+        ├── Guard (must type "deploy" to confirm)
+        ├── CI (full lint + test + frontend suite)
+        ├── Cloud Build (builds Docker image remotely)
+        ├── Deploy to Cloud Run
+        └── Health check (verifies /login returns < 500)
+```
+
+### CI — Automatic on Every Push/PR
+
+The CI workflow runs three parallel jobs:
+
+| Job | What It Does |
+|-----|-------------|
+| **lint** | `uv run ruff check .` |
+| **test** | `uv run pytest -v -x --tb=short` (fake API keys, no real calls) |
+| **frontend** | `npm ci && npm run build && npx vitest run` |
+
+All three must pass before a deploy is allowed.
+
+### Deploy — Manual with Confirmation
+
+Deployment is **never automatic**. To deploy:
+
+1. Go to **Actions → Deploy → Run workflow** on GitHub
+2. Type `deploy` in the confirmation field
+3. Click **Run workflow**
+
+The deploy job builds the Docker image via **Cloud Build** (no local Docker needed), deploys to Cloud Run, and verifies the service is healthy.
+
+### Authentication: Workload Identity Federation
+
+GitHub Actions authenticates to GCP using OIDC tokens — no service account keys stored in GitHub. The setup:
+
+- **Workload Identity Pool**: `github-actions` (global)
+- **OIDC Provider**: `github-oidc` (locked to `jaggernaut007/CR8`)
+- **Service Account**: `github-deploy@cr8-learning.iam.gserviceaccount.com`
+- **Roles**: Cloud Run Admin, Artifact Registry Writer, Cloud Build Editor, SA User, Storage Admin
+
+### Triggering a Deploy Locally
+
+You can still deploy from a local machine using the deploy script:
+
+```bash
+./deploy.sh cr8-learning --cpu
+```
+
+Or via Cloud Build directly (no local Docker required):
+
+```bash
+gcloud builds submit --project=cr8-learning --region=europe-west2 \
+  --tag="europe-west2-docker.pkg.dev/cr8-learning/cr8/cr8-pipeline:$(git rev-parse --short HEAD)" .
+gcloud run deploy cr8-pipeline --project=cr8-learning --region=europe-west2 \
+  --image="europe-west2-docker.pkg.dev/cr8-learning/cr8/cr8-pipeline:$(git rev-parse --short HEAD)"
+```
+
+---
+
 ## Future Enhancements
 
-These are not needed for the initial deployment but worth considering as usage grows:
+These are worth considering as usage grows:
 
-1. **CI/CD** — GitHub Actions pipeline to auto-deploy on push to main
-2. **Custom Domain** — Map a domain via `gcloud run domain-mappings create`
-3. **Authentication** — Add IAM or Identity-Aware Proxy to restrict access
-4. **Cloud Tasks** — Decouple job submission from execution for better reliability
-5. **Monitoring** — Set up Cloud Monitoring alerts for error rates and latency
+1. **Custom Domain** — Map a domain via `gcloud run domain-mappings create`
+2. **Cloud Tasks** — Decouple job submission from execution for better reliability
+3. **Monitoring** — Set up Cloud Monitoring alerts for error rates and latency

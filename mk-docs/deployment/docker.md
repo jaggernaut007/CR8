@@ -4,27 +4,32 @@ CR8 uses a multi-stage Docker build for efficient containerization. The resultin
 
 ## Dockerfile Overview
 
-The Dockerfile uses a **multi-stage build** based on `python:3.11-slim`:
+The Dockerfile uses a **3-stage build**:
 
 ```
-Stage 1: Builder
-├── Install build dependencies (gcc, etc.)
-├── Copy requirements and install Python packages
-└── Build wheels for all dependencies
+Stage 0: Frontend (node:22-slim)
+├── Copy package.json + package-lock.json
+├── npm ci (install Node dependencies)
+└── npm run build (Vite builds React SPA → dist/)
 
-Stage 2: Runtime
-├── Copy wheels from builder stage
+Stage 1: Builder (python:3.11-slim)
+├── Install build dependencies (gcc, etc.)
+├── Copy pyproject.toml + uv.lock
+└── uv sync (install Python packages)
+
+Stage 2: Runtime (python:3.11-slim)
+├── Copy Python venv from Builder
 ├── Install runtime-only system deps
 ├── Copy application source code
-├── Set up non-root user
+├── Copy built React SPA from Frontend → frontend/static/
 └── Configure Gunicorn + Uvicorn entrypoint
 ```
 
 ### Key Design Decisions
 
+- **Frontend built in Docker** — `frontend/static/` is gitignored, so the React SPA must be built during the image build. Stage 0 handles this automatically.
 - **`python:3.11-slim`** base image keeps the final image small (~500MB vs ~1.2GB for full Python images)
 - **Multi-stage build** separates build tools from runtime, reducing attack surface and image size
-- **Non-root user** for security best practices
 - **Gunicorn with Uvicorn workers** for production-grade async request handling
 
 ## Build Locally
