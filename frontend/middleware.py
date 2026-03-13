@@ -15,8 +15,6 @@ import time
 import jwt
 from fastapi import Request
 from fastapi.responses import JSONResponse, RedirectResponse
-from starlette.middleware.base import BaseHTTPMiddleware
-
 from backend.config import settings
 
 logger = logging.getLogger(__name__)
@@ -159,53 +157,91 @@ async def get_current_user(request: Request) -> dict | None:
 # Auth enforcement middleware (outermost — runs before routing)
 # ---------------------------------------------------------------------------
 
-class AuthMiddleware(BaseHTTPMiddleware):
-    """Block requests that lack a valid JWT or session, except public paths."""
+class AuthMiddleware:
+    """Block requests that lack a valid JWT or session, except public paths.
 
-    async def dispatch(self, request: Request, call_next):
+    Pure ASGI implementation — avoids ``BaseHTTPMiddleware``'s response body
+    buffering which corrupts ``Content-Length`` on ``FileResponse``.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
         """Check authentication for non-public paths."""
-        if request.url.path in _PUBLIC_PATHS:
-            return await call_next(request)
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-        # Allow static assets (SPA JS/CSS/images) and view routes
-        # (view routes use the unguessable short_id as a capability token;
-        # iframes, <video>, and <img> tags can't send Bearer headers)
-        if request.url.path.startswith(("/static/", "/assets/", "/api/view/")):
-            return await call_next(request)
+        request = Request(scope)
+        path = request.url.path
+
+        # Public paths, static assets, and view routes pass through
+        if (
+            path in _PUBLIC_PATHS
+            or path.startswith(("/static/", "/assets/", "/api/view/"))
+        ):
+            await self.app(scope, receive, send)
+            return
 
         user = await get_current_user(request)
         if user is not None:
             # Stash user info on request state for downstream routes
-            request.state.user = user
-            return await call_next(request)
+            scope.setdefault("state", {})
+            scope["state"]["user"] = user
+            await self.app(scope, receive, send)
+            return
 
-        # Not authenticated
-        if request.url.path.startswith("/api/"):
-            return JSONResponse({"error": "Authentication required"}, status_code=401)
-        return RedirectResponse(url="/login", status_code=302)
+        # Not authenticated — send error response directly
+        if path.startswith("/api/"):
+            response = JSONResponse({"error": "Authentication required"}, status_code=401)
+        else:
+            response = RedirectResponse(url="/login", status_code=302)
+        await response(scope, receive, send)
 
 
 # ---------------------------------------------------------------------------
 # Security headers middleware
 # ---------------------------------------------------------------------------
 
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Add security headers to all responses."""
+_SECURITY_HEADERS = [
+    (b"x-content-type-options", b"nosniff"),
+    # SAMEORIGIN allows our SPA to embed PDFs in iframes
+    (b"x-frame-options", b"SAMEORIGIN"),
+    (b"referrer-policy", b"strict-origin-when-cross-origin"),
+    (b"content-security-policy", (
+        b"default-src 'self'; "
+        b"script-src 'self' 'unsafe-inline'; "
+        b"style-src 'self' 'unsafe-inline'; "
+        b"img-src 'self' data:; "
+        b"font-src 'self'; "
+        b"media-src 'self'; "
+        b"frame-src 'self'"
+    )),
+]
 
-    async def dispatch(self, request: Request, call_next):
-        """Add security headers to the response."""
-        response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        # SAMEORIGIN allows our SPA to embed PDFs in iframes
-        response.headers["X-Frame-Options"] = "SAMEORIGIN"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; "
-            "font-src 'self'; "
-            "media-src 'self'; "
-            "frame-src 'self'"
-        )
-        return response
+
+class SecurityHeadersMiddleware:
+    """Add security headers to all responses.
+
+    Pure ASGI implementation — avoids ``BaseHTTPMiddleware``'s response body
+    buffering which corrupts ``Content-Length`` on ``FileResponse``.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        """Intercept response start to inject security headers."""
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                headers.extend(_SECURITY_HEADERS)
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)

@@ -216,7 +216,7 @@ async def update_job_result(
         "progress_pct = 100, updated_at = now(), completed_at = now() "
         "WHERE id = $7",
         status,
-        result_meta,
+        json.dumps(result_meta) if result_meta and isinstance(result_meta, (dict, list)) else result_meta,
         json.dumps(topics) if topics and isinstance(topics, (list, dict)) else topics,
         json.dumps(gap_summary) if gap_summary and isinstance(gap_summary, (list, dict)) else gap_summary,
         json.dumps(modules_md) if modules_md and isinstance(modules_md, (list, dict)) else modules_md,
