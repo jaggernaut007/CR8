@@ -6,7 +6,7 @@ Security controls implemented in CR8, from authentication to input validation to
 
 ## Authentication
 
-All routes except `/login`, `/api/auth/login`, and `/health` require a valid session. The enforcement layer is a Starlette `BaseHTTPMiddleware` registered as the outermost middleware — it intercepts every request before FastAPI's router.
+All routes except `/login`, `/api/auth/login`, `/api/auth/register`, `/api/auth/refresh`, and `/health` require a valid JWT or session. The enforcement layer is a pure ASGI middleware (`AuthMiddleware`) registered as the outermost middleware — it intercepts every request before FastAPI's router. The pure ASGI implementation avoids Starlette's `BaseHTTPMiddleware` response-body buffering, which caused `Content-Length` corruption on `FileResponse` (PDF/video streaming).
 
 ### How it works
 

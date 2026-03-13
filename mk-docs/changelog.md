@@ -2,6 +2,22 @@
 
 > **See also**: [Services Reference](services/index.md) and [Prompt Templates](agents/prompts.md) — Complete technical reference for all builders, prompts, and eval checks.
 
+## v0.5.5 — Production Bug Fixes (2026-03-13)
+
+### Fixed
+
+- **asyncpg DataError on job completion** — `result_meta` dict was passed raw to asyncpg which expects JSON strings for JSONB columns. Added `json.dumps()` serialization in `db_client.update_job_result()`, matching the pattern already used for `topics`, `gap_summary`, and `modules_md`. This caused `/api/progress` to return 500 after every successful pipeline run.
+- **Content-Length corruption on file serving** — Converted `AuthMiddleware` and `SecurityHeadersMiddleware` from Starlette `BaseHTTPMiddleware` to pure ASGI middleware. `BaseHTTPMiddleware` buffers and replays `FileResponse` bodies, which corrupted `Content-Length` headers when serving PDFs, slide images, and videos via `/api/view/` routes.
+
+### Changed
+
+| File | Change |
+|------|--------|
+| `backend/services/db_client.py` | `result_meta` now serialized with `json.dumps()` before passing to asyncpg |
+| `frontend/middleware.py` | Both middleware classes rewritten as pure ASGI (no `BaseHTTPMiddleware`) |
+
+---
+
 ## v0.5.4 — Quiz Agent + Quiz UI (2026-03-09)
 
 **Summary**: Adds a dedicated Quiz Agent LangGraph pipeline and a full edX-style quiz experience in the React SPA. The 4 previous 501 stub routes in `quiz_routes.py` are replaced with 5 real endpoints. The quiz flow is one-attempt, enforced at both the API and database layers. Questions carry Bloom's taxonomy labels and difficulty ratings. Test suite grew from 928 pytest / 81 Vitest / 10 E2E to **1063 pytest / 124 Vitest / 17 E2E = 1204 total**.

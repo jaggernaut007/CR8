@@ -86,7 +86,7 @@ Dockerized on GCP Cloud Run (europe-west2). Single container with Gunicorn + Uvi
 | PDF generation | fpdf2 | Compile learning guide PDF (rich text, code blocks) |
 | PPT generation | python-pptx | Gap analysis PowerPoint with severity badges |
 | Web framework | FastAPI + uvicorn | Async HTTP server for web UI |
-| Authentication | bcrypt + Starlette BaseHTTPMiddleware | Password auth, 256-bit server-side sessions, IP-based rate limiting |
+| Authentication | bcrypt + PyJWT + pure ASGI middleware | Dual auth (JWT primary + legacy session), IP-based rate limiting |
 | Concurrency | ThreadPoolExecutor | Parallel agent execution (max_workers=12, video_max_workers=12) |
 | Configuration | pydantic-settings | Type-safe env loading |
 | Eval framework | DeepSeek-V3 + structural checks | Two-layer quality evaluation (L1 free + L2 ~$0.02/run) |
