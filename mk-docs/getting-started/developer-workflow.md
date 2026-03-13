@@ -60,7 +60,7 @@ Read PROGRESS.md and summarise where we left off.
 ./scripts/init.sh
 ```
 
-`init.sh` verifies that the environment is healthy: dependencies installed, lint clean, all 626 tests passing. If any check fails, **fix it before starting new work**.
+`init.sh` verifies that the environment is healthy: dependencies installed, lint clean, all 1063 tests passing. If any check fails, **fix it before starting new work**.
 
 !!! warning "Never skip init.sh"
     Starting new work on top of a broken baseline compounds problems. If `init.sh` fails, treat fixing it as task zero.
@@ -171,8 +171,7 @@ Claude Code connects to MCP (Model Context Protocol) servers that extend agent c
 | **Context7** | Version-specific library docs (LangGraph, FastAPI, ChromaDB, python-pptx, fpdf2, MoviePy, PyMuPDF, 1000+) | `research-assistant`, `docs-writer` |
 | **Playwright** | Browser automation — navigate, click, snapshot, console/network inspection | `code-reviewer`, `debug-detective`, `docs-writer` |
 | **Sequential Thinking** | Structured step-by-step reasoning with branching and revision | `adr-writer`, `research-assistant`, `docs-writer` |
-| **CodeGrok** | Semantic code search via embeddings — find code by meaning, not keywords (10-100x token savings) | All agents |
-| **code-graph-mcp** | Structural code analysis — call graphs, imports, callers/callees, complexity, dependency maps | `code-reviewer`, `debug-detective`, `research-assistant` |
+| **Nexus-MCP** | Unified code intelligence — hybrid search (vector + BM25 + graph), structural analysis (callers, callees, impact, complexity), semantic memory. 15 tools, token-budgeted responses (summary/detailed/full). Replaces CodeGrok + code-graph-mcp. | All agents |
 
 ### When MCPs are used automatically
 
@@ -183,8 +182,8 @@ You don't need to call MCPs manually — agents invoke them at the right step:
 - **Debugging a UI bug?** `debug-detective` uses Playwright to check console errors and failed network requests.
 - **Writing an ADR?** `adr-writer` uses Sequential Thinking to reason through alternatives before drafting.
 - **Updating docs?** `docs-writer` uses Context7 to verify library API signatures are current. For new or significantly restructured pages, it uses Playwright to confirm the page renders correctly at localhost:8000. Sequential Thinking is available when a large change touches 5+ doc pages.
-- **Understanding codebase structure?** Any agent can use CodeGrok (`get_sources`) to find relevant code by meaning (e.g., "how does video pipeline work?") instead of loading entire files.
-- **Impact analysis before refactoring?** `code-reviewer` uses code-graph-mcp (`find_callers`, `dependency_analysis`, `complexity_analysis`) to understand what will break.
+- **Understanding codebase structure?** Any agent can use Nexus-MCP (`search`, `explain`) to find relevant code by meaning (e.g., "how does video pipeline work?") instead of loading entire files. Use `overview` or `architecture` for high-level project understanding.
+- **Impact analysis before refactoring?** `code-reviewer` uses Nexus-MCP (`find_callers`, `impact`, `analyze`) to understand what will break. The `impact` tool provides transitive change analysis across the call graph.
 
 ### Verify MCPs are connected
 
@@ -201,15 +200,14 @@ claude mcp add playwright -- npx -y @playwright/mcp@latest
 claude mcp add --scope user sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking
 ```
 
-CodeGrok and code-graph-mcp are configured in `.claude/mcp.json` (project-scoped, auto-loaded).
+Nexus-MCP is configured in `.claude/mcp.json` (project-scoped, auto-loaded). Install: `cd ~/dev/Nexus-MCP && ./setup.sh`
 
 ### Code Intelligence: Re-indexing
 
-- **code-graph-mcp**: Auto-reindexes on file changes via file watcher (2-second debounce). No manual action needed.
-- **CodeGrok**: Run `make reindex` after adding/removing files, or after merging branches with structural changes. Uses `learn` tool with `mode=auto` for incremental updates.
+- **Nexus-MCP**: Use the `index` tool to trigger incremental re-indexing after adding/removing files or merging branches. Only changed files are re-processed. Run `make reindex` for guidance.
 
 !!! tip "MCPs require Node.js >= v18"
-    Context7, Playwright, and Sequential Thinking run via npx. Ensure Node.js v18+ is installed. CodeGrok and code-graph-mcp are Python-based (3.10+).
+    Context7, Playwright, and Sequential Thinking run via npx. Ensure Node.js v18+ is installed. Nexus-MCP is Python-based (3.10+), installed at `~/dev/Nexus-MCP/`.
 
 ---
 
@@ -491,7 +489,7 @@ There are no service account keys in GitHub — authentication uses GCP Workload
 | Command | Description |
 |---------|-------------|
 | `make install` | Install all dependencies via `uv sync --all-extras` |
-| `make test` | Run the full 626-test suite with verbose output |
+| `make test` | Run the full 1063-test pytest suite with verbose output |
 | `make lint` | Run `ruff check .` — must be clean before committing |
 | `make lint-fix` | Run `ruff check . --fix` — auto-fix lint issues |
 | `make dev` | Start FastAPI + Uvicorn at http://localhost:8080 (all interfaces, hot-reload) |
@@ -517,7 +515,7 @@ Ruff will auto-fix most issues. Re-run `./scripts/init.sh` to confirm clean.
 
 ### `init.sh` fails at tests
 
-Read the test output carefully. Identify which test is failing and why. Fix the underlying code — do not modify test assertions to force a pass. Only start new work after all 626 tests are green.
+Read the test output carefully. Identify which test is failing and why. Fix the underlying code — do not modify test assertions to force a pass. Only start new work after all 1063 tests are green.
 
 ### Claude Code ignores your instructions
 
@@ -552,4 +550,4 @@ make install
 All LLMs, Tavily, and ChromaDB calls are mocked in tests. If a test is slow, it is likely making a real network call. Check that the test is using the shared fixtures from `conftest.py` and not bypassing mocks.
 
 !!! tip "Zero real API calls is a hard requirement"
-    The full 626-test suite runs in approximately 60 seconds with zero real API calls. Any test that hits a real endpoint is a bug in the test, not a valid slow test.
+    The full 1204-test suite (1063 pytest + 124 Vitest + 17 E2E) runs in approximately 32 seconds (pytest) with zero real API calls. Any test that hits a real endpoint is a bug in the test, not a valid slow test.

@@ -101,7 +101,7 @@ Auto-fix safe violations: `ruff check . --fix`
 - All external API calls mocked — zero real API calls in the test suite
 - Test naming: `test_[function]_[scenario]`
 - Use `hypothesis` for property-based testing, `syrupy` for snapshot regression
-- Run `make test` and read the output — all 687 tests must pass
+- Run `make test` and read the output — all 1063 tests must pass
 
 ## Workflow Before Committing
 
@@ -132,7 +132,7 @@ docs: update services/llm.md with new model routing table
 chore: bump langgraph to 0.2.x
 ```
 
-Include test counts in feat commits: `feat: add video script streaming (626 → 687 tests)`
+Include test counts in feat commits: `feat: add quiz agent pipeline (928 → 1063 tests)`
 
 ## Pull Request Checklist
 - [ ] `make lint` passes (ruff clean)
@@ -158,9 +158,7 @@ When `GPU_SERVICE_URL` is set, video rendering is offloaded to a GPU service (NV
 
 ## Frontend Development
 
-The current `frontend/` is a prototype FastAPI/HTML UI. A React frontend with glassmorphism design is planned for v0.5.
-Before starting frontend work, create `docs/research/frontend-framework.md` to document
-the chosen tech stack and check `docs/adr/` for prior decisions.
+The frontend is a React 19 SPA (Vite 7, Tailwind v4, glassmorphism design) served as static files by FastAPI. A Jinja2 fallback exists when the SPA is not built. See `docs/adr/ADR-010-react-spa-frontend.md` for architecture decisions.
 
 The frontend package is split into focused modules (Wave 3 restructure):
 
@@ -170,6 +168,6 @@ The frontend package is split into focused modules (Wave 3 restructure):
 | `frontend/middleware.py` | Auth enforcement, security headers, rate limiting, session store |
 | `frontend/auth_routes.py` | All `/api/auth/*` routes |
 | `frontend/job_routes.py` | All job management routes (`/api/upload`, `/api/start`, etc.) |
-| `frontend/quiz_routes.py` | Quiz stubs (501) — implement Phase 4 content here |
+| `frontend/quiz_routes.py` | All `/api/quiz/*` routes (start, question, answer, results, attempts) |
 
 When adding a new route, choose the appropriate sub-module rather than adding to `app.py`.

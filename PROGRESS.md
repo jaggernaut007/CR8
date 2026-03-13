@@ -3,9 +3,9 @@
      Updated at the end of every session using the session-handoff skill. -->
 
 ## Current Status
-**Last updated:** 2026-03-09
-**Overall project phase:** v0.5.4 complete — post-release E2E bug fixes applied (job normalisation, view route auth, DB result persistence, quiz idempotency)
-**Current version:** v0.5.4
+**Last updated:** 2026-03-13
+**Overall project phase:** v0.5.5 complete — production bug fixes (asyncpg DataError serialisation, Content-Length middleware corruption)
+**Current version:** v0.5.5
 
 ## Post-v0.5.4 E2E Bug Fix Session (2026-03-09)
 > Fixes discovered during end-to-end testing of the React SPA against the live FastAPI server.
@@ -61,7 +61,7 @@
 - Authentication (bcrypt session auth on all protected routes)
 - Docker + GCP Cloud Run deployment
 - Evaluation framework (L1 structural + L2 LLM judges, A/B comparison CLI)
-- MkDocs documentation site (55 pages, Material theme)
+- MkDocs documentation site (60 pages, Material theme)
 - Agent-readiness scaffolding complete (AGENTS.md, skills, hooks, rules, subagents)
 - **docs-writer agent expanded** — now covers 6 documentation layers (mk-docs, CHANGELOG, Loop Intelligence, AGENTS.md counts, PROGRESS.md, llms.txt); Playwright MCP for visual page verification; Sequential Thinking MCP for planning large updates
 - **Quiz Agent pipeline** — dedicated LangGraph workflow (`quiz_graph.py`) with `quiz_state.py` TypedDict, `agent_quiz.py`, and `backend/prompts/quiz.py` prompt constants; generates MCQs with Bloom's taxonomy labels, difficulty levels, and distractors

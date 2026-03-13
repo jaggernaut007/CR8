@@ -1,7 +1,7 @@
 # CR8 v0.4 → v1.0 — Roadmap & Detailed Plan
 
 ## Context
-CR8 is at v0.3.0 — clean baseline, 362 tests, ruff clean, no active work. The roadmap (Loop_Intelligence.md) defines three v0.3 features, but the user wants a revised execution plan with higher ambition on frontend polish, security hardening at every step, and commitizen semver (0.4, 0.5, 0.6).
+CR8 is at v0.5.5 (this roadmap was originally written at v0.3.0 — 362 tests. Current state: 1204 tests, ruff clean). The roadmap (Loop_Intelligence.md) defines three v0.3 features, but the user wants a revised execution plan with higher ambition on frontend polish, security hardening at every step, and commitizen semver (0.4, 0.5, 0.6).
 
 **Key decisions (confirmed):**
 - **Backend**: Python/FastAPI stays. No Node.js runtime. Node.js only at build time (Vite → static assets served by FastAPI).
@@ -203,7 +203,7 @@ Each phase follows the Wave Protocol from AGENTS.md. Agents run in strict order 
 
 **Wave 1: Vite + React scaffold + Tailwind + auth context + test tooling + dev intelligence**
 1. Add `pytest-randomly>=0.15` and `pytest-timeout>=2.2` to `pyproject.toml` dev deps; configure `timeout = 30` in `[tool.pytest.ini_options]`
-2. **Add CodeGrok MCP** to `.claude/mcp.json` — run initial index on `backend/` + `frontend/` (~2-5 min one-time). See `docs/research/code-intelligence-tools.md`.
+2. **Add Nexus-MCP** to `.claude/mcp.json` — run initial index on `backend/` + `frontend/` (~2-5 min one-time). See `docs/research/code-intelligence-tools.md`. *(DONE 2026-03-12 — replaces CodeGrok + code-graph-mcp)*
 3. **Add GitHub Projects V2 MCP** — create "v0.5.2" board, link existing issues. Configure with GitHub PAT in `.claude/mcp.json`.
 4. Document new MCPs in `CLAUDE.md` MCP Servers section
 5. `test-writer` — Vitest component tests for LoginPage, AuthContext
@@ -226,7 +226,7 @@ Each phase follows the Wave Protocol from AGENTS.md. Agents run in strict order 
 
 **MCP usage:**
 - **Context7**: React 19 hooks/context patterns, Vite config for FastAPI proxy, Tailwind v4 utility classes, React Router v7 createBrowserRouter
-- **CodeGrok**: semantic code search for "find all video-related code", "how does auth work" — replaces manual Grep + Read chains, 10x token savings
+- **Nexus-MCP**: hybrid code search for "find all video-related code", "how does auth work" — replaces manual Grep + Read chains, 10-100x token savings. Use `search`, `explain`, `find_callers`, `impact`.
 - **GitHub Projects V2**: query active sprint issues, link PRs to board, filter by phase/status
 - **Playwright**: verify each page renders at localhost:8080 after SPA integration — LoginPage, DashboardPage, UploadPage, ProgressPage; test dark mode toggle; test responsive layout
 - **Sequential Thinking**: reason through SPA routing strategy (hash vs browser router, FastAPI catch-all)
@@ -283,20 +283,21 @@ Each phase follows the Wave Protocol from AGENTS.md. Agents run in strict order 
 #### Post-v0.5.4 Research Sprint: Code Knowledge Graph + PM Tool Evaluation
 > **PRIORITY** — Run immediately after v0.5.4 ships. Both research streams inform tooling for v0.6+ and are prerequisites for implementation.
 
-**Stream 1: Code Knowledge Graph (for CR8 codebase understanding)**
+**Stream 1: Code Knowledge Graph — RESOLVED (2026-03-12)**
 
-Existing research: `docs/research/code-intelligence-tools.md` (2026-03-06), `docs/research/gitlab-knowledge-graph.md` (2026-03-06). Both need refreshing — tools have evolved since initial evaluation.
+**Decision:** Nexus-MCP installed and configured. Consolidates CodeGrok + code-graph-mcp into one unified server with hybrid search (vector+BM25+graph), structural analysis, and semantic memory. 15 tools, <350MB RAM, MIT licensed. See ADR-011 (updated).
 
-- `research-assistant` → **Refresh code-graph-mcp evaluation** (v1.2.0+ — check if Python 3.11 is now supported, ast-grep backend improvements, real-world benchmarks on ~20K LoC Python projects)
-- `research-assistant` → **Deep-dive codebase-memory-mcp** (Go binary, 35 languages, 99.2% token reduction claimed — verify with CR8-sized project, check MCP compatibility with Claude Code, security assessment)
-- `research-assistant` → **Re-evaluate Axon MCP** (KuzuDB vs Neo4j for CR8's scale, Python structural analysis quality, impact analysis accuracy on LangGraph codebases)
-- `research-assistant` → **Evaluate new entrants** (web search for code graph MCP tools released since March 2026 — the ecosystem moves fast)
-- **Hands-on trial**: Install top 2 candidates, index CR8 codebase, run 10 standard queries:
-  1. "What calls `build_videos()`?"
-  2. "What does `agent_generate.py` depend on?"
-  3. "Show me all ChromaDB usage"
-  4. "Impact of changing `PipelineState` schema"
-  5. "What services does `gpu_client.py` interact with?"
+Previous research: `docs/research/code-intelligence-tools.md` (2026-03-06), `docs/research/gitlab-knowledge-graph.md` (2026-03-06), `docs/research/axon-mcp.md`.
+
+- [x] Evaluate tools → Nexus-MCP chosen (superset of both predecessors)
+- [x] Install and configure (`.claude/mcp.json`)
+- [x] Update all docs (AGENTS.md, CLAUDE.md, ADR-011, agentic-guide, developer-workflow)
+- [ ] **Hands-on validation**: Index CR8 codebase, run 10 standard queries:
+  1. "What calls `build_videos()`?" → `find_callers`
+  2. "What does `agent_generate.py` depend on?" → `analyze`
+  3. "Show me all ChromaDB usage" → `search`
+  4. "Impact of changing `PipelineState` schema" → `impact`
+  5. "What services does `gpu_client.py` interact with?" → `find_callees`
   6. "Find all LangGraph node functions"
   7. "What routes call `db_client` functions?"
   8. "Show the import graph for `backend/pipeline/`"
@@ -318,13 +319,13 @@ Existing research: `docs/research/code-intelligence-tools.md` Category 2 (2026-0
 - **Deliverable**: `docs/research/pm-tool-evaluation.md` with scored comparison matrix and recommendation
 - **Decision criteria**: Must have working MCP or REST API, support bidirectional sync, and cost <$25/month for 2-person team
 
-**Timeline**: Both streams run in parallel. Results feed directly into v0.6 implementation — the winning PM tool replaces the current Notion-specific plan, and the winning code graph tool gets installed immediately.
+**Timeline**: Stream 1 is DONE (Nexus-MCP installed 2026-03-12). Stream 2 (PM tool) runs independently — the winning PM tool replaces the current Notion-specific plan.
 
 ---
 
 ### Foundation work
 - **MCP Phase 1+2 (config-only): COMPLETE** (2026-03-04, updated 2026-03-05) — Context7, Playwright, Sequential Thinking installed and wired into agents. GitHub MCP removed (unreliable). See `docs/research/mcp-dev-tools.md` and `PM-Docs/MCP_Integration_Plan.md`.
-- **Code Intelligence MCP (v0.5.2):** CodeGrok for semantic code search (10x token savings). Setup: `.claude/mcp.json` + one-time index. See `docs/research/code-intelligence-tools.md`.
+- **Code Intelligence MCP (v0.5.2):** Nexus-MCP for hybrid code search + structural analysis + semantic memory (10-100x token savings). Replaces CodeGrok + code-graph-mcp. Setup: `.claude/mcp.json` (DONE 2026-03-12). See ADR-011.
 - **GitHub Projects V2 MCP (v0.5.2):** Sprint board for active phases, linked to repo issues. See `docs/research/code-intelligence-tools.md`.
 - **MCP Phase 2 (code change): deferred here** — FastAPI-MCP mount in `frontend/app.py`. Use `fastmcp>=3.1` instead of `fastapi-mcp>=0.1` (see `PM-Docs/MCP_Integration_Plan.md` Research Findings).
 - ~~ADR-001: LangGraph pipeline architecture~~ → Repurposed as [ADR-001: Three-Tier Video Fallback](../docs/adr/ADR-001-three-tier-video-fallback.md) (completed v0.4.2)
@@ -597,7 +598,7 @@ Every feature follows Red → Green → Refactor. Tests written before implement
 9. **Pin ALL frontend deps in package.json** — Use exact versions (no `^` or `~`). React ecosystem moves fast; `^19.0.0` today might resolve to a breaking `19.1.0` next week.
 10. **Playwright E2E suite as regression gate** — After v0.5.2, add a `make e2e` target running 5-10 core Playwright scenarios (login → upload → progress → results → download). Run before every commit.
 11. **Token optimization discipline** — Use `/clear` between backend/frontend work sessions. Use Plan mode before any 5+ file change. Keep CLAUDE.md <500 lines (already done). Expected savings: 40-60% token reduction per session. See `docs/research/code-intelligence-tools.md`.
-12. **CodeGrok for code search** — Add CodeGrok MCP in Wave 1 alongside Vite scaffold. Semantic code search replaces manual Grep+Read chains. 10x token savings per query, 30-minute setup, MIT licensed, fully local.
+12. **Nexus-MCP for code intelligence** — DONE (2026-03-12). Unified hybrid search + structural analysis + semantic memory. Replaces CodeGrok + code-graph-mcp. 15 tools, 10-100x token savings, <350MB RAM, MIT licensed, fully local.
 
 **Architecture risks to address early:**
 - **SPA + FastAPI static serving** — Test the catch-all route early. React Router's browser history mode requires FastAPI to serve `index.html` for all non-API paths. Get this working in Wave 1 of v0.5.2.
@@ -623,7 +624,7 @@ Every feature follows Red → Green → Refactor. Tests written before implement
 - Research notes: `recharts.md`, `structured-logging-python.md`
 - **Research note (REQUIRED — completed in post-v0.5.4 research sprint):** `docs/research/pm-tool-evaluation.md` — comparative evaluation of Notion, GitHub Projects V2, Linear, Plane, and new entrants. Scored matrix on API quality, AI agent support, cost, sync capability, security.
 - Backfill remaining research notes: `fpdf2.md`, `python-pptx.md`, `chromadb.md`
-- **Code intelligence upgrade:** Evaluate code-graph-mcp for call graphs + dependency analysis (requires Python 3.12 upgrade decision). Evaluate Axon MCP if codebase exceeds 30K LoC. Review CodeGrok token savings metrics from v0.5 usage.
+- **Code intelligence:** DONE — Nexus-MCP installed (2026-03-12), consolidates CodeGrok + code-graph-mcp. Review Nexus-MCP token savings metrics from v0.5 usage. Re-evaluate if codebase exceeds 50K LoC.
 
 ### PM Tool Integration (developer workflow — NOT content source)
 > Winning tool from post-v0.5.4 research sprint. No content ingestion into the pipeline from PM tool.
@@ -1158,31 +1159,27 @@ Non-negotiable before any university pilot contract.
 > Research: `docs/research/code-intelligence-tools.md`, `docs/research/gitlab-knowledge-graph.md`
 > Summary: `PM-Docs/CODEBASE-INTELLIGENCE-SUMMARY.md`
 
-### v0.5.2 — Add Tools
-| Change | File | Impact |
-|--------|------|--------|
-| Add CodeGrok MCP (semantic code search) | `.claude/mcp.json` | 10x token savings per code query |
-| Add GitHub Projects V2 MCP (sprint tracking) | `.claude/mcp.json` | Replace markdown-grep with queryable board |
-| Document new MCPs | `CLAUDE.md` | Agent awareness |
-| Add token optimization guidelines | `mk-docs/getting-started/developer-workflow.md` | Team discipline |
+### v0.5.2 — Add Tools (DONE)
+| Change | File | Impact | Status |
+|--------|------|--------|--------|
+| Add Nexus-MCP (hybrid code intelligence) | `.claude/mcp.json` | 10-100x token savings per code query | DONE 2026-03-12 |
+| Add GitHub Projects V2 MCP (sprint tracking) | `.claude/mcp.json` | Replace markdown-grep with queryable board | TODO |
+| Document new MCPs | `CLAUDE.md`, `AGENTS.md`, ADR-011, all agent docs | Agent awareness | DONE 2026-03-12 |
+| Add token optimization guidelines | `mk-docs/getting-started/developer-workflow.md` | Team discipline | DONE |
 
-### Post-v0.5.4 — Research Sprint (Code Graph + PM Tool)
+### Post-v0.5.4 — Research Sprint (PM Tool Only)
 | Change | File | Impact |
 |--------|------|--------|
-| **Research: code-graph-mcp refresh** | `docs/research/code-knowledge-graph-eval.md` | Python 3.11 compat, benchmarks on CR8 |
-| **Research: codebase-memory-mcp deep-dive** | `docs/research/code-knowledge-graph-eval.md` | 99% token reduction claims verified |
-| **Research: Axon MCP re-evaluation** | `docs/research/code-knowledge-graph-eval.md` | KuzuDB vs Neo4j for CR8 scale |
-| **Research: new code graph entrants** | `docs/research/code-knowledge-graph-eval.md` | Ecosystem scan since March 2026 |
-| **Hands-on trial**: top 2 tools on CR8 | `.claude/mcp.json` | 10 standard queries benchmarked |
 | **Research: PM tool evaluation** (Notion vs alternatives) | `docs/research/pm-tool-evaluation.md` | Scored matrix: Notion, GitHub Projects, Linear, Plane, new entrants |
 
-### v0.6 — PM Tool + Code Graph Integration + Admin Dashboard
+> Code graph research is RESOLVED — Nexus-MCP chosen and installed (2026-03-12). See ADR-011.
+
+### v0.6 — PM Tool Integration + Admin Dashboard
 | Change | File | Impact |
 |--------|------|--------|
-| Install winning code graph MCP | `.claude/mcp.json` | >5x token savings on structural queries |
 | Implement `pm_client.py` + sync script (winner from research) | `backend/services/pm_client.py` | Queryable project tracking |
 | Sync job completions + sprint status to PM tool | `scripts/pm_sync.py` | Single source of truth for features |
-| Review token savings metrics from v0.5 | `PM-Docs/token-usage-report.md` | Data-driven tool decisions |
+| Review Nexus-MCP token savings metrics from v0.5 | `PM-Docs/token-usage-report.md` | Data-driven tool decisions |
 
 ### v0.7 — Knowledge Graph Research + Implementation
 | Change | File | Impact |
@@ -1217,9 +1214,9 @@ Non-negotiable before any university pilot contract.
 | Plane | PM | Plane Cloud matured; MCP support may exist now |
 | GitHub Projects V2 | PM | Status field API limitation may be resolved |
 | Notion | PM | Already connected via MCP; needs deeper API capability assessment |
-| code-graph-mcp | Code graph | Python 3.11 support? Benchmark on CR8 needed |
-| codebase-memory-mcp | Code graph | 99% token reduction claimed; never tested on CR8 |
-| Axon MCP | Code graph | KuzuDB option removes Neo4j overhead; re-evaluate for CR8 scale |
+| ~~code-graph-mcp~~ | Code graph | RESOLVED — replaced by Nexus-MCP (2026-03-12) |
+| ~~codebase-memory-mcp~~ | Code graph | RESOLVED — Nexus-MCP includes semantic memory |
+| ~~Axon MCP~~ | Code graph | RESOLVED — Nexus-MCP includes impact analysis |
 
 ---
 
@@ -1232,7 +1229,7 @@ v0.4.0  ← Kokoro TTS video pipeline (507 tests)
   v0.4.2  ← CPU video service, 3-tier fallback (626 tests)
 v0.5.0  ← React frontend + Quiz platform (IN PROGRESS)
   v0.5.1  ← dark mode, polish
-v0.6.0  ← Admin dashboard + feedback loop + Prompt v3 + SCORM + PM tool + code graph integration
+v0.6.0  ← Admin dashboard + feedback loop + Prompt v3 + SCORM + PM tool (code intelligence DONE via Nexus-MCP)
 v0.7.0  ← Student engagement (mind maps, flashcards, RAG chat) + Knowledge Graph
 v0.8.0  ← Production readiness (job queuing, TTS upgrade, eval datasets)
 v0.9.0  ← LMS & integration (LTI 1.3, avatar, WCAG, DPIA)

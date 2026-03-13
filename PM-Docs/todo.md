@@ -24,7 +24,7 @@
    - **Implemented (v0.4.0)**: Kokoro TTS local video pipeline — open-source, zero-cost. `VIDEO_PROVIDER=kokoro` chains: script parsing → Kokoro TTS (82M model, GPU-aware) → slide export (PyMuPDF/LibreOffice) → ffmpeg composition → MP4. Two-phase pipeline: sequential TTS → parallel ffmpeg. Hardware H.264 encoding (VideoToolbox/NVENC/QSV/AMF). GPU service offload via Cloud Run NVIDIA L4 + GCS data transfer. Videos are embeddable and downloadable. 507 tests passing.
 
 
-## Upcoming
+## Upcoming (v0.6+)
 
 6. ~~Create a quiz-based website for the content created by the agent~~ **DONE (v0.5.4)**
 7. Create a feedback loop for the agent to improve content based on quiz performance (→ v0.6)
@@ -41,3 +41,4 @@
 18. UI: Everystage has an eta and overall eta is present as well. We can also show the eta for each stage. This will help the users to understand how much time is left for the completion of the task.
 19. description on what its doing during progress. high level description of what the agent is doing during the progress. This will help the users to understand the process jsut be sure that its working well.
 20. Add estimated time for quiz generation and video generation. This will help the users to understand how much time is left for the completion of the task.
+21. video fps as 1 because its a slide based video. This will help to reduce the video size and also it will be easier to watch the video.
