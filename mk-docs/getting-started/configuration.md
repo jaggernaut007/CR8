@@ -62,10 +62,9 @@ HEYGEN_VOICE_ID=
 SYNTHESIA_API_KEY=
 SYNTHESIA_AVATAR_ID=
 
-# Video services — 3-tier fallback chain (leave empty to run locally)
+# Video services — 2-tier fallback chain (leave empty to run locally)
 GPU_SERVICE_URL=           # Tier 1: GPU primary  (europe-west4, NVIDIA L4)
-GPU_FALLBACK_URL=          # Tier 2: GPU fallback (europe-west1, NVIDIA L4)
-CPU_VIDEO_SERVICE_URL=     # Tier 3: CPU-only     (europe-west2, 8 vCPU / 32 GiB)
+CPU_VIDEO_SERVICE_URL=     # Tier 2: CPU-only     (europe-west2, 8 vCPU / 32 GiB)
 GCS_BUCKET=cr8-jobs        # shared GCS bucket for data transfer
 
 # Output formats — comma-separated: pdf, ppt, script, video
@@ -153,15 +152,14 @@ The vector database persists at this path between runs. Run `make clean` to wipe
 
 ### Video Service (3-Tier Fallback)
 
-Set these variables to offload TTS and video encoding to remote Cloud Run services instead of running locally. The pipeline tries each tier in order on infrastructure failures. When all three URLs are empty, video runs locally using the Kokoro pipeline.
+Set these variables to offload TTS and video encoding to remote Cloud Run services instead of running locally. The pipeline tries each tier in order on infrastructure failures. When both URLs are empty, video runs locally using the Kokoro pipeline.
 
-**Tier chain:** GPU Primary (europe-west4) → GPU Fallback (europe-west1) → CPU Video (europe-west2)
+**Tier chain:** GPU Primary (europe-west4) → CPU Video (europe-west2)
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `GPU_SERVICE_URL` | No | *(empty)* | GPU primary Cloud Run service URL (europe-west4, NVIDIA L4) |
-| `GPU_FALLBACK_URL` | No | *(empty)* | GPU fallback Cloud Run service URL (europe-west1, NVIDIA L4) |
-| `CPU_VIDEO_SERVICE_URL` | No | *(empty)* | CPU-only video service URL (europe-west2, 8 vCPU / 32 GiB). Tier 3 fallback. |
+| `CPU_VIDEO_SERVICE_URL` | No | *(empty)* | CPU-only video service URL (europe-west2, 8 vCPU / 32 GiB). Tier 2 fallback. |
 | `GCS_BUCKET` | No | `cr8-jobs` | GCS bucket used to transfer slide images and completed MP4s. Must be accessible from all services. |
 
 When any video service URL is set:

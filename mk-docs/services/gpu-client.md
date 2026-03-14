@@ -8,12 +8,11 @@ HTTP client for CR8 Cloud Run video generation services (GPU and CPU-video).
 
 ## Overview
 
-`VideoServiceClient` communicates with remote video microservices to offload video generation (TTS + ffmpeg) away from the main pipeline container. It implements a **3-tier fallback chain** — trying each tier in sequence on infrastructure failures until a job is accepted.
+`VideoServiceClient` communicates with remote video microservices to offload video generation (TTS + ffmpeg) away from the main pipeline container. It implements a **2-tier fallback chain** — trying each tier in sequence on infrastructure failures until a job is accepted.
 
 ```
 Tier 1: GPU Primary   (europe-west4, NVIDIA L4)
-Tier 2: GPU Fallback  (europe-west1, NVIDIA L4)
-Tier 3: CPU Video     (europe-west2, 8 vCPU / 32 GiB)
+Tier 2: CPU Video     (europe-west2, 8 vCPU / 32 GiB)
 ```
 
 `GPUVideoClient` is retained as a backward-compatible alias.
@@ -61,7 +60,6 @@ Uses Cloud Run identity tokens (OIDC) for service-to-service auth. Tokens are fe
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `GPU_SERVICE_URL` | *(empty)* | GPU primary service URL (europe-west4) |
-| `GPU_FALLBACK_URL` | *(empty)* | GPU fallback service URL (europe-west1) |
 | `CPU_VIDEO_SERVICE_URL` | *(empty)* | CPU-only video service URL (europe-west2) |
 | `GCS_BUCKET` | `cr8-jobs` | Shared GCS bucket for data transfer |
 

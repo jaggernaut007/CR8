@@ -105,7 +105,6 @@ class Settings(BaseSettings):
 
     # Video services (offload to Cloud Run GPU or CPU-video instances)
     gpu_service_url: str = ""         # GPU primary (europe-west4)
-    gpu_fallback_url: str = ""        # GPU fallback (europe-west1)
     cpu_video_service_url: str = ""   # CPU-only video service (europe-west2)
     gcs_bucket: str = "cr8-jobs"      # shared GCS bucket for data transfer
 

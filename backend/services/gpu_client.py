@@ -1,9 +1,8 @@
 """HTTP client for CR8 video generation services (GPU and CPU-video).
 
-Supports a 3-tier fallback chain:
+Supports a 2-tier fallback chain:
     Tier 1: GPU primary (europe-west4)
-    Tier 2: GPU fallback (europe-west1)
-    Tier 3: CPU-video (europe-west2)
+    Tier 2: CPU-video (europe-west2)
 
 Usage:
     from backend.services.gpu_client import VideoServiceClient
@@ -64,10 +63,9 @@ class VideoServiceClient:
     def __init__(
         self,
         base_url: str | None = None,
-        fallback_url: str | None = None,
         cpu_video_url: str | None = None,
     ):
-        self._tiers = _build_tier_list(base_url, fallback_url, cpu_video_url)
+        self._tiers = _build_tier_list(base_url, cpu_video_url)
         self._current_tier_idx = 0
         self.base_url = self._tiers[0] if self._tiers else ""
 
@@ -236,13 +234,11 @@ GPUVideoClient = VideoServiceClient
 
 def _build_tier_list(
     base_url: str | None,
-    fallback_url: str | None,
     cpu_video_url: str | None,
 ) -> list[str]:
     """Build an ordered list of service URLs, skipping empty values."""
     candidates = [
         (base_url or settings.gpu_service_url).rstrip("/"),
-        (fallback_url or settings.gpu_fallback_url).rstrip("/"),
         (cpu_video_url or settings.cpu_video_service_url).rstrip("/"),
     ]
     return [url for url in candidates if url]

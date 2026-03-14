@@ -1,4 +1,4 @@
-"""Tests for video service HTTP client (3-tier fallback).
+"""Tests for video service HTTP client (2-tier fallback: GPU → CPU-video).
 
 Optimized: all tests mock time.sleep and _get_identity_token to avoid
 real delays (~150s savings across the suite).
@@ -33,7 +33,6 @@ def video_client():
     """Create a VideoServiceClient with a single GPU tier."""
     with patch("backend.services.gpu_client.settings") as mock_settings:
         mock_settings.gpu_service_url = "https://cr8-gpu.example.com"
-        mock_settings.gpu_fallback_url = ""
         mock_settings.cpu_video_service_url = ""
         from backend.services.gpu_client import VideoServiceClient
 
@@ -41,17 +40,15 @@ def video_client():
 
 
 @pytest.fixture()
-def three_tier_client():
-    """Create a VideoServiceClient with all 3 tiers configured."""
+def two_tier_client():
+    """Create a VideoServiceClient with GPU + CPU-video tiers."""
     with patch("backend.services.gpu_client.settings") as mock_settings:
         mock_settings.gpu_service_url = "https://gpu1.example.com"
-        mock_settings.gpu_fallback_url = "https://gpu2.example.com"
         mock_settings.cpu_video_service_url = "https://cpu-video.example.com"
         from backend.services.gpu_client import VideoServiceClient
 
         return VideoServiceClient(
             base_url="https://gpu1.example.com",
-            fallback_url="https://gpu2.example.com",
             cpu_video_url="https://cpu-video.example.com",
         )
 
@@ -72,16 +69,15 @@ class TestIsAvailable:
             mock_req.get.side_effect = ConnectionError("refused")
             assert video_client.is_available() is False
 
-    def test_tries_all_tiers(self, three_tier_client):
-        """Falls through GPU1 and GPU2 to CPU-video."""
+    def test_tries_all_tiers(self, two_tier_client):
+        """Falls through GPU to CPU-video."""
         with patch("backend.services.gpu_client.requests") as mock_req:
             mock_req.get.side_effect = [
                 ConnectionError("gpu1 down"),
-                ConnectionError("gpu2 down"),
                 MagicMock(status_code=200),
             ]
-            assert three_tier_client.is_available() is True
-            assert three_tier_client.base_url == "https://cpu-video.example.com"
+            assert two_tier_client.is_available() is True
+            assert two_tier_client.base_url == "https://cpu-video.example.com"
 
 
 class TestSubmitJob:
@@ -109,8 +105,8 @@ class TestSubmitJob:
             with pytest.raises(Exception, match="403"):
                 video_client.submit_job("abc", "gs://bucket/abc")
 
-    def test_fallback_to_tier_2_on_connection_error(self, three_tier_client):
-        """GPU1 fails, GPU2 succeeds."""
+    def test_fallback_to_cpu_on_gpu_failure(self, two_tier_client):
+        """GPU fails, CPU-video succeeds."""
         with patch("backend.services.gpu_client.requests") as mock_req:
             mock_req.ConnectionError = req_lib.ConnectionError
             mock_req.Timeout = req_lib.Timeout
@@ -118,33 +114,14 @@ class TestSubmitJob:
             ok_resp = MagicMock()
             ok_resp.json.return_value = {"video_job_id": "vj_x_123", "status": "accepted"}
             ok_resp.raise_for_status = MagicMock()
-            mock_req.post.side_effect = [req_lib.ConnectionError("gpu1 down"), ok_resp]
+            mock_req.post.side_effect = [req_lib.ConnectionError("gpu down"), ok_resp]
 
-            result = three_tier_client.submit_job("x", "gs://b/x")
+            result = two_tier_client.submit_job("x", "gs://b/x")
             assert result == "vj_x_123"
-            assert three_tier_client.base_url == "https://gpu2.example.com"
+            assert two_tier_client.base_url == "https://cpu-video.example.com"
 
-    def test_fallback_to_tier_3_on_all_gpu_failure(self, three_tier_client):
-        """Both GPUs fail, CPU-video succeeds."""
-        with patch("backend.services.gpu_client.requests") as mock_req:
-            mock_req.ConnectionError = req_lib.ConnectionError
-            mock_req.Timeout = req_lib.Timeout
-            mock_req.HTTPError = req_lib.HTTPError
-            ok_resp = MagicMock()
-            ok_resp.json.return_value = {"video_job_id": "vj_y_456", "status": "accepted"}
-            ok_resp.raise_for_status = MagicMock()
-            mock_req.post.side_effect = [
-                req_lib.ConnectionError("gpu1 down"),
-                req_lib.ConnectionError("gpu2 down"),
-                ok_resp,
-            ]
-
-            result = three_tier_client.submit_job("y", "gs://b/y")
-            assert result == "vj_y_456"
-            assert three_tier_client.base_url == "https://cpu-video.example.com"
-
-    def test_raises_when_all_tiers_fail(self, three_tier_client):
-        """All 3 tiers fail — raises the last exception."""
+    def test_raises_when_all_tiers_fail(self, two_tier_client):
+        """Both tiers fail — raises the last exception."""
         with patch("backend.services.gpu_client.requests") as mock_req:
             mock_req.ConnectionError = req_lib.ConnectionError
             mock_req.Timeout = req_lib.Timeout
@@ -152,7 +129,7 @@ class TestSubmitJob:
             mock_req.post.side_effect = req_lib.ConnectionError("all down")
 
             with pytest.raises(req_lib.ConnectionError, match="all down"):
-                three_tier_client.submit_job("z", "gs://b/z")
+                two_tier_client.submit_job("z", "gs://b/z")
 
 
 # ---------------------------------------------------------------------------
@@ -482,7 +459,6 @@ class TestBackwardCompat:
     def test_gpu_video_client_alias_exists(self):
         with patch("backend.services.gpu_client.settings") as mock_settings:
             mock_settings.gpu_service_url = "https://gpu.example.com"
-            mock_settings.gpu_fallback_url = ""
             mock_settings.cpu_video_service_url = ""
             from backend.services.gpu_client import GPUVideoClient, VideoServiceClient
 
@@ -493,48 +469,43 @@ class TestTierList:
     def test_empty_urls_filtered_out(self):
         with patch("backend.services.gpu_client.settings") as mock_settings:
             mock_settings.gpu_service_url = "https://gpu.example.com"
-            mock_settings.gpu_fallback_url = ""
             mock_settings.cpu_video_service_url = ""
             from backend.services.gpu_client import _build_tier_list
 
-            tiers = _build_tier_list("https://gpu.example.com", "", "")
+            tiers = _build_tier_list("https://gpu.example.com", "")
             assert len(tiers) == 1
             assert tiers[0] == "https://gpu.example.com"
 
-    def test_all_three_tiers(self):
+    def test_both_tiers(self):
         with patch("backend.services.gpu_client.settings") as mock_settings:
             mock_settings.gpu_service_url = ""
-            mock_settings.gpu_fallback_url = ""
             mock_settings.cpu_video_service_url = ""
             from backend.services.gpu_client import _build_tier_list
 
             tiers = _build_tier_list(
                 "https://gpu1.example.com",
-                "https://gpu2.example.com",
                 "https://cpu.example.com",
             )
-            assert len(tiers) == 3
+            assert len(tiers) == 2
 
     def test_strips_trailing_slash(self):
         """Trailing slashes on URLs are stripped so requests don't get double-slash paths."""
         with patch("backend.services.gpu_client.settings") as mock_settings:
             mock_settings.gpu_service_url = ""
-            mock_settings.gpu_fallback_url = ""
             mock_settings.cpu_video_service_url = ""
             from backend.services.gpu_client import _build_tier_list
 
-            tiers = _build_tier_list("https://gpu.example.com/", "", "")
+            tiers = _build_tier_list("https://gpu.example.com/", "")
             assert tiers[0] == "https://gpu.example.com"
 
     def test_only_cpu_video_url_set(self):
         """A client configured with only a CPU-video URL has exactly one tier."""
         with patch("backend.services.gpu_client.settings") as mock_settings:
             mock_settings.gpu_service_url = ""
-            mock_settings.gpu_fallback_url = ""
             mock_settings.cpu_video_service_url = ""
             from backend.services.gpu_client import _build_tier_list
 
-            tiers = _build_tier_list(None, None, "https://cpu.example.com")
+            tiers = _build_tier_list(None, "https://cpu.example.com")
             assert len(tiers) == 1
             assert tiers[0] == "https://cpu.example.com"
 
@@ -542,11 +513,10 @@ class TestTierList:
         """When all arguments are None, tiers are built from settings values."""
         with patch("backend.services.gpu_client.settings") as mock_settings:
             mock_settings.gpu_service_url = "https://from-settings.example.com"
-            mock_settings.gpu_fallback_url = ""
             mock_settings.cpu_video_service_url = ""
             from backend.services.gpu_client import _build_tier_list
 
-            tiers = _build_tier_list(None, None, None)
+            tiers = _build_tier_list(None, None)
             assert len(tiers) == 1
             assert tiers[0] == "https://from-settings.example.com"
 
@@ -556,14 +526,13 @@ class TestTryNextTier:
         """_try_next_tier returns False when already on the only tier."""
         assert video_client._try_next_tier() is False
 
-    def test_returns_true_and_advances_on_three_tier_client(self, three_tier_client):
-        """_try_next_tier advances to tier 2 and returns True."""
-        advanced = three_tier_client._try_next_tier()
+    def test_returns_true_and_advances_on_two_tier_client(self, two_tier_client):
+        """_try_next_tier advances to CPU-video tier and returns True."""
+        advanced = two_tier_client._try_next_tier()
         assert advanced is True
-        assert three_tier_client.base_url == "https://gpu2.example.com"
+        assert two_tier_client.base_url == "https://cpu-video.example.com"
 
-    def test_returns_false_when_already_on_last_tier(self, three_tier_client):
+    def test_returns_false_when_already_on_last_tier(self, two_tier_client):
         """_try_next_tier returns False when already on the last configured tier."""
-        three_tier_client._try_next_tier()  # -> tier 2
-        three_tier_client._try_next_tier()  # -> tier 3
-        assert three_tier_client._try_next_tier() is False
+        two_tier_client._try_next_tier()  # -> cpu-video
+        assert two_tier_client._try_next_tier() is False

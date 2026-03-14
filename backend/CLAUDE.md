@@ -26,7 +26,7 @@ One file per external integration. Never add external API calls anywhere else:
 - `tts_engine.py` — Kokoro TTS wrapper with lazy model loading, GPU-aware device selection
 - `gpu_utils.py` — GPU/hardware detection: torch device selection, ffmpeg encoder probing
 - `gcs_client.py` — GCS upload/download for CPU↔video-service data transfer
-- `gpu_client.py` — `VideoServiceClient`: 3-tier fallback HTTP client (GPU Primary → GPU Fallback → CPU Video). `GPUVideoClient` is a backward-compatible alias. Fallback triggers on `ConnectionError`, `Timeout`, or 5xx only — not on job-level errors.
+- `gpu_client.py` — `VideoServiceClient`: 2-tier fallback HTTP client (GPU Primary → CPU Video). `GPUVideoClient` is a backward-compatible alias. Fallback triggers on `ConnectionError`, `Timeout`, or 5xx only — not on job-level errors.
 
 ### Prompts (backend/prompts/)
 All prompt strings are Python constants — never put prompts inline in agents or services:

@@ -54,7 +54,7 @@ npx vitest run  # 124 Vitest component tests (from frontend/react-app/)
 - **Multi-model routing** — GPT-5-nano (extraction), GPT-5-mini (analysis), GPT-5.1 (generation) with severity-based routing
 - **Chained outputs** — PDF → PPT → Scripts → Videos (MP4), each building on the previous
 - **Kokoro TTS video pipeline** — Open-source voiceover + slide backgrounds → rendered MP4 videos at zero API cost
-- **3-tier video fallback** — GPU Primary (europe-west4) → GPU Fallback (europe-west1) → CPU Video (europe-west2)
+- **2-tier video fallback** — GPU Primary (europe-west4) → CPU Video (europe-west2)
 - **React SPA frontend** — React 19 + Vite 7 + Tailwind v4 + Tanstack Query, all pages wired to real API
 - **Content viewers** — Inline PDF iframe, PPT slide carousel with keyboard navigation, HTML5 video player
 - **Quiz platform** — On-demand MCQ generation (Bloom's taxonomy, difficulty distribution, gap targeting), one-attempt scoring with per-question feedback

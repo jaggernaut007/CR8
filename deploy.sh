@@ -22,10 +22,7 @@ CPU_VIDEO_SERVICE_NAME="cr8-cpu-video"
 REPO_NAME="cr8"
 
 # GPU-enabled regions — europe-west4 (Netherlands) has L4 quota=3
-# europe-west1 had allocation failures in the past; used as fallback
 GPU_REGION="europe-west4"
-GPU_FALLBACK_REGION="europe-west1"
-GPU_FALLBACK_SERVICE_NAME="cr8-gpu-fallback"
 
 # ── Parse arguments ───────────────────────────────────────────────
 DEPLOY_CPU=true
@@ -60,10 +57,8 @@ fi
 
 REGISTRY="${REGION}-docker.pkg.dev"
 GPU_REGISTRY="${GPU_REGION}-docker.pkg.dev"
-GPU_FALLBACK_REGISTRY="${GPU_FALLBACK_REGION}-docker.pkg.dev"
 CPU_IMAGE="${REGISTRY}/${PROJECT_ID}/${REPO_NAME}/${CPU_SERVICE_NAME}"
 GPU_IMAGE="${GPU_REGISTRY}/${PROJECT_ID}/${REPO_NAME}/${GPU_SERVICE_NAME}"
-GPU_FALLBACK_IMAGE="${GPU_FALLBACK_REGISTRY}/${PROJECT_ID}/${REPO_NAME}/${GPU_FALLBACK_SERVICE_NAME}"
 CPU_VIDEO_IMAGE="${REGISTRY}/${PROJECT_ID}/${REPO_NAME}/${CPU_VIDEO_SERVICE_NAME}"
 TAG="$(git rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)"
 GCS_BUCKET="cr8-jobs-${PROJECT_ID}"
@@ -100,14 +95,6 @@ if [[ "${RUN_SETUP}" == "true" ]]; then
             --location="${GPU_REGION}" \
             --description="CR8 GPU service container images" \
             2>/dev/null || echo "    (${GPU_REGION} repository already exists)"
-    fi
-
-    if [[ "${GPU_FALLBACK_REGION}" != "${REGION}" && "${GPU_FALLBACK_REGION}" != "${GPU_REGION}" ]]; then
-        gcloud artifacts repositories create "${REPO_NAME}" \
-            --repository-format=docker \
-            --location="${GPU_FALLBACK_REGION}" \
-            --description="CR8 GPU fallback service container images" \
-            2>/dev/null || echo "    (${GPU_FALLBACK_REGION} repository already exists)"
     fi
 
     echo "==> Creating GCS bucket for CPU↔GPU data transfer..."
@@ -153,11 +140,6 @@ if [[ "${RUN_SETUP}" == "true" ]]; then
     echo "    --role=\"roles/run.invoker\" \\"
     echo "    --region=${GPU_REGION}"
     echo ""
-    echo "  gcloud run services add-iam-policy-binding ${GPU_FALLBACK_SERVICE_NAME} \\"
-    echo "    --member=\"serviceAccount:\${SA}\" \\"
-    echo "    --role=\"roles/run.invoker\" \\"
-    echo "    --region=${GPU_FALLBACK_REGION}"
-    echo ""
     echo "Setup complete. Run ./deploy.sh ${PROJECT_ID} to deploy both services."
     exit 0
 fi
@@ -193,38 +175,6 @@ if [[ "${DEPLOY_GPU}" == "true" ]]; then
         --region="${GPU_REGION}" --format='value(status.url)')
     echo ""
     echo "GPU service deployed: ${GPU_URL}"
-    echo ""
-
-    # ── Deploy GPU fallback to europe-west1 ──
-    echo "==> Configuring Docker for GPU fallback Artifact Registry..."
-    gcloud auth configure-docker "${GPU_FALLBACK_REGISTRY}" --quiet
-
-    echo "==> Pushing GPU image to fallback registry (${GPU_FALLBACK_REGION})..."
-    docker tag "${GPU_IMAGE}:${TAG}" "${GPU_FALLBACK_IMAGE}:${TAG}"
-    docker push "${GPU_FALLBACK_IMAGE}:${TAG}"
-
-    echo "==> Deploying GPU fallback service to Cloud Run (${GPU_FALLBACK_REGION})..."
-    gcloud run deploy "${GPU_FALLBACK_SERVICE_NAME}" \
-        --image="${GPU_FALLBACK_IMAGE}:${TAG}" \
-        --region="${GPU_FALLBACK_REGION}" \
-        --platform=managed \
-        --no-allow-unauthenticated \
-        --port=8080 \
-        --memory=16Gi \
-        --cpu=4 \
-        --gpu=1 \
-        --gpu-type=nvidia-l4 \
-        --timeout=3600 \
-        --min-instances=0 \
-        --max-instances=1 \
-        --no-cpu-throttling \
-        --set-secrets="HF_TOKEN=HF_TOKEN:latest" \
-        --set-env-vars="GCS_BUCKET=${GCS_BUCKET},VIDEO_DEVICE=auto,VIDEO_MAX_WORKERS=6,KOKORO_VOICE=af_heart,KOKORO_LANG=a,VIDEO_FPS=2"
-
-    GPU_FALLBACK_URL=$(gcloud run services describe "${GPU_FALLBACK_SERVICE_NAME}" \
-        --region="${GPU_FALLBACK_REGION}" --format='value(status.url)')
-    echo ""
-    echo "GPU fallback deployed: ${GPU_FALLBACK_URL}"
     echo ""
 fi
 
@@ -271,8 +221,6 @@ if [[ "${DEPLOY_CPU}" == "true" ]]; then
     # Get video service URLs for injection
     GPU_URL=$(gcloud run services describe "${GPU_SERVICE_NAME}" \
         --region="${GPU_REGION}" --format='value(status.url)' 2>/dev/null || echo "")
-    GPU_FALLBACK_URL=$(gcloud run services describe "${GPU_FALLBACK_SERVICE_NAME}" \
-        --region="${GPU_FALLBACK_REGION}" --format='value(status.url)' 2>/dev/null || echo "")
     CPU_VIDEO_URL=$(gcloud run services describe "${CPU_VIDEO_SERVICE_NAME}" \
         --region="${REGION}" --format='value(status.url)' 2>/dev/null || echo "")
 
@@ -294,7 +242,7 @@ if [[ "${DEPLOY_CPU}" == "true" ]]; then
         --max-instances=1 \
         --no-cpu-throttling \
         --set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest,TAVILY_API_KEY=TAVILY_API_KEY:latest,AUTH_PASSWORD=AUTH_PASSWORD:latest,HF_TOKEN=HF_TOKEN:latest,HEYGEN_API_KEY=HEYGEN_API_KEY:latest,LANGCHAIN_API_KEY=LANGCHAIN_API_KEY:latest" \
-        --set-env-vars="GPU_SERVICE_URL=${GPU_URL},GPU_FALLBACK_URL=${GPU_FALLBACK_URL},CPU_VIDEO_SERVICE_URL=${CPU_VIDEO_URL},GCS_BUCKET=${GCS_BUCKET},OPENAI_MODEL=gpt-5.1,OPENAI_MODEL_PREMIUM=gpt-5.1,OPENAI_MODEL_MINI=gpt-5-mini,OPENAI_MODEL_NANO=gpt-5-nano,CHROMA_PERSIST_DIR=./chroma_db,LANGCHAIN_TRACING_V2=true,LANGCHAIN_PROJECT=cr8-prototype,MAX_WORKERS=12,VIDEO_MAX_WORKERS=6,VIDEO_PROVIDER=kokoro,COOKIE_SECURE=true"
+        --set-env-vars="GPU_SERVICE_URL=${GPU_URL},CPU_VIDEO_SERVICE_URL=${CPU_VIDEO_URL},GCS_BUCKET=${GCS_BUCKET},OPENAI_MODEL=gpt-5.1,OPENAI_MODEL_PREMIUM=gpt-5.1,OPENAI_MODEL_MINI=gpt-5-mini,OPENAI_MODEL_NANO=gpt-5-nano,CHROMA_PERSIST_DIR=./chroma_db,LANGCHAIN_TRACING_V2=true,LANGCHAIN_PROJECT=cr8-prototype,MAX_WORKERS=12,VIDEO_MAX_WORKERS=6,VIDEO_PROVIDER=kokoro,COOKIE_SECURE=true"
 
     CPU_URL=$(gcloud run services describe "${CPU_SERVICE_NAME}" \
         --region="${REGION}" --format='value(status.url)')
@@ -310,7 +258,6 @@ if [[ "${DEPLOY_CPU}" == "true" ]]; then
 fi
 if [[ "${DEPLOY_GPU}" == "true" ]]; then
     echo "GPU URL:         ${GPU_URL:-unknown} (private — CPU service auth only)"
-    echo "GPU Fallback:    ${GPU_FALLBACK_URL:-unknown} (europe-west1, private)"
 fi
 if [[ "${DEPLOY_CPU_VIDEO}" == "true" ]]; then
     echo "CPU Video:       ${CPU_VIDEO_URL:-unknown} (${REGION}, private)"
