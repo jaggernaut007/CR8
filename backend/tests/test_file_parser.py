@@ -1,9 +1,11 @@
 import os
+import tempfile
 from unittest.mock import patch
 
 import pytest
 
 from backend.services.file_parser import export_slides_as_images, extract_text
+from backend.services.file_parser import _validate_output_dir
 
 
 def test_extract_text_from_pdf(single_slide_pdf):
@@ -106,17 +108,28 @@ class TestExportSlidesAsImages:
         with pytest.raises(ValueError, match="Path traversal"):
             export_slides_as_images(single_slide_pdf, "/etc/evil_dir")
 
-    def test_pptx_without_libreoffice(self, tmp_path):
-        """PPTX export gracefully fails when LibreOffice is not available."""
+    def test_pptx_without_libreoffice_binary(self, tmp_path):
+        """shutil.which guard raises RuntimeError when libreoffice is absent."""
         pptx_path = str(tmp_path / "test.pptx")
         with open(pptx_path, "wb") as f:
             f.write(b"fake-pptx")
 
-        with patch("backend.services.file_parser.subprocess.run") as mock_run:
+        with patch("backend.services.file_parser.shutil.which", return_value=None), \
+             pytest.raises(RuntimeError, match="libreoffice is not installed"):
+            export_slides_as_images(pptx_path, str(tmp_path / "out"))
+
+    def test_pptx_libreoffice_conversion_fails(self, tmp_path):
+        """PPTX export raises RuntimeError when LibreOffice exits non-zero."""
+        pptx_path = str(tmp_path / "test.pptx")
+        with open(pptx_path, "wb") as f:
+            f.write(b"fake-pptx")
+
+        with patch("backend.services.file_parser.shutil.which", return_value="/usr/bin/libreoffice"), \
+             patch("backend.services.file_parser.subprocess.run") as mock_run:
             mock_run.return_value = type("Result", (), {
-                "returncode": 1, "stderr": b"command not found"
+                "returncode": 1, "stderr": b"conversion failed"
             })()
-            with pytest.raises(RuntimeError, match="LibreOffice"):
+            with pytest.raises(RuntimeError, match="conversion failed"):
                 export_slides_as_images(pptx_path, str(tmp_path / "out"))
 
     def test_export_creates_output_dir(self, single_slide_pdf, tmp_path):
@@ -145,3 +158,92 @@ class TestExportSlidesAsImages:
         assert len(paths) == 1
         with Image.open(paths[0]) as img:
             assert img.size == (1920, 1080), f"Expected 1920x1080, got {img.size}"
+
+
+# ---------------------------------------------------------------------------
+# _validate_output_dir — edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestValidateOutputDir:
+    """Direct unit tests for the path-traversal guard in _validate_output_dir."""
+
+    def test_tmp_path_is_allowed(self, tmp_path):
+        """A path inside tempfile.gettempdir() must not raise."""
+        sub = str(tmp_path / "sub")
+        # Should not raise — tmp_path is inside the system temp dir
+        _validate_output_dir(sub)
+
+    def test_cwd_subdir_is_allowed(self, tmp_path, monkeypatch):
+        """A path inside the working directory must be accepted."""
+        monkeypatch.chdir(tmp_path)
+        allowed = str(tmp_path / "outputs" / "slides")
+        _validate_output_dir(allowed)  # must not raise
+
+    def test_cwd_itself_is_allowed(self, tmp_path, monkeypatch):
+        """Passing the cwd itself (not a subdirectory) is explicitly allowed."""
+        monkeypatch.chdir(tmp_path)
+        _validate_output_dir(str(tmp_path))  # must not raise
+
+    def test_system_tmp_itself_is_allowed(self):
+        """The system temp root is an explicitly allowed base."""
+        tmp = os.path.realpath(tempfile.gettempdir())
+        _validate_output_dir(tmp)  # must not raise
+
+    def test_absolute_path_outside_cwd_and_tmp_raises(self, tmp_path, monkeypatch):
+        """A path that is neither under cwd nor under /tmp must raise ValueError."""
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(ValueError, match="Path traversal"):
+            _validate_output_dir("/etc/evil")
+
+    def test_dotdot_traversal_from_non_tmp_cwd_raises(self, monkeypatch):
+        """A dotdot path that escapes a non-tmp cwd to outside both cwd and /tmp
+        must be rejected by the path-traversal guard.
+
+        tmp_path is itself inside /tmp so going up from it stays in /tmp and
+        would be allowed. We use the project directory (not under /tmp) as cwd
+        to ensure a dotdot escape reliably leaves both allowed roots.
+        """
+        import os as _os
+        project_dir = _os.path.realpath(_os.path.join(_os.path.dirname(__file__), '..', '..'))
+        monkeypatch.chdir(project_dir)
+        # Four levels up from the project dir lands in /private/etc on macOS
+        # which is neither under cwd nor under /tmp
+        evil = _os.path.join(project_dir, '..', '..', '..', '..', 'etc', 'shadow')
+        with pytest.raises(ValueError, match="Path traversal"):
+            _validate_output_dir(evil)
+
+    def test_symlink_traversal_rejected(self, tmp_path, monkeypatch):
+        """A symlink that resolves outside the allowed roots must be rejected.
+
+        We use monkeypatch to change cwd to tmp_path, then create a symlink
+        inside tmp_path pointing to /etc to simulate a symlink escape.
+        """
+        monkeypatch.chdir(tmp_path)
+        link = tmp_path / "escape_link"
+        try:
+            link.symlink_to("/etc")
+        except (OSError, NotImplementedError):
+            pytest.skip("Cannot create symlinks on this system")
+
+        with pytest.raises(ValueError, match="Path traversal"):
+            _validate_output_dir(str(link / "passwd"))
+
+    def test_tmp_subdir_with_dotdot_allowed_when_stays_in_tmp(self, tmp_path):
+        """A path using .. that resolves back into /tmp is still accepted."""
+        sub = tmp_path / "a" / ".." / "b"
+        # os.path.realpath will resolve this to tmp_path/b — still inside tmp
+        _validate_output_dir(str(sub))  # must not raise
+
+    def test_error_message_contains_the_bad_path(self, tmp_path, monkeypatch):
+        """ValueError message must include the offending path for debuggability."""
+        monkeypatch.chdir(tmp_path)
+        bad_path = "/var/secret"
+        with pytest.raises(ValueError, match=bad_path):
+            _validate_output_dir(bad_path)
+
+    def test_root_path_raises(self, tmp_path, monkeypatch):
+        """Passing '/' must be rejected."""
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(ValueError, match="Path traversal"):
+            _validate_output_dir("/")

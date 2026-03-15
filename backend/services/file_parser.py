@@ -1,5 +1,8 @@
+"""File parsing and slide export for PDF and PPTX documents."""
+
 import logging
 import os
+import shutil
 import subprocess
 import tempfile
 
@@ -34,10 +37,9 @@ def extract_text(file_path: str) -> list[dict]:
     ext = os.path.splitext(file_path)[1].lower()
     if ext == ".pdf":
         return _extract_pdf(file_path)
-    elif ext == ".pptx":
+    if ext == ".pptx":
         return _extract_pptx(file_path)
-    else:
-        raise ValueError(f"Unsupported file type: {ext}")
+    raise ValueError(f"Unsupported file type: {ext}")
 
 
 def _extract_pdf(file_path: str) -> list[dict]:
@@ -121,6 +123,13 @@ def _export_pdf_pages(file_path: str, output_dir: str, dpi: int = 144) -> list[s
 
 def _export_pptx_pages(file_path: str, output_dir: str, dpi: int = 144) -> list[str]:
     """Convert PPTX to PDF via LibreOffice headless, then render pages."""
+    if not shutil.which("libreoffice"):
+        raise RuntimeError(
+            "libreoffice is not installed. PPTX slide export requires "
+            "LibreOffice headless. On the CPU pipeline container, video "
+            "generation (which needs slide images) should be offloaded to "
+            "the GPU or CPU-video service."
+        )
     with tempfile.TemporaryDirectory() as tmpdir:
         result = subprocess.run(
             [
@@ -157,9 +166,7 @@ def _validate_output_dir(output_dir: str) -> None:
     cwd = os.path.realpath(os.getcwd())
     tmp = os.path.realpath(tempfile.gettempdir())
     if not (
-        resolved.startswith(cwd + os.sep)
-        or resolved.startswith(tmp + os.sep)
-        or resolved == cwd
-        or resolved == tmp
+        resolved.startswith((cwd + os.sep, tmp + os.sep))
+        or resolved in (cwd, tmp)
     ):
         raise ValueError(f"Path traversal detected: {output_dir}")

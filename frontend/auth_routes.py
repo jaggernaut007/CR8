@@ -8,8 +8,9 @@ import logging
 import os
 
 import bcrypt
+import jwt
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from backend.config import settings
 from backend.services import auth_service, db_client
@@ -204,6 +205,13 @@ async def login(request: Request, body: dict):
     return response
 
 
+def _refresh_error_response(message: str) -> JSONResponse:
+    """Build a 401 response that also clears the stale refresh cookie."""
+    response = JSONResponse({"error": message}, status_code=401)
+    response.delete_cookie("cr8_refresh", path="/api/auth/refresh")
+    return response
+
+
 @router.post("/refresh")
 async def refresh(request: Request):
     """Issue a new access token using a valid refresh token cookie.
@@ -220,9 +228,18 @@ async def refresh(request: Request):
 
     try:
         payload = auth_service.verify_token(refresh_token, expected_type="refresh")
+    except jwt.ExpiredSignatureError:
+        logger.warning("Refresh token expired — user must re-login")
+        return _refresh_error_response("Refresh token expired")
+    except jwt.InvalidSignatureError:
+        logger.warning(
+            "Refresh token signature mismatch — likely JWT_SECRET "
+            "changed after redeployment. User must re-login."
+        )
+        return _refresh_error_response("Invalid refresh token")
     except Exception:
         logger.exception("Refresh token verification failed")
-        return JSONResponse({"error": "Invalid refresh token"}, status_code=401)
+        return _refresh_error_response("Invalid refresh token")
 
     user_id = payload["sub"]
     pool = getattr(request.app.state, "db_pool", None)
@@ -275,7 +292,7 @@ async def logout(request: Request):
     if session_token:
         invalidate_session(session_token)
 
-    response = JSONResponse(content=None, status_code=204)
+    response = Response(status_code=204)
     response.delete_cookie("cr8_session")
     response.delete_cookie("cr8_refresh", path="/api/auth/refresh")
     logger.info("User logged out")

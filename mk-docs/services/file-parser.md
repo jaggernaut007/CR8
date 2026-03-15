@@ -66,7 +66,7 @@ image_paths = export_slides_as_images(
 def export_slides_as_images(
     file_path: str,
     output_dir: str,
-    dpi: int = 150,
+    dpi: int = 144,
 ) -> list[str]
 ```
 
@@ -76,25 +76,44 @@ def export_slides_as_images(
 |-----------|------|---------|-------------|
 | `file_path` | `str` | — | Path to the source PDF or PPTX file |
 | `output_dir` | `str` | — | Directory where PNG files will be written |
-| `dpi` | `int` | `150` | Render resolution for PDF pages (higher = larger file, sharper image) |
+| `dpi` | `int` | `144` | Render resolution (144 DPI on a 13.333" × 7.5" widescreen slide produces 1920 × 1080 pixels) |
 
-**Returns**: Ordered list of absolute paths to the exported PNG files (one per slide/page).
+**Returns**: Sorted list of PNG file paths (`slide_001.png`, `slide_002.png`, ...).
+
+**Raises**:
+
+| Exception | Condition |
+|-----------|-----------|
+| `ValueError` | Unsupported file extension, or `output_dir` fails the path traversal check |
+| `RuntimeError` | LibreOffice is not installed, or LibreOffice PPTX→PDF conversion exits non-zero |
 
 ### Export Backends
 
 | Source format | Export method | System requirement |
 |--------------|--------------|-------------------|
 | PDF | PyMuPDF `page.get_pixmap()` | None (pure Python) |
-| PPTX | LibreOffice CLI → intermediate PDF → `pdftoppm` | `libreoffice`, `poppler-utils` |
+| PPTX | LibreOffice CLI → intermediate PDF → PyMuPDF | `libreoffice` |
+
+### Path Traversal Protection
+
+`export_slides_as_images` calls `_validate_output_dir(output_dir)` before any file operations. The guard resolves `output_dir` with `os.path.realpath()` (which expands symlinks) and rejects any path that is not under the current working directory or the system temporary directory. Attempts to write to paths like `/etc/evil`, `../../../../etc/shadow`, or a symlink pointing outside allowed roots all raise `ValueError: Path traversal detected: <path>`.
+
+```python
+from backend.services.file_parser import _validate_output_dir
+
+_validate_output_dir("/etc/evil")           # raises ValueError
+_validate_output_dir("/tmp/safe/subdir")    # accepted
+_validate_output_dir("outputs/slides")     # accepted (under cwd)
+```
 
 ### Security Notes
 
-- Input path is validated to prevent path traversal before any file operations
+- `_validate_output_dir` uses `os.path.realpath()` (not `abspath`) to resolve symlinks before the boundary check — symlink escape attempts are caught
 - PPTX export uses a `tempfile.TemporaryDirectory()` context manager for automatic cleanup of intermediate files
-- LibreOffice is invoked via `subprocess.run()` with an explicit argument list and a timeout (no shell=True)
+- LibreOffice is invoked via `subprocess.run()` with an explicit argument list, a 60-second timeout, and `shell=False`
 
 !!! warning "System dependencies for PPTX export"
-    PPTX slide export requires `libreoffice` and `poppler-utils` (for `pdftoppm`) to be installed. These are included in the project `Dockerfile`. For local development on macOS, install with `brew install libreoffice poppler`.
+    PPTX slide export requires `libreoffice` to be installed. It is included in `Dockerfile.gpu` and `Dockerfile.cpu-video`. The main pipeline `Dockerfile` does not include LibreOffice — slide export on the CPU pipeline container is intentionally deferred to the GPU or CPU-video remote worker. For local development on macOS: `brew install libreoffice`.
 
 ### Decorated for tracing
 

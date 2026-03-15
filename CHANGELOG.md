@@ -55,6 +55,31 @@ Total: **1063 pytest** + **124 Vitest** + **17 Playwright E2E** = **1204 tests**
 
 ---
 
+## Unreleased — agent_generate.py refactor (51 ruff violations → 0)
+
+### Changed
+- `backend/pipeline/agent_generate.py`: eliminated all 51 ruff violations. Added module docstring. Replaced 33 `print()` calls with `logger.info()` / `logger.warning()` using lazy `%s` formatting. Extracted `_GenerateCtx` and `_ScriptCtx` context classes to reduce argument counts across 5 functions (PLR0913). Decomposed `generate_node` (~115 statements) into 12 focused helpers: `_init_generate_ctx`, `_generate_all_modules`, `_build_pdf_and_ppt`, `_build_pdf_ppt_parallel`, `_build_pdf_only`, `_build_ppt_only`, `_handle_scripts_videos`, `_handle_ppt_aligned_path`, `_handle_fallback_path`, `_render_videos`, `_save_raw_outputs`, `_merge_slide_data`. Also extracted `_invoke_with_retry` from `_generate_module` and `_collect_slide_sources` from `_get_slide_images`. Fixed `zip()` without `strict=True` (B905). Removed unused `i` param from `_convert_to_script`.
+- `backend/services/file_parser.py`: added module docstring; replaced `elif` after `return` with `if` (RET505); merged `startswith` tuple + `in` comparisons (PIE810/SIM109).
+
+### Tests
+- `backend/tests/test_pipeline_agents.py`: updated `_ppt_monolithic_fallback` calls to pass `_GenerateCtx`; fixed section comment headers (ERA001) and unused variable (RUF059).
+- `backend/tests/test_agent_generate.py`: removed unused imports (F401); fixed ambiguous character (RUF003) and unused variable (RUF059); updated all `_generate_module` calls to pass `_GenerateCtx`.
+- `backend/tests/test_file_parser.py`: merged nested `with` statements (SIM117).
+
+---
+
+## Unreleased — Test coverage expansion + path traversal hardening
+
+### Added
+- `backend/tests/test_agent_generate.py` (44 tests, new file): `_VideoJobInputs` field storage and defaults (including `ppt_path`); `_build_chroma_cache` ChromaDB routing and placeholder text; `_validate_module` length gate and missing-section reporting; `_generate_module` severity-based model routing, retry logic, and best-effort fallback after max retries; `generate_node` dual PDF+PPT parallel path and PPT-only/monolithic-fallback paths
+- `backend/tests/test_file_parser.py` (expanded to 24 total): direct unit tests for `_validate_output_dir` covering symlink traversal, dotdot escape, system-tmp root as allowed base, cwd as allowed base, error message content, and root-path rejection; DPI accuracy assertion (144 DPI on widescreen produces 1920×1080)
+- `frontend/tests/test_auth_routes.py` (expanded to 71 total): additional coverage of register, login, refresh, me, and logout edge cases
+
+### Changed
+- `backend/services/file_parser.py`: added `_validate_output_dir()` — resolves `output_dir` via `os.path.realpath()` (symlink-aware) and rejects any path not under cwd or the system temp directory; `export_slides_as_images()` now calls this guard before any file operations; DPI default corrected from 150 to 144 (produces exactly 1920×1080 on standard 13.333"×7.5" widescreen slides); PPTX export no longer depends on `pdftoppm` — LibreOffice converts to PDF, then PyMuPDF renders each page
+
+---
+
 ## Unreleased — Video Cloud Run Fix + UI Re-run Features
 
 ### Added

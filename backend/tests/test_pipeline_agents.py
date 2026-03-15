@@ -11,9 +11,9 @@ from unittest.mock import MagicMock, patch
 
 
 
-# ===========================================================================
-# _sanitize (agent_ingest)
-# ===========================================================================
+# ---------------------------------------------------------------------------
+# _sanitize
+# ---------------------------------------------------------------------------
 
 
 class TestSanitize:
@@ -77,9 +77,9 @@ class TestSanitize:
         assert "beforeafter" in result
 
 
-# ===========================================================================
+# ---------------------------------------------------------------------------
 # ingest_node
-# ===========================================================================
+# ---------------------------------------------------------------------------
 
 
 def _make_valid_topics_json():
@@ -179,9 +179,9 @@ class TestIngestNode:
         fake_store.reset_collections.assert_called_once()
 
 
-# ===========================================================================
+# ---------------------------------------------------------------------------
 # research_node
-# ===========================================================================
+# ---------------------------------------------------------------------------
 
 
 def _make_gap_analysis(topic_name="Transformers"):
@@ -276,9 +276,9 @@ class TestResearchNode:
         assert result["current_stage"] == "researched"
 
 
-# ===========================================================================
-# _validate_module (agent_generate)
-# ===========================================================================
+# ---------------------------------------------------------------------------
+# _validate_module
+# ---------------------------------------------------------------------------
 
 
 _VALID_MODULE = (
@@ -329,13 +329,13 @@ class TestValidateModule:
             "## Key Takeaways\n"
             + "x" * 2000
         )
-        is_valid, issues = _validate_module(valid, "Test")
+        is_valid, _issues = _validate_module(valid, "Test")
         assert is_valid
 
 
-# ===========================================================================
-# _detect_hook_type (agent_generate)
-# ===========================================================================
+# ---------------------------------------------------------------------------
+# _detect_hook_type
+# ---------------------------------------------------------------------------
 
 
 class TestDetectHookType:
@@ -405,9 +405,9 @@ class TestDetectHookType:
         assert _detect_hook_type(script) == "unknown"
 
 
-# ===========================================================================
+# ---------------------------------------------------------------------------
 # generate_node
-# ===========================================================================
+# ---------------------------------------------------------------------------
 
 
 def _make_module_content():
@@ -516,9 +516,9 @@ class TestGenerateNode:
         assert result.get("current_stage") == "complete"
 
 
-# ===========================================================================
-# _ppt_monolithic_fallback (agent_generate — new helper extracted this session)
-# ===========================================================================
+# ---------------------------------------------------------------------------
+# _ppt_monolithic_fallback
+# ---------------------------------------------------------------------------
 
 
 def _make_gap_summary_for_ppt():
@@ -546,21 +546,22 @@ class TestPptMonolithicFallback:
 
     def _run_fallback(self, llm_response_content: str):
         """Run _ppt_monolithic_fallback with a mocked LLM response."""
-        from backend.pipeline.agent_generate import _ppt_monolithic_fallback
+        from backend.pipeline.agent_generate import _GenerateCtx, _ppt_monolithic_fallback
 
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = MagicMock(content=llm_response_content)
 
-        topics = [
+        ctx = _GenerateCtx()
+        ctx.topics = [
             {"name": "Transformer Architecture"},
             {"name": "BERT Pretraining"},
         ]
-        modules_md = ["Module content A " * 50, "Module content B " * 50]
-        gap_summary = _make_gap_summary_for_ppt()
-        curriculum_scope = "NLP fundamentals"
+        ctx.modules_md = ["Module content A " * 50, "Module content B " * 50]
+        ctx.gap_summary = _make_gap_summary_for_ppt()
+        ctx.curriculum_scope = "NLP fundamentals"
 
         with patch("backend.pipeline.agent_generate.get_llm", return_value=mock_llm):
-            return _ppt_monolithic_fallback(topics, modules_md, gap_summary, curriculum_scope)
+            return _ppt_monolithic_fallback(ctx)
 
     def test_returns_dict_on_valid_json(self):
         """When the LLM returns valid JSON, the parsed dict must be returned."""
@@ -589,34 +590,36 @@ class TestPptMonolithicFallback:
 
     def test_calls_get_llm_with_mini_tier(self):
         """_ppt_monolithic_fallback must use the 'mini' LLM tier."""
-        from backend.pipeline.agent_generate import _ppt_monolithic_fallback
+        from backend.pipeline.agent_generate import _GenerateCtx, _ppt_monolithic_fallback
 
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = MagicMock(content=json.dumps({"topic_slides": []}))
 
+        ctx = _GenerateCtx()
+        ctx.topics = [{"name": "T"}]
+        ctx.modules_md = ["content"]
+        ctx.gap_summary = []
+        ctx.curriculum_scope = "scope"
+
         with patch("backend.pipeline.agent_generate.get_llm", return_value=mock_llm) as mock_get_llm:
-            _ppt_monolithic_fallback(
-                topics=[{"name": "T"}],
-                modules_md=["content"],
-                gap_summary=[],
-                curriculum_scope="scope",
-            )
+            _ppt_monolithic_fallback(ctx)
         mock_get_llm.assert_called_once_with("mini")
 
     def test_invokes_llm_exactly_once(self):
         """The function must make exactly one LLM call (monolithic = single request)."""
-        from backend.pipeline.agent_generate import _ppt_monolithic_fallback
+        from backend.pipeline.agent_generate import _GenerateCtx, _ppt_monolithic_fallback
 
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = MagicMock(content=json.dumps({"topic_slides": []}))
 
+        ctx = _GenerateCtx()
+        ctx.topics = [{"name": "T1"}, {"name": "T2"}]
+        ctx.modules_md = ["mod1", "mod2"]
+        ctx.gap_summary = []
+        ctx.curriculum_scope = "scope"
+
         with patch("backend.pipeline.agent_generate.get_llm", return_value=mock_llm):
-            _ppt_monolithic_fallback(
-                topics=[{"name": "T1"}, {"name": "T2"}],
-                modules_md=["mod1", "mod2"],
-                gap_summary=[],
-                curriculum_scope="scope",
-            )
+            _ppt_monolithic_fallback(ctx)
 
         assert mock_llm.invoke.call_count == 1
 
@@ -627,7 +630,7 @@ class TestPptMonolithicFallback:
 
     def test_module_content_included_in_prompt(self):
         """The LLM prompt must contain the module markdown content."""
-        from backend.pipeline.agent_generate import _ppt_monolithic_fallback
+        from backend.pipeline.agent_generate import _GenerateCtx, _ppt_monolithic_fallback
 
         mock_llm = MagicMock()
         mock_llm.invoke.return_value = MagicMock(content=json.dumps({"topic_slides": []}))
@@ -639,12 +642,13 @@ class TestPptMonolithicFallback:
 
         mock_llm.invoke.side_effect = capture_invoke
 
+        ctx = _GenerateCtx()
+        ctx.topics = [{"name": "Transformers"}]
+        ctx.modules_md = ["unique_module_sentinel_xyz"]
+        ctx.gap_summary = []
+        ctx.curriculum_scope = "scope"
+
         with patch("backend.pipeline.agent_generate.get_llm", return_value=mock_llm):
-            _ppt_monolithic_fallback(
-                topics=[{"name": "Transformers"}],
-                modules_md=["unique_module_sentinel_xyz"],
-                gap_summary=[],
-                curriculum_scope="scope",
-            )
+            _ppt_monolithic_fallback(ctx)
 
         assert any("unique_module_sentinel_xyz" in str(p) for p in captured_prompts)

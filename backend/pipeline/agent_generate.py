@@ -1,3 +1,5 @@
+"""Agent 3: Generate learning modules and compile chained outputs (PDF, PPT, Script, Video)."""
+
 from __future__ import annotations
 
 import json
@@ -34,6 +36,26 @@ logger = logging.getLogger(__name__)
 _MIN_MODULE_CHARS = 2000
 _REQUIRED_SECTIONS = ["## Module Overview", "## Learning Objectives", "## Core Content", "## Key Takeaways"]
 
+# Maximum retries for module generation when validation fails.
+# 2 retries (3 total attempts) balances quality vs. API cost.
+_MAX_MODULE_RETRIES = 2
+
+# Hook keywords: video scripts open with a "hook" (first ~300 chars).
+# We track which hook types have been used across topics to encourage variety.
+# Each type maps to keywords that identify it in the opening text.
+_HOOK_KEYWORDS = {
+    "curiosity": ["what if", "did you know", "ever wonder"],
+    "scenario": ["imagine", "picture this", "you're on your first"],
+    "statistic": ["percent", "%", "majority of", "studies show"],
+    "misconception": ["most students think", "common mistake", "you might think"],
+    "value_promise": ["in the next", "by the end", "you'll learn"],
+}
+
+
+# ---------------------------------------------------------------------------
+# Context classes — reduce argument passing (PLR0913)
+# ---------------------------------------------------------------------------
+
 
 class _VideoJobInputs:
     """Groups the video dispatch arguments to satisfy PLR0913 (max 5 args)."""
@@ -60,11 +82,39 @@ class _VideoJobInputs:
         self.ppt_path = ppt_path
 
 
+class _GenerateCtx:
+    """Shared context for the generate phase — reduces argument passing (PLR0913).
+
+    Fields are set by ``_init_generate_ctx`` and updated by helper functions.
+    Core fields: topics, curriculum_scope, gap_summary, gap_lookup, chroma_cache,
+    llm_premium, llm_mini, formats, timestamp.
+    Mutable output fields: modules_md, topic_modules_map, slide_data, ppt_path,
+    topic_slide_map.
+    """
+
+
+class _ScriptCtx:
+    """Script generation context — wraps _GenerateCtx with script-specific state."""
+
+    __slots__ = ("gen", "hooks_lock", "llm_script", "used_hooks")
+
+    def __init__(self, gen_ctx, llm_script, used_hooks, hooks_lock):
+        self.gen = gen_ctx
+        self.llm_script = llm_script
+        self.used_hooks = used_hooks
+        self.hooks_lock = hooks_lock
+
+
+# ---------------------------------------------------------------------------
+# Video dispatch
+# ---------------------------------------------------------------------------
+
+
 def _build_videos_dispatch(state: PipelineState, inputs: _VideoJobInputs) -> None:
     """Route video generation to remote services or local fallback.
 
     When remote video services are configured (GPU or CPU-video), uses the
-    2-tier fallback chain: GPU primary → CPU-video.
+    2-tier fallback chain: GPU primary -> CPU-video.
     Local ``build_videos()`` is only used when no service URLs are set
     (local development).
     """
@@ -171,27 +221,13 @@ def _video_kwargs(
     }
 
 
-def _get_slide_images(
-    state: PipelineState,
-    video_dir: str,
-    ppt_path: str | None = None,
-) -> list[str]:
-    """Export slide images for Kokoro video composition.
+# ---------------------------------------------------------------------------
+# Slide image export
+# ---------------------------------------------------------------------------
 
-    Args:
-        state: Pipeline state (used as fallback for file_paths).
-        video_dir: Directory for video output (slide_images/ created inside).
-        ppt_path: Explicit path to generated PPT — preferred source.
 
-    Returns the slide image paths if provider is kokoro, otherwise [].
-    """
-    if settings.video_provider != "kokoro":
-        return []
-
-    slide_img_dir = os.path.join(video_dir, "slide_images")
-
-    dpi = settings.slide_export_dpi
-
+def _collect_slide_sources(state, ppt_path):
+    """Collect candidate slide sources in priority order."""
     sources = []
     if ppt_path and os.path.exists(ppt_path):
         sources.append(ppt_path)
@@ -204,12 +240,35 @@ def _get_slide_images(
         ext = os.path.splitext(src)[1].lower()
         if ext in (".pdf", ".pptx") and src not in sources:
             sources.append(src)
+    return sources
+
+
+def _get_slide_images(
+    state: PipelineState,
+    video_dir: str,
+    ppt_path: str | None = None,
+) -> list[str]:
+    """Export slide images for Kokoro video composition.
+
+    Args:
+        state: Pipeline state (used as fallback for file_paths).
+        video_dir: Directory for video output (slide_images/ created inside).
+        ppt_path: Explicit path to generated PPT -- preferred source.
+
+    Returns the slide image paths if provider is kokoro, otherwise [].
+    """
+    if settings.video_provider != "kokoro":
+        return []
+
+    slide_img_dir = os.path.join(video_dir, "slide_images")
+    dpi = settings.slide_export_dpi
+    sources = _collect_slide_sources(state, ppt_path)
 
     for src in sources:
         try:
             logger.info("Exporting slide images from: %s", src)
             return export_slides_as_images(src, slide_img_dir, dpi=dpi)
-        except FileNotFoundError:
+        except (FileNotFoundError, RuntimeError):
             logger.warning("LibreOffice not available for slide export — deferring to remote service")
             return []
         except OSError:
@@ -219,24 +278,9 @@ def _get_slide_images(
     logger.info("No slide source available — video will have no slide images")
     return []
 
-# Maximum retries for module generation when validation fails.
-# 2 retries (3 total attempts) balances quality vs. API cost.
-_MAX_MODULE_RETRIES = 2
-
-# Hook keywords: video scripts open with a "hook" (first ~300 chars).
-# We track which hook types have been used across topics to encourage variety.
-# Each type maps to keywords that identify it in the opening text.
-_HOOK_KEYWORDS = {
-    "curiosity": ["what if", "did you know", "ever wonder"],
-    "scenario": ["imagine", "picture this", "you're on your first"],
-    "statistic": ["percent", "%", "majority of", "studies show"],
-    "misconception": ["most students think", "common mistake", "you might think"],
-    "value_promise": ["in the next", "by the end", "you'll learn"],
-}
-
 
 # ---------------------------------------------------------------------------
-# ChromaDB result caching (#4)
+# ChromaDB result caching
 # ---------------------------------------------------------------------------
 
 
@@ -255,7 +299,7 @@ def _build_chroma_cache(store, topics):
 
 
 # ---------------------------------------------------------------------------
-# Module validation (#10) and retry (#13)
+# Module validation and generation
 # ---------------------------------------------------------------------------
 
 
@@ -273,51 +317,12 @@ def _validate_module(module_md, topic_name):
     return (len(issues) == 0, issues)
 
 
-# ---------------------------------------------------------------------------
-# Module generation with severity routing (#6) and retry (#13)
-# ---------------------------------------------------------------------------
+def _invoke_with_retry(llm, prompt, name, model_label, severity):
+    """Invoke LLM with validation retry loop.
 
-
-def _generate_module(i, topic, total, chroma_cache, llm_premium, llm_mini, curriculum_scope, gap_lookup, prompt_template=None):
-    """Generate a single learning module with severity-based model routing and validation retry.
-
-    Args:
-        prompt_template: Optional custom prompt template for eval variant testing.
-                        If None, uses the default GENERATE_MODULE prompt.
+    Returns the first valid response, or the last best-effort response
+    after ``_MAX_MODULE_RETRIES`` retries.
     """
-    name = topic["name"]
-    desc = topic.get("description", "")
-    techniques = topic.get("key_techniques", [])
-    print(f"[Generate] Module {i + 1}/{total}: {name}")
-
-    # Use cached ChromaDB results
-    cached = chroma_cache[name]
-    curriculum_text = cached["curriculum_text"]
-    research_text = cached["research_text"]
-
-    # Get gap analysis and route by severity
-    gap_data = gap_lookup.get(name, {})
-    gap_text = json.dumps(gap_data, indent=2) if gap_data else "No gap analysis available."
-    severity = gap_data.get("severity", "moderate")
-
-    # Severity-based model routing: critical gaps get the best model (GPT-5.1)
-    # because they represent the biggest curriculum-to-industry gaps and need
-    # the highest quality output.  Moderate/minor gaps use GPT-5-mini to save
-    # cost (~10x cheaper) while still producing good results.
-    llm = llm_premium if severity == "critical" else llm_mini
-    model_label = "premium" if severity == "critical" else "mini"
-
-    template = prompt_template or GENERATE_MODULE
-    prompt = template.format(
-        topic_name=name,
-        topic_description=desc,
-        key_techniques=", ".join(techniques) if techniques else "Not specified",
-        curriculum_scope=curriculum_scope,
-        curriculum_chunks=curriculum_text,
-        research_chunks=research_text,
-        gap_analysis=gap_text,
-    )
-
     best_result = None
     for attempt in range(_MAX_MODULE_RETRIES + 1):
         response = llm.invoke(prompt, config={"run_name": f"generate_{name}"})
@@ -325,16 +330,54 @@ def _generate_module(i, topic, total, chroma_cache, llm_premium, llm_mini, curri
         is_valid, issues = _validate_module(content, name)
 
         if is_valid:
-            print(f"[Generate]   {name}: done — {len(content)} chars ({model_label}, severity={severity})")
+            logger.info("  %s: done — %d chars (%s, severity=%s)", name, len(content), model_label, severity)
             return content
 
-        best_result = content  # keep best-effort
+        best_result = content
         if attempt < _MAX_MODULE_RETRIES:
-            print(f"[Generate]   {name}: validation failed ({', '.join(issues)}), retrying ({attempt + 1}/{_MAX_MODULE_RETRIES})...")
+            logger.info("  %s: validation failed (%s), retrying (%d/%d)...", name, ", ".join(issues), attempt + 1, _MAX_MODULE_RETRIES)
         else:
-            print(f"[Generate]   WARNING: {name}: validation failed after {_MAX_MODULE_RETRIES} retries ({', '.join(issues)}), using best-effort")
+            logger.warning("  %s: validation failed after %d retries (%s), using best-effort", name, _MAX_MODULE_RETRIES, ", ".join(issues))
 
     return best_result
+
+
+def _generate_module(i, topic, total, ctx, prompt_template=None):
+    """Generate a single learning module with severity-based model routing and validation retry.
+
+    Args:
+        i: Zero-based topic index.
+        topic: Topic dict with name, description, key_techniques.
+        total: Total number of topics (for logging).
+        ctx: _GenerateCtx with chroma_cache, llm_premium, llm_mini, curriculum_scope, gap_lookup.
+        prompt_template: Optional custom prompt template for eval variant testing.
+    """
+    name = topic["name"]
+    desc = topic.get("description", "")
+    techniques = topic.get("key_techniques", [])
+    logger.info("Module %d/%d: %s", i + 1, total, name)
+
+    cached = ctx.chroma_cache[name]
+    gap_data = ctx.gap_lookup.get(name, {})
+    gap_text = json.dumps(gap_data, indent=2) if gap_data else "No gap analysis available."
+    severity = gap_data.get("severity", "moderate")
+
+    # Severity-based model routing: critical gaps get the best model
+    llm = ctx.llm_premium if severity == "critical" else ctx.llm_mini
+    model_label = "premium" if severity == "critical" else "mini"
+
+    template = prompt_template or GENERATE_MODULE
+    prompt = template.format(
+        topic_name=name,
+        topic_description=desc,
+        key_techniques=", ".join(techniques) if techniques else "Not specified",
+        curriculum_scope=ctx.curriculum_scope,
+        curriculum_chunks=cached["curriculum_text"],
+        research_chunks=cached["research_text"],
+        gap_analysis=gap_text,
+    )
+
+    return _invoke_with_retry(llm, prompt, name, model_label, severity)
 
 
 # ---------------------------------------------------------------------------
@@ -342,9 +385,9 @@ def _generate_module(i, topic, total, chroma_cache, llm_premium, llm_mini, curri
 # ---------------------------------------------------------------------------
 
 
-def _convert_to_script(i, topic_name, module_md, chroma_cache, llm_script):
+def _convert_to_script(topic_name, module_md, chroma_cache, llm_script):
     """Convert a markdown module into a spoken-word video script (fallback path)."""
-    print(f"[Script] Converting module to script: {topic_name}")
+    logger.info("Converting module to script: %s", topic_name)
 
     cached = chroma_cache[topic_name]
     prompt = MODULE_TO_SCRIPT.format(
@@ -357,7 +400,7 @@ def _convert_to_script(i, topic_name, module_md, chroma_cache, llm_script):
     response = llm_script.invoke(prompt, config={"run_name": f"script_{topic_name}"})
     script = response.content.strip()
     word_count = len(script.split())
-    print(f"[Script]   {topic_name}: ready — {len(script)} chars, {word_count} words (~{word_count // 150}-{word_count // 120} min)")
+    logger.info("  %s: ready — %d chars, %d words (~%d-%d min)", topic_name, len(script), word_count, word_count // 150, word_count // 120)
     return script
 
 
@@ -373,30 +416,30 @@ def _save_scripts(topics, scripts, scripts_dir, slide_aligned=False):
     os.makedirs(scripts_dir, exist_ok=True)
     suffix = "_slide" if slide_aligned else ""
     paths = []
-    for i, (topic, script) in enumerate(zip(topics, scripts)):
+    for i, (topic, script) in enumerate(zip(topics, scripts, strict=True)):
         slug = _slugify(topic["name"])
         filename = f"{i + 1:02d}_{slug}{suffix}.txt"
         path = os.path.join(scripts_dir, filename)
         with open(path, "w", encoding="utf-8") as f:
             f.write(script)
         paths.append(path)
-        print(f"[Script]   Saved: {path}")
+        logger.info("  Saved: %s", path)
     return paths
 
 
-def _generate_scripts(topics, modules_md, chroma_cache, gap_lookup, video_limit):
+def _generate_scripts(ctx, video_limit):
     """Generate video scripts from markdown modules for the first N topics (fallback path)."""
-    video_topics = topics[:video_limit]
-    video_modules = modules_md[:video_limit]
+    video_topics = ctx.topics[:video_limit]
+    video_modules = ctx.modules_md[:video_limit]
 
-    print(f"[Script] Generating scripts for {video_limit} topics (prototype limit)...")
+    logger.info("Generating scripts for %d topics (prototype limit)...", video_limit)
 
     llm_script = get_llm("premium", temperature=settings.temp_creative)
     scripts = [None] * video_limit
     with ThreadPoolExecutor(max_workers=settings.max_workers) as executor:
         future_to_idx = {
             executor.submit(
-                _convert_to_script, i, video_topics[i]["name"], video_modules[i], chroma_cache, llm_script
+                _convert_to_script, video_topics[i]["name"], video_modules[i], ctx.chroma_cache, llm_script
             ): i
             for i in range(video_limit)
         }
@@ -505,7 +548,7 @@ def _build_fallback_slide_data(gap_summary, curriculum_scope):
 
 
 # ---------------------------------------------------------------------------
-# Hook variety enforcement (#9)
+# Hook variety enforcement
 # ---------------------------------------------------------------------------
 
 
@@ -540,18 +583,22 @@ def _get_hook_guidance(used_hooks, lock):
 
 
 # ---------------------------------------------------------------------------
-# PPT parallel structuring (#3)
+# PPT parallel structuring
 # ---------------------------------------------------------------------------
 
 
-def _structure_single_topic_slide(topic, module_md, gap_data, llm_mini, research_text="", prompt_template=None):
+def _structure_single_topic_slide(topic, module_md, gap_data, ctx, prompt_template=None):
     """Structure one topic's PPT slide data via LLM.
 
     Args:
-        research_text: Raw research chunks from ChromaDB for market_signal grounding.
+        topic: Topic dict with name.
+        module_md: Markdown content for this topic.
+        gap_data: Gap analysis dict for this topic.
+        ctx: _GenerateCtx with llm_mini and chroma_cache.
         prompt_template: Optional custom prompt template for eval variant testing.
     """
     name = topic["name"]
+    research_text = ctx.chroma_cache.get(name, {}).get("research_text", "")
     template = prompt_template or STRUCTURE_SINGLE_TOPIC_SLIDE
     prompt = template.format(
         topic_name=name,
@@ -559,7 +606,7 @@ def _structure_single_topic_slide(topic, module_md, gap_data, llm_mini, research
         gap_analysis_json=json.dumps(gap_data, indent=2) if gap_data else "{}",
         research_chunks=research_text or "No raw research data available.",
     )
-    response = llm_mini.invoke(
+    response = ctx.llm_mini.invoke(
         prompt,
         config={"run_name": f"structure_slide_{name}"},
         response_format={"type": "json_object"},
@@ -567,13 +614,12 @@ def _structure_single_topic_slide(topic, module_md, gap_data, llm_mini, research
     try:
         return json.loads(response.content)
     except json.JSONDecodeError:
-        print(f"[Generate] WARNING: Failed to parse slide JSON for {name}, using fallback")
+        logger.warning("Failed to parse slide JSON for %s, using fallback", name)
         return None
 
 
 def _generate_executive_summary(topics, gap_summary, curriculum_scope, llm_nano):
     """Generate executive summary from aggregated gap data."""
-    # Aggregate severity counts
     severity_counts = {"critical": 0, "moderate": 0, "minor": 0}
     topic_severities = []
     all_gaps = []
@@ -601,19 +647,17 @@ def _generate_executive_summary(topics, gap_summary, curriculum_scope, llm_nano)
     try:
         return json.loads(response.content)
     except json.JSONDecodeError:
-        print("[Generate] WARNING: Failed to parse executive summary JSON")
+        logger.warning("Failed to parse executive summary JSON")
         return None
 
 
-def _structure_slides_parallel(topics, modules_md, gap_summary, gap_lookup, curriculum_scope, chroma_cache=None):
+def _structure_slides_parallel(ctx):
     """Structure PPT slide data in parallel: per-topic slides + executive summary.
 
     Falls back to monolithic STRUCTURE_GAP_SLIDES if parallel approach fails.
     """
-    total = len(topics)
-    llm_mini = get_llm("mini")
+    total = len(ctx.topics)
     llm_nano = get_llm("nano")
-    chroma_cache = chroma_cache or {}
 
     # Per-topic slides in parallel
     topic_slides = [None] * total
@@ -621,10 +665,9 @@ def _structure_slides_parallel(topics, modules_md, gap_summary, gap_lookup, curr
         future_to_idx = {
             executor.submit(
                 _structure_single_topic_slide,
-                topics[i], modules_md[i],
-                gap_lookup.get(topics[i]["name"], {}),
-                llm_mini,
-                research_text=chroma_cache.get(topics[i]["name"], {}).get("research_text", ""),
+                ctx.topics[i], ctx.modules_md[i],
+                ctx.gap_lookup.get(ctx.topics[i]["name"], {}),
+                ctx,
             ): i
             for i in range(total)
         }
@@ -633,16 +676,16 @@ def _structure_slides_parallel(topics, modules_md, gap_summary, gap_lookup, curr
             topic_slides[idx] = future.result()
 
     # Executive summary
-    exec_summary = _generate_executive_summary(topics, gap_summary, curriculum_scope, llm_nano)
+    exec_summary = _generate_executive_summary(ctx.topics, ctx.gap_summary, ctx.curriculum_scope, llm_nano)
 
     # Check for failures — if any topic slide failed, fall back
     if any(ts is None for ts in topic_slides) or exec_summary is None:
-        print("[Generate] Parallel PPT structuring had failures, falling back to monolithic approach...")
+        logger.info("Parallel PPT structuring had failures, falling back to monolithic approach...")
         return None
 
     # Assemble full slide_data
     return {
-        "presentation_title": curriculum_scope,
+        "presentation_title": ctx.curriculum_scope,
         "executive_summary": exec_summary,
         "topic_slides": topic_slides,
         "recommendations_summary": [],
@@ -650,37 +693,38 @@ def _structure_slides_parallel(topics, modules_md, gap_summary, gap_lookup, curr
 
 
 # ---------------------------------------------------------------------------
-# PPT-aligned script generation with filtered context (#2) and hook variety (#9)
+# PPT-aligned script generation with filtered context and hook variety
 # ---------------------------------------------------------------------------
 
 
-def _generate_script_for_topic(idx, topic_slide, topic_module_md, gap_data, chroma_cache, llm_script, used_hooks, hooks_lock, prompt_template=None):
+def _generate_script_for_topic(idx, topic_slide, ctx, prompt_template=None):
     """Generate one video script aligned to one PPT topic slide.
 
     Receives ONLY its own topic's module content and gap data (filtered context).
-    This per-topic filtering prevents cross-topic contamination in scripts —
-    each script should only discuss its own topic, not reference other topics'
-    gaps or curriculum content.
+    This per-topic filtering prevents cross-topic contamination in scripts.
 
     Args:
+        idx: Zero-based topic index.
+        topic_slide: Structured slide dict for this topic.
+        ctx: _ScriptCtx with gen (_GenerateCtx), llm_script, used_hooks, hooks_lock.
         prompt_template: Optional custom prompt template for eval variant testing.
     """
     topic_name = topic_slide.get("topic_name", "Unknown")
     severity = topic_slide.get("severity", "moderate")
     curriculum_anchor = topic_slide.get("curriculum_anchor", "Covered in coursework.")
     misconception = topic_slide.get("misconception", {})
-    misconception_wrong = misconception.get("wrong", "")
-    misconception_right = misconception.get("right", "")
 
-    print(f"[Script] Topic {idx + 1}: {topic_name} — generating PPT-aligned script...")
+    logger.info("Topic %d: %s — generating PPT-aligned script...", idx + 1, topic_name)
 
     # Use cached ChromaDB results
-    cached = chroma_cache.get(topic_name, {})
+    cached = ctx.gen.chroma_cache.get(topic_name, {})
     curriculum_text = cached.get("curriculum_text", "No curriculum content available.")
     research_text = cached.get("research_text", "No research content available.")
+    gap_data = ctx.gen.gap_lookup.get(topic_name, {})
+    topic_module_md = ctx.gen.topic_modules_map.get(topic_name, "")
 
     # Hook variety guidance
-    hook_guidance = _get_hook_guidance(used_hooks, hooks_lock)
+    hook_guidance = _get_hook_guidance(ctx.used_hooks, ctx.hooks_lock)
 
     template = prompt_template or SCRIPT_FROM_SLIDES
     prompt = template.format(
@@ -692,24 +736,24 @@ def _generate_script_for_topic(idx, topic_slide, topic_module_md, gap_data, chro
         modules_content=topic_module_md,
         research_context=json.dumps(gap_data, indent=2) if gap_data else "{}",
         curriculum_anchor=curriculum_anchor,
-        misconception_wrong=misconception_wrong if misconception_wrong else "No specific misconception identified.",
-        misconception_right=misconception_right if misconception_right else "Refer to the gap concepts above for the correct understanding.",
+        misconception_wrong=misconception.get("wrong", "") or "No specific misconception identified.",
+        misconception_right=misconception.get("right", "") or "Refer to the gap concepts above for the correct understanding.",
         hook_guidance=hook_guidance,
     )
-    response = llm_script.invoke(prompt, config={"run_name": f"script_slide_{topic_name}"})
+    response = ctx.llm_script.invoke(prompt, config={"run_name": f"script_slide_{topic_name}"})
     script = response.content.strip()
 
     # Track which hook was used
     hook_type = _detect_hook_type(script)
-    with hooks_lock:
-        used_hooks.append(hook_type)
+    with ctx.hooks_lock:
+        ctx.used_hooks.append(hook_type)
 
     word_count = len(script.split())
-    print(f"[Script]   {topic_name}: ready — {len(script)} chars, {word_count} words, hook={hook_type}")
+    logger.info("  %s: ready — %d chars, %d words, hook=%s", topic_name, len(script), word_count, hook_type)
     return script
 
 
-def _generate_scripts_from_slides(slide_data, topic_modules_map, gap_lookup, chroma_cache, video_limit):
+def _generate_scripts_from_slides(ctx, slide_data, video_limit):
     """Generate per-topic video scripts aligned to PPT topic slides.
 
     Each topic receives ONLY its own module content and gap data (filtered context).
@@ -717,28 +761,20 @@ def _generate_scripts_from_slides(slide_data, topic_modules_map, gap_lookup, chr
     """
     topic_slides = slide_data.get("topic_slides", [])[:video_limit]
     total = len(topic_slides)
-    print(f"[Script] Generating {total} PPT-aligned scripts (limit: {video_limit})...")
+    logger.info("Generating %d PPT-aligned scripts (limit: %d)...", total, video_limit)
 
     llm_script = get_llm("premium", temperature=settings.temp_creative)
     scripts = [None] * total
     video_topics = [{"name": ts.get("topic_name", "Unknown")} for ts in topic_slides]
 
     # Thread-safe hook tracking
-    used_hooks = []
-    hooks_lock = threading.Lock()
+    script_ctx = _ScriptCtx(ctx, llm_script, [], threading.Lock())
 
     with ThreadPoolExecutor(max_workers=settings.max_workers) as executor:
-        future_to_idx = {}
-        for i in range(total):
-            topic_name = topic_slides[i].get("topic_name", "Unknown")
-            topic_module = topic_modules_map.get(topic_name, "")
-            topic_gap = gap_lookup.get(topic_name, {})
-            future = executor.submit(
-                _generate_script_for_topic,
-                i, topic_slides[i], topic_module, topic_gap,
-                chroma_cache, llm_script, used_hooks, hooks_lock,
-            )
-            future_to_idx[future] = i
+        future_to_idx = {
+            executor.submit(_generate_script_for_topic, i, topic_slides[i], script_ctx): i
+            for i in range(total)
+        }
         for future in as_completed(future_to_idx):
             idx = future_to_idx[future]
             scripts[idx] = future.result()
@@ -746,22 +782,27 @@ def _generate_scripts_from_slides(slide_data, topic_modules_map, gap_lookup, chr
     return video_topics, scripts
 
 
-def _ppt_monolithic_fallback(topics, modules_md, gap_summary, curriculum_scope):
+# ---------------------------------------------------------------------------
+# PPT monolithic fallback
+# ---------------------------------------------------------------------------
+
+
+def _ppt_monolithic_fallback(ctx):
     """Fall back to monolithic PPT structuring when parallel structuring fails.
 
     Sends all modules and gap data in a single LLM call. Returns parsed
     slide data dict, or fallback placeholder data if parsing also fails.
     """
     llm_ppt = get_llm("mini")
-    total = len(topics)
+    total = len(ctx.topics)
     modules_content = "\n\n---\n\n".join(
-        f"### {topics[i]['name']}\n{md}" for i, md in enumerate(modules_md)
+        f"### {ctx.topics[i]['name']}\n{md}" for i, md in enumerate(ctx.modules_md)
     )
     ppt_prompt = STRUCTURE_GAP_SLIDES.format(
-        curriculum_scope=curriculum_scope,
+        curriculum_scope=ctx.curriculum_scope,
         topic_count=total,
         modules_content=modules_content,
-        gap_summary_json=json.dumps(gap_summary, indent=2),
+        gap_summary_json=json.dumps(ctx.gap_summary, indent=2),
     )
     ppt_response = llm_ppt.invoke(
         ppt_prompt,
@@ -772,8 +813,219 @@ def _ppt_monolithic_fallback(topics, modules_md, gap_summary, curriculum_scope):
         return json.loads(ppt_response.content)
     except json.JSONDecodeError:
         logger.warning("Failed to parse monolithic slide JSON, using fallback")
-        print("[Generate] WARNING: Failed to parse slide JSON, using fallback")
-        return _build_fallback_slide_data(gap_summary, curriculum_scope)
+        return _build_fallback_slide_data(ctx.gap_summary, ctx.curriculum_scope)
+
+
+# ---------------------------------------------------------------------------
+# generate_node — extracted helpers
+# ---------------------------------------------------------------------------
+
+
+def _init_generate_ctx(state):
+    """Initialize shared generate context from pipeline state."""
+    ctx = _GenerateCtx()
+    ctx.topics = state["topics"]
+    ctx.curriculum_scope = state.get("curriculum_scope", "")
+    ctx.gap_summary = state.get("gap_summary", [])
+    ctx.formats = [
+        f.strip()
+        for f in state.get("output_formats", settings.output_formats).split(",")
+        if f.strip()
+    ]
+    ctx.gap_lookup = {g.get("topic", ""): g for g in ctx.gap_summary}
+    store = ChromaStore(settings.chroma_persist_dir)
+    ctx.chroma_cache = _build_chroma_cache(store, ctx.topics)
+    ctx.llm_premium = get_llm("premium", temperature=settings.temp_structured)
+    ctx.llm_mini = get_llm("mini")
+    ctx.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ctx.modules_md = None
+    ctx.topic_modules_map = None
+    ctx.slide_data = None
+    ctx.ppt_path = None
+    ctx.topic_slide_map = None
+    return ctx
+
+
+def _generate_all_modules(ctx):
+    """Generate all markdown modules in parallel."""
+    total = len(ctx.topics)
+    modules_md = [None] * total
+    with ThreadPoolExecutor(max_workers=settings.max_workers) as executor:
+        future_to_idx = {
+            executor.submit(_generate_module, i, topic, total, ctx): i
+            for i, topic in enumerate(ctx.topics)
+        }
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            try:
+                modules_md[idx] = future.result()
+            except PipelineCancelledError:
+                raise
+            except Exception as exc:
+                topic_name = ctx.topics[idx]["name"]
+                logger.exception("Module generation failed for '%s'", topic_name)
+                modules_md[idx] = f"## {topic_name}\n\n*Module generation failed: {exc}*"
+
+    ctx.modules_md = modules_md
+    ctx.topic_modules_map = {
+        t["name"]: m for t, m in zip(ctx.topics, modules_md, strict=True)
+    }
+
+
+def _build_pdf_and_ppt(ctx, result):
+    """Build PDF and/or PPT outputs based on requested formats.
+
+    Sets ctx.slide_data, ctx.ppt_path, ctx.topic_slide_map as side effects.
+    """
+    needs_pdf = "pdf" in ctx.formats
+    needs_ppt = "ppt" in ctx.formats and ctx.gap_summary
+
+    if needs_pdf and needs_ppt:
+        _build_pdf_ppt_parallel(ctx, result)
+        return
+
+    if needs_pdf:
+        _build_pdf_only(ctx, result)
+
+    if needs_ppt:
+        _build_ppt_only(ctx, result)
+    elif "ppt" in ctx.formats:
+        logger.info("Skipping PPT — no gap data available")
+
+
+def _build_pdf_ppt_parallel(ctx, result):
+    """Run PDF build and PPT structuring concurrently."""
+    pdf_path = os.path.join("outputs", f"{ctx.timestamp}_learning_guide.pdf")
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        pdf_future = executor.submit(
+            build_pdf,
+            title="Market-Enriched Learning Guide",
+            topics=ctx.topics,
+            modules_md=ctx.modules_md,
+            output_path=pdf_path,
+        )
+        ppt_future = executor.submit(_structure_slides_parallel, ctx)
+        pdf_future.result()
+        logger.info("PDF written to %s", pdf_path)
+        result["pdf_path"] = pdf_path
+        ctx.slide_data = ppt_future.result()
+
+    if ctx.slide_data is None:
+        logger.info("Falling back to monolithic PPT structuring...")
+        ctx.slide_data = _ppt_monolithic_fallback(ctx)
+
+    ctx.ppt_path = os.path.join("outputs", f"{ctx.timestamp}_gap_analysis.pptx")
+    _, ctx.topic_slide_map = build_gap_ppt(slide_data=ctx.slide_data, output_path=ctx.ppt_path)
+    logger.info("PPT written to %s", ctx.ppt_path)
+    result["ppt_path"] = ctx.ppt_path
+
+
+def _build_pdf_only(ctx, result):
+    """Build PDF output only."""
+    pdf_path = os.path.join("outputs", f"{ctx.timestamp}_learning_guide.pdf")
+    build_pdf(
+        title="Market-Enriched Learning Guide",
+        topics=ctx.topics,
+        modules_md=ctx.modules_md,
+        output_path=pdf_path,
+    )
+    logger.info("PDF written to %s", pdf_path)
+    result["pdf_path"] = pdf_path
+
+
+def _build_ppt_only(ctx, result):
+    """Build PPT output only."""
+    logger.info("Structuring slides from PDF content + gap analysis...")
+    ctx.slide_data = _structure_slides_parallel(ctx)
+    if ctx.slide_data is None:
+        logger.info("Falling back to monolithic PPT structuring...")
+        ctx.slide_data = _ppt_monolithic_fallback(ctx)
+
+    ctx.ppt_path = os.path.join("outputs", f"{ctx.timestamp}_gap_analysis.pptx")
+    _, ctx.topic_slide_map = build_gap_ppt(slide_data=ctx.slide_data, output_path=ctx.ppt_path)
+    logger.info("PPT written to %s", ctx.ppt_path)
+    result["ppt_path"] = ctx.ppt_path
+
+
+def _handle_scripts_videos(state, ctx, result):
+    """Generate scripts and/or videos from structured content."""
+    if "script" not in ctx.formats and "video" not in ctx.formats:
+        return
+
+    video_dir = os.path.join("outputs", f"{ctx.timestamp}_videos")
+    scripts_dir = os.path.join(video_dir, "scripts")
+    video_limit = min(settings.video_topic_limit, len(ctx.topics))
+
+    if ctx.slide_data is not None:
+        _handle_ppt_aligned_path(state, ctx, video_dir, scripts_dir, video_limit, result)
+    else:
+        _handle_fallback_path(state, ctx, video_dir, scripts_dir, video_limit, result)
+
+
+def _handle_ppt_aligned_path(  # noqa: PLR0913
+    state, ctx, video_dir, scripts_dir, video_limit, result,
+):
+    """Handle PPT-aligned script generation and optional video rendering."""
+    video_topics, scripts = _generate_scripts_from_slides(ctx, ctx.slide_data, video_limit)
+    _save_scripts(video_topics, scripts, scripts_dir, slide_aligned=True)
+    logger.info("%d PPT-aligned scripts saved to %s", len(scripts), scripts_dir)
+    result["video_dir"] = video_dir
+
+    if "video" in ctx.formats:
+        _render_videos(state, ctx, video_topics, scripts, video_dir, result)
+
+
+def _handle_fallback_path(  # noqa: PLR0913
+    state, ctx, video_dir, scripts_dir, video_limit, result,
+):
+    """Handle per-module script generation and optional video rendering."""
+    video_topics, scripts = _generate_scripts(ctx, video_limit)
+    _save_scripts(video_topics, scripts, scripts_dir)
+    logger.info("%d per-module scripts saved to %s", video_limit, scripts_dir)
+    result["video_dir"] = video_dir
+
+    if "video" in ctx.formats:
+        _render_videos(state, ctx, video_topics, scripts, video_dir, result)
+
+
+def _render_videos(  # noqa: PLR0913
+    state, ctx, video_topics, scripts, video_dir, result,
+):
+    """Export slide images and dispatch video generation."""
+    logger.info("Generating %d videos...", len(scripts))
+    slide_images = _get_slide_images(state, video_dir, ppt_path=ctx.ppt_path)
+    result["slide_images"] = slide_images
+    vid_inputs = _VideoJobInputs(
+        video_topics, scripts, video_dir, slide_images, ctx.topic_slide_map, ctx.ppt_path,
+    )
+    _build_videos_dispatch(state, vid_inputs)
+    logger.info("Videos saved to %s", video_dir)
+
+
+def _merge_slide_data(raw_outputs, slide_data):
+    """Merge PPT slide data into raw outputs dict."""
+    for ts in slide_data.get("topic_slides", []):
+        name = ts.get("topic_name", "")
+        if name in raw_outputs:
+            raw_outputs[name]["ppt_json"] = ts
+    raw_outputs["_slide_data"] = slide_data
+
+
+def _save_raw_outputs(ctx):
+    """Save raw pipeline outputs as JSON sidecar for eval framework."""
+    raw_outputs_path = os.path.join("outputs", f"{ctx.timestamp}_raw_outputs.json")
+    raw_outputs = {
+        topic["name"]: {"module_md": ctx.modules_md[i] or ""}
+        for i, topic in enumerate(ctx.topics)
+    }
+    if ctx.slide_data is not None:
+        _merge_slide_data(raw_outputs, ctx.slide_data)
+    try:
+        with open(raw_outputs_path, "w", encoding="utf-8") as f:
+            json.dump(raw_outputs, f, indent=2, ensure_ascii=False)
+        logger.info("Raw outputs saved to %s", raw_outputs_path)
+    except Exception:
+        logger.exception("Failed to save raw outputs")
 
 
 # ---------------------------------------------------------------------------
@@ -801,184 +1053,16 @@ def generate_node(state: PipelineState) -> dict:
         ``pdf_path``, ``ppt_path``, and ``video_dir`` depending on which
         output formats were requested.
     """
-    print("[Generate] Starting...")
+    logger.info("Starting generation...")
     os.makedirs("outputs", exist_ok=True)
 
-    store = ChromaStore(settings.chroma_persist_dir)
-    topics = state["topics"]
-    curriculum_scope = state.get("curriculum_scope", "")
-    gap_summary = state.get("gap_summary", [])
-    total = len(topics)
-    formats = [
-        f.strip()
-        for f in state.get("output_formats", settings.output_formats).split(",")
-        if f.strip()
-    ]
+    ctx = _init_generate_ctx(state)
+    _generate_all_modules(ctx)
 
-    # Build lookup and caches upfront
-    gap_lookup = {g.get("topic", ""): g for g in gap_summary}
-    chroma_cache = _build_chroma_cache(store, topics)
-
-    # Create both LLM tiers for severity-based routing
-    llm_premium = get_llm("premium", temperature=settings.temp_structured)
-    llm_mini = get_llm("mini")
-
-    # --- Step 1: Generate all markdown modules in parallel (always needed) ---
-    modules_md = [None] * total
-    with ThreadPoolExecutor(max_workers=settings.max_workers) as executor:
-        future_to_idx = {
-            executor.submit(
-                _generate_module, i, topic, total, chroma_cache, llm_premium, llm_mini, curriculum_scope, gap_lookup
-            ): i
-            for i, topic in enumerate(topics)
-        }
-        for future in as_completed(future_to_idx):
-            idx = future_to_idx[future]
-            try:
-                modules_md[idx] = future.result()
-            except PipelineCancelledError:
-                raise
-            except Exception as exc:
-                topic_name = topics[idx]["name"]
-                logger.exception("Module generation failed for '%s'", topic_name)
-                print(f"[Generate] ERROR: module '{topic_name}' failed — {exc}")
-                modules_md[idx] = f"## {topic_name}\n\n*Module generation failed: {exc}*"
-
-    # Build per-topic module map (for filtered context in scripts)
-    topic_modules_map = {topics[i]["name"]: modules_md[i] for i in range(total)}
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     result = {"current_stage": "complete"}
-    slide_data = None
-    topic_slide_map: dict[str, list[int]] | None = None
-    ppt_path: str | None = None
+    _build_pdf_and_ppt(ctx, result)
+    _handle_scripts_videos(state, ctx, result)
+    _save_raw_outputs(ctx)
 
-    # --- Step 2 & 3: PDF + PPT in parallel (#1) ---
-    needs_pdf = "pdf" in formats
-    needs_ppt = "ppt" in formats and gap_summary
-
-    if needs_pdf and needs_ppt:
-        # Run PDF build and PPT structuring concurrently
-        pdf_path = os.path.join("outputs", f"{timestamp}_learning_guide.pdf")
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            pdf_future = executor.submit(
-                build_pdf,
-                title="Market-Enriched Learning Guide",
-                topics=topics,
-                modules_md=modules_md,
-                output_path=pdf_path,
-            )
-            ppt_future = executor.submit(
-                _structure_slides_parallel,
-                topics, modules_md, gap_summary, gap_lookup, curriculum_scope, chroma_cache,
-            )
-            pdf_future.result()
-            print(f"[Generate] PDF written to {pdf_path}")
-            result["pdf_path"] = pdf_path
-
-            slide_data = ppt_future.result()
-
-        # If parallel PPT structuring failed, fall back to monolithic
-        if slide_data is None:
-            print("[Generate] Falling back to monolithic PPT structuring...")
-            slide_data = _ppt_monolithic_fallback(topics, modules_md, gap_summary, curriculum_scope)
-
-        ppt_path = os.path.join("outputs", f"{timestamp}_gap_analysis.pptx")
-        _, topic_slide_map = build_gap_ppt(slide_data=slide_data, output_path=ppt_path)
-        print(f"[Generate] PPT written to {ppt_path}")
-        result["ppt_path"] = ppt_path
-
-    else:
-        # Non-parallel paths
-        if needs_pdf:
-            pdf_path = os.path.join("outputs", f"{timestamp}_learning_guide.pdf")
-            build_pdf(
-                title="Market-Enriched Learning Guide",
-                topics=topics,
-                modules_md=modules_md,
-                output_path=pdf_path,
-            )
-            print(f"[Generate] PDF written to {pdf_path}")
-            result["pdf_path"] = pdf_path
-
-        if needs_ppt:
-            print("[Generate] Structuring slides from PDF content + gap analysis...")
-            slide_data = _structure_slides_parallel(
-                topics, modules_md, gap_summary, gap_lookup, curriculum_scope, chroma_cache,
-            )
-            if slide_data is None:
-                print("[Generate] Falling back to monolithic PPT structuring...")
-                slide_data = _ppt_monolithic_fallback(topics, modules_md, gap_summary, curriculum_scope)
-
-            ppt_path = os.path.join("outputs", f"{timestamp}_gap_analysis.pptx")
-            _, topic_slide_map = build_gap_ppt(slide_data=slide_data, output_path=ppt_path)
-            print(f"[Generate] PPT written to {ppt_path}")
-            result["ppt_path"] = ppt_path
-
-        if "ppt" in formats and not gap_summary:
-            print("[Generate] Skipping PPT — no gap data available")
-
-    # --- Step 4: Scripts and/or Videos (per-topic, aligned to PPT if available) ---
-    needs_scripts = "script" in formats or "video" in formats
-    if needs_scripts:
-        video_dir = os.path.join("outputs", f"{timestamp}_videos")
-        scripts_dir = os.path.join(video_dir, "scripts")
-        video_limit = min(settings.video_topic_limit, total)
-
-        if slide_data is not None:
-            # PPT-aligned path: one script per topic slide, filtered context
-            video_topics, scripts = _generate_scripts_from_slides(
-                slide_data, topic_modules_map, gap_lookup, chroma_cache, video_limit,
-            )
-            _save_scripts(video_topics, scripts, scripts_dir, slide_aligned=True)
-            print(f"[Script] {len(scripts)} PPT-aligned scripts saved to {scripts_dir}")
-            result["video_dir"] = video_dir
-
-            if "video" in formats:
-                print(f"[Video] Generating {len(scripts)} PPT-aligned videos...")
-                slide_images = _get_slide_images(state, video_dir, ppt_path=ppt_path)
-                result["slide_images"] = slide_images
-                vid_inputs = _VideoJobInputs(
-                    video_topics, scripts, video_dir, slide_images, topic_slide_map, ppt_path,
-                )
-                _build_videos_dispatch(state, vid_inputs)
-                print(f"[Video] Videos saved to {video_dir}")
-        else:
-            # Fallback: per-module scripts (no PPT available)
-            video_topics, scripts = _generate_scripts(topics, modules_md, chroma_cache, gap_lookup, video_limit)
-            _save_scripts(video_topics, scripts, scripts_dir)
-            print(f"[Script] {video_limit} per-module scripts saved to {scripts_dir}")
-            result["video_dir"] = video_dir
-
-            if "video" in formats:
-                print(f"[Video] Generating {video_limit} videos...")
-                slide_images = _get_slide_images(state, video_dir, ppt_path=ppt_path)
-                result["slide_images"] = slide_images
-                vid_inputs = _VideoJobInputs(
-                    video_topics, scripts, video_dir, slide_images, topic_slide_map, ppt_path,
-                )
-                _build_videos_dispatch(state, vid_inputs)
-                print(f"[Video] Videos saved to {video_dir}")
-
-    # Save raw outputs sidecar for eval framework
-    raw_outputs_path = os.path.join("outputs", f"{timestamp}_raw_outputs.json")
-    raw_outputs = {}
-    for i, topic in enumerate(topics):
-        name = topic["name"]
-        raw_outputs[name] = {"module_md": modules_md[i] or ""}
-    if slide_data is not None:
-        for ts in slide_data.get("topic_slides", []):
-            name = ts.get("topic_name", "")
-            if name in raw_outputs:
-                raw_outputs[name]["ppt_json"] = ts
-        raw_outputs["_slide_data"] = slide_data
-    try:
-        with open(raw_outputs_path, "w", encoding="utf-8") as f:
-            json.dump(raw_outputs, f, indent=2, ensure_ascii=False)
-        print(f"[Generate] Raw outputs saved to {raw_outputs_path}")
-    except Exception as e:
-        logger.exception("Failed to save raw outputs")
-        print(f"[Generate] WARNING: Failed to save raw outputs: {e}")
-
-    result["modules_md"] = modules_md
+    result["modules_md"] = ctx.modules_md
     return result

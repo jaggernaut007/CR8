@@ -4,8 +4,50 @@
 
 ## Current Status
 **Last updated:** 2026-03-15
-**Overall project phase:** v0.5.5+ — Cloud Run video fix (LibreOffice fallback, remote PPTX export) + UI re-run features
+**Overall project phase:** v0.5.5+ — Ruff refactor: agent_generate.py 51 violations → 0 (context classes, extracted helpers, logger migration); file_parser.py 3 violations → 0; ruff now clean across all modified files; 1158 pytest all passing
 **Current version:** v0.5.5
+
+## Ruff Refactor — agent_generate.py + file_parser.py (2026-03-15)
+> Eliminated all 51 ruff violations in agent_generate.py and 3 in file_parser.py. Zero linting errors in all modified files. 1158 pytest all passing.
+
+### Backend — agent_generate.py (COMPLETE)
+- Added module docstring.
+- Replaced 33 `print()` calls with `logger.info()` / `logger.warning()` using lazy `%s` formatting (ruff T20, G004).
+- Created `_GenerateCtx` — shared context class holding topics, models, caches, and output fields; eliminates argument threading across 5 helpers.
+- Created `_ScriptCtx` — script generation context wrapping `_GenerateCtx` with `llm_script`, `used_hooks`, and `hooks_lock`.
+- Reduced argument counts: `_generate_module` 9 → 5, `_structure_single_topic_slide` 6 → 5, `_structure_slides_parallel` 6 → 1, `_generate_script_for_topic` 9 → 4, `_ppt_monolithic_fallback` 4 → 1.
+- Decomposed `generate_node` (~115 statements) into 12 focused helpers (each under 25 statements).
+- Extracted `_invoke_with_retry` from `_generate_module`; extracted `_collect_slide_sources` from `_get_slide_images`.
+- Fixed `zip()` without `strict=True` (B905); removed unused `i` param from `_convert_to_script`.
+
+### Backend — file_parser.py (COMPLETE)
+- Added module docstring.
+- Replaced `elif` after `return` with `if` (RET505).
+- Merged `startswith` tuple + `in` comparisons (PIE810/SIM109).
+
+### Tests Updated (COMPLETE)
+- `test_pipeline_agents.py`: updated `_ppt_monolithic_fallback` calls to use `_GenerateCtx`; fixed ERA001 and RUF059.
+- `test_agent_generate.py`: removed unused imports; fixed RUF003 ambiguous char and RUF059 unused var; updated `_generate_module` call signatures.
+- `test_file_parser.py`: merged nested `with` statements (SIM117).
+
+---
+
+## Test Coverage Expansion + Path Traversal Hardening (2026-03-15)
+> New test file `test_agent_generate.py` (44 tests), expanded `test_file_parser.py` and `test_auth_routes.py`. Total pytest count: 1063 → 1158.
+
+### Backend — New Test File (COMPLETE)
+- `backend/tests/test_agent_generate.py` (NEW, 44 tests): covers `_VideoJobInputs` (field storage, `ppt_path` default None), `_build_chroma_cache` (collection routing, document joining, placeholder text for empty docs), `_validate_module` (length gate, missing-section naming, multi-issue list), `_generate_module` (severity-based LLM selection, success on first attempt, retry on invalid response, best-effort fallback after max retries, custom prompt template), `generate_node` (dual PDF+PPT path, PDF-only path, monolithic fallback when parallel structuring returns None, `modules_md` in result, `current_stage=complete`, PPT skipped when no gap summary).
+
+### Backend — Expanded Test File (COMPLETE)
+- `backend/tests/test_file_parser.py` (expanded to 24 total): direct unit tests for `_validate_output_dir` — symlink-escape rejection, dotdot escape rejection, `/etc`, `/var/secret`, `/` all rejected; cwd subdirectory and system tmp root both accepted; error message contains the offending path; dotdot that stays within /tmp is accepted. DPI assertion: 144 DPI on 960×540 pt PDF produces exactly 1920×1080 image.
+
+### Backend — `file_parser.py` Changes (COMPLETE)
+- `backend/services/file_parser.py`: `_validate_output_dir()` added — resolves path via `os.path.realpath()` (symlink-aware) before boundary check. `export_slides_as_images()` calls this guard first and raises `ValueError` on traversal attempts. DPI default corrected from 150 → 144. PPTX export path no longer requires `pdftoppm`; LibreOffice converts to PDF then PyMuPDF renders pages directly.
+
+### Frontend — Expanded Auth Route Tests (COMPLETE)
+- `frontend/tests/test_auth_routes.py` (expanded to 71 total): additional coverage of register, login, refresh, me, and logout paths.
+
+---
 
 ## Cloud Run Video Fix + UI Re-run Features (2026-03-15)
 > Video pipeline crashed on Cloud Run CPU container (no LibreOffice). Fixed via graceful fallback + remote PPTX export via GCS. Added "Generate Video" and "Re-run" UI actions.
@@ -74,7 +116,9 @@
 - **Video error/warning surfacing** — `ProgressCapture` captures `[Video] ERROR:` and `[Video] WARNING:` lines; UI shows yellow warning box on completion
 - **Configurable login password** — `AUTH_PASSWORD` env var (default: `CR8-AI`); no longer hardcoded
 - **Unified video provider validation** — `_validate_video_provider()` shared between CLI and web
-- **1204-test suite** — 1063 pytest + 124 Vitest + 17 Playwright E2E, all passing, ruff clean, pytest-xdist parallel (~32s)
+- **1299-test suite** — 1158 pytest + 124 Vitest + 17 Playwright E2E, all passing, ruff clean across all source files (0 violations), pytest-xdist parallel (~32s)
+- **`_validate_output_dir` path traversal guard** — `os.path.realpath()` symlink-aware boundary check in `file_parser.py`; rejects paths outside cwd and system temp; 10 dedicated tests
+- **`test_agent_generate.py`** (44 tests) — comprehensive coverage of `_VideoJobInputs`, `_build_chroma_cache`, `_validate_module`, `_generate_module` retry logic, and `generate_node` dual path
 - **Video slides from generated PPT** (was: original PDF) — fixed `_get_slide_images()` bug
 - **Two-phase video pipeline** — sequential TTS (shared engine) → parallel ffmpeg composition
 - **GPU acceleration** — MPS/CUDA for TTS, hardware H.264 encoding (VideoToolbox/NVENC/QSV/AMF), per-worker thread control
@@ -384,5 +428,5 @@ CPU service (europe-west2, 2 vCPU, 4 GiB)
 ## Environment Notes
 - Dev server: `make dev` → http://localhost:8080
 - Docs preview: `make docs-serve` → http://localhost:8000
-- Tests: `make test` → 1063 pytest + 124 Vitest + 17 Playwright E2E = 1204 total
+- Tests: `make test` → 1158 pytest + 124 Vitest + 17 Playwright E2E = 1299 total
 - Requires: `.env` file with OPENAI_API_KEY, TAVILY_API_KEY (copy from `.env.example`)

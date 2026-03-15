@@ -210,6 +210,34 @@ class TestSecurityHeadersMiddleware:
         assert "referrer-policy" in resp.headers
         assert "content-security-policy" in resp.headers
 
+    def test_content_length_corrected_when_mismatched(self):
+        """Middleware fixes Content-Length if body size differs from declared value."""
+        from starlette.testclient import TestClient as StarletteTestClient
+        from frontend.middleware import SecurityHeadersMiddleware
+
+        async def bad_app(scope, receive, send):
+            # Deliberately declare wrong Content-Length (10) for a 5-byte body
+            await send({
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"content-type", b"text/plain"),
+                    (b"content-length", b"10"),
+                ],
+            })
+            await send({
+                "type": "http.response.body",
+                "body": b"hello",
+                "more_body": False,
+            })
+
+        wrapped = SecurityHeadersMiddleware(bad_app)
+        tc = StarletteTestClient(wrapped, raise_server_exceptions=False)
+        resp = tc.get("/")
+        assert resp.status_code == 200
+        assert resp.text == "hello"
+        assert resp.headers["content-length"] == "5"
+
 
 # ---------------------------------------------------------------------------
 # AuthMiddleware — public paths pass through

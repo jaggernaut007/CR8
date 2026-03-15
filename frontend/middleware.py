@@ -237,11 +237,55 @@ class SecurityHeadersMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # Buffer the start message so we can fix Content-Length if the
+        # body turns out to be a different size (race with FileResponse
+        # stat, or 204 responses with accidental body).
+        state: dict = {"start_message": None}
+
         async def send_with_headers(message):
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
                 headers.extend(_SECURITY_HEADERS)
-                message = {**message, "headers": headers}
+                state["start_message"] = {**message, "headers": headers}
+                return  # Don't send yet — wait for body
+
+            if message["type"] == "http.response.body":
+                start = state.get("start_message")
+                if start is not None:
+                    body = message.get("body", b"")
+                    more_body = message.get("more_body", False)
+                    # For single-chunk responses, fix Content-Length if
+                    # it doesn't match the actual body length.
+                    if not more_body:
+                        _fix_content_length(start, len(body))
+                    await send(start)
+                    state["start_message"] = None
+                await send(message)
+                return
+
             await send(message)
 
         await self.app(scope, receive, send_with_headers)
+
+
+def _fix_content_length(start_message: dict, body_len: int) -> None:
+    """Correct the Content-Length header in *start_message* if it
+    disagrees with *body_len*.
+
+    Mutates the headers list in place.
+    """
+    headers = start_message.get("headers", [])
+    for i, (name, value) in enumerate(headers):
+        if name == b"content-length":
+            try:
+                declared = int(value)
+            except (ValueError, TypeError):
+                break
+            if declared != body_len:
+                logger.warning(
+                    "Content-Length mismatch: declared=%d, actual=%d — correcting",
+                    declared,
+                    body_len,
+                )
+                headers[i] = (b"content-length", str(body_len).encode())
+            break

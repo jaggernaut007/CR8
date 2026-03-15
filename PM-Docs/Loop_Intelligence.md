@@ -15,8 +15,8 @@ This document is the **single source of strategic truth** for CR8. It serves two
 
 **Update cadence:** Refresh after each minor version bump (0.4 → 0.5 → 0.6). Keep under 400 lines.
 
-**Last Updated**: 2026-03-15 (Cloud Run video fix — LibreOffice fallback, remote PPTX export via GCS; UI "Generate Video" and "Re-run" actions)
-**Previous Version**: 2026-03-09 (post-v0.5.4 — E2E bug fixes: job normalisation, view route auth exemption, DB result persistence, idempotent quiz generation)
+**Last Updated**: 2026-03-15 (Ruff refactor: agent_generate.py 51 violations → 0 via context classes, extracted helpers, logger migration; file_parser.py 3 violations → 0; all 1158 pytest passing; ruff clean across all source files)
+**Previous Version**: 2026-03-15 (Test coverage 1063 → 1158 pytest: 95 new generate agent tests, 10 new file parser path-traversal tests, 13 new auth route tests; `_validate_output_dir` path traversal guard added to file_parser)
 
 ---
 
@@ -34,7 +34,7 @@ Curriculum PDFs → [Ingest Agent] → [Research Agent] → [Generate Agent] →
        └── Feedback Loop → Agent improves future content
 ```
 
-Built with LangGraph, OpenAI, ChromaDB, Tavily, fpdf2, FastAPI, React 19 + Vite 7 + Tailwind v4. Deployed on GCP Cloud Run. 1063 backend tests + 124 Vitest + 17 Playwright E2E = 1204 tests total.
+Built with LangGraph, OpenAI, ChromaDB, Tavily, fpdf2, FastAPI, React 19 + Vite 7 + Tailwind v4. Deployed on GCP Cloud Run. 1158 backend tests + 124 Vitest + 17 Playwright E2E = 1299 tests total.
 
 ---
 

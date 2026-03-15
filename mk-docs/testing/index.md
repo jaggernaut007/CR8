@@ -2,7 +2,7 @@
 
 CR8 has a comprehensive automated test suite covering the full stack across three layers:
 
-- **1063 pytest tests** (backend + FastAPI endpoints + GPU/CPU video services + quiz pipeline) — zero real API calls
+- **1158 pytest tests** (backend + FastAPI endpoints + GPU/CPU video services + quiz pipeline) — zero real API calls
 - **124 Vitest component tests** (React SPA pages, shared components, content viewers, and quiz UI)
 - **17 Playwright E2E tests** (auth flow + content viewer + quiz flow)
 
@@ -50,7 +50,8 @@ python3 -m pytest backend/tests/test_eval_harness.py::TestEvalResultSnapshot \
 | `test_bug_fixes.py` | 21 | Regression suite for all March 2026 hardening fixes |
 | `test_pdf_builder.py` | 20+ | PDF generation: Unicode, malformed markdown, code blocks, special chars |
 | `test_chromadb_store.py` | 7 | Add/query, reset, isolation, custom IDs, metadata, empty collection, `n_results` limit |
-| `test_file_parser.py` | 12 | PDF extraction, non-empty pages, multiple files, missing file, empty PDF, unsupported type; `export_slides_as_images()` PDF and PPTX paths, output dir creation, path validation |
+| `test_file_parser.py` | 24 | PDF extraction, non-empty pages, multiple files, missing file, empty PDF, unsupported type; `export_slides_as_images()` PDF and PPTX paths, output dir creation, 1920×1080 DPI assertion; `_validate_output_dir` edge cases: symlink traversal, dotdot escape, system tmp root, error message content |
+| `test_agent_generate.py` | 44 | `_VideoJobInputs` field storage and defaults (including `ppt_path`); `_build_chroma_cache` collection routing, document joining, placeholder text, empty-topics case; `_validate_module` length gate, missing sections, multi-issue reporting; `_generate_module` severity-based model routing, success on first attempt, retry on invalid response, best-effort fallback after max retries; `generate_node` dual PDF+PPT parallel path, PDF-only path, monolithic fallback on parallel failure, `modules_md` output, `current_stage=complete` |
 | `test_script_parser.py` | 10 | `[SLIDE N]` marker parsing, empty scripts, malformed markers, multi-segment scripts |
 | `test_tts_engine.py` | 10 | `synthesize()` and `synthesize_segments()` with `soundfile` stubbed via `sys.modules` |
 | `test_run_pipeline.py` | 9 | `run_job()` validation (invalid format, missing video provider keys, unknown provider), pipeline invocation, state shape, unique job IDs |
@@ -65,7 +66,7 @@ python3 -m pytest backend/tests/test_eval_harness.py::TestEvalResultSnapshot \
 |------|-------|----------------|
 | `frontend/tests/test_api.py` | 90 | All FastAPI endpoints: auth, upload (PDF + PPTX), start, progress (including `warnings` field), download; PPTX magic byte validation; video UI (Kokoro TTS checkbox enabled, warning box) |
 | `frontend/tests/test_progress_capture.py` | 39 | Stage parsing, progress %age (updated STAGE_WEIGHTS), thread safety, stage time budgets |
-| `frontend/tests/test_auth_routes.py` | 49 | Register (201, 409, 400, 503, email normalisation), JWT login (200, 401, 429), legacy login, refresh (happy/invalid/no-cookie), `/me` (JWT Bearer, legacy session, expired), logout (204, session invalidation), `get_current_user` (expired JWT, malformed header) |
+| `frontend/tests/test_auth_routes.py` | 71 | Register (201, 409, 400, 503, email normalisation), JWT login (200, 401, 429), legacy login, refresh (happy/invalid/no-cookie), `/me` (JWT Bearer, legacy session, expired), logout (204, session invalidation), `get_current_user` (expired JWT, malformed header) |
 | `frontend/tests/test_quiz_routes.py` | 24 | Quiz generate (auth, db_pool, validation), get quiz (auth, db_pool), submit (auth, body validation), results (auth), by-job (auth), Pydantic models (8 tests), route helpers (_strip_answers, _score_responses, _serialize_attempt) |
 
 ### React SPA Tests (Vitest)
@@ -117,7 +118,7 @@ Run E2E tests with `make e2e` (requires the dev server and React build to be run
 | `cpu_video_service/tests/test_worker.py` | 37 | Full job lifecycle, cancellation flow (during TTS and compose), ETA estimation, error handling, GCS status upload |
 | `cpu_video_service/tests/test_gcs_client.py` | 22 | `download_manifest()`, `download_slides()`, `upload_videos()`, `upload_status()` with mocked `google.cloud.storage` |
 
-**Total: 1063 pytest (0 real API calls) + 124 Vitest + 17 Playwright E2E = 1204 tests across all layers**
+**Total: 1158 pytest (0 real API calls) + 124 Vitest + 17 Playwright E2E = 1299 tests across all layers**
 
 ---
 
@@ -272,7 +273,13 @@ All test files share a common fixture set:
 | `[SLIDE N]` script parsing edge cases | Yes — 10 tests in `test_script_parser.py` |
 | Kokoro TTS wrapper (`synthesize`, `synthesize_segments`) | Yes — 10 tests with stubbed soundfile |
 | Kokoro two-phase video pipeline (TTS + parallel compose), shared engine, empty slide guard | Yes — 11 tests in `test_video_builder.py` |
-| `export_slides_as_images()` PDF and PPTX paths | Yes — 6 tests in `test_file_parser.py` |
+| `export_slides_as_images()` PDF and PPTX paths, 1920×1080 DPI assertion | Yes — `test_file_parser.py` |
+| `_validate_output_dir` path traversal guard (symlink escape, dotdot, `/etc`, error message) | Yes — 10 tests in `test_file_parser.py` |
+| `_VideoJobInputs` field storage including `ppt_path` field | Yes — 8 tests in `test_agent_generate.py` |
+| `_build_chroma_cache` ChromaDB routing, document joining, placeholder text | Yes — 9 tests in `test_agent_generate.py` |
+| `_validate_module` length gate, missing sections, multi-issue, topic-name independence | Yes — 9 tests in `test_agent_generate.py` |
+| `_generate_module` severity routing, retry on invalid, best-effort after max retries | Yes — 9 tests in `test_agent_generate.py` |
+| `generate_node` dual PDF+PPT path, PDF-only path, monolithic fallback, `modules_md`, `current_stage` | Yes — 9 tests in `test_agent_generate.py` |
 | PPTX upload magic byte validation | Yes — 6 tests in `frontend/tests/test_api.py` |
 | Video UI (Kokoro TTS checkbox, warning box) | Yes — 4 tests in `frontend/tests/test_api.py` |
 | Progress bar stage weights (including Video=25%) | Yes — Updated `test_progress_capture.py` |

@@ -30,7 +30,7 @@ Generated modules are checked for:
 - **Required sections**: `## Module Overview`, `## Learning Objectives`, `## Core Content`, `## Key Takeaways`
 - **Minimum length**: 2,000 characters
 
-Failed modules are retried up to 2 times before the pipeline raises an error.
+Failed modules are retried up to `_MAX_MODULE_RETRIES` times (currently 2). After all retries are exhausted the best-effort response — the last LLM output regardless of validation result — is used so the pipeline continues rather than raising an error.
 
 ## PDF Compilation
 
@@ -61,6 +61,76 @@ PPT structuring runs in parallel with PDF generation:
 - This saves ~86% on input tokens compared to passing all module content
 - **Hook variety** is enforced via a thread-safe tracker that prevents consecutive scripts from using the same hook type (question, statistic, analogy, myth-buster, etc.)
 - Scripts are generated using GPT-5.1 at temperature 0.55 for creative writing
+
+## Internal Structure
+
+### Context Classes
+
+The refactored agent uses two context classes to pass shared state between helpers without exceeding the 5-argument function limit (PLR0913).
+
+**`_GenerateCtx`** — shared context for the entire generate phase. Populated by `_init_generate_ctx` and mutated by helpers.
+
+| Field | Set by | Description |
+|-------|--------|-------------|
+| `topics` | `_init_generate_ctx` | Topic list from pipeline state |
+| `curriculum_scope` | `_init_generate_ctx` | Top-level curriculum description |
+| `gap_summary` | `_init_generate_ctx` | Full gap analysis list from Research Agent |
+| `gap_lookup` | `_init_generate_ctx` | `{topic_name: gap_dict}` index for fast lookups |
+| `chroma_cache` | `_init_generate_ctx` | Pre-queried ChromaDB results keyed by topic name |
+| `llm_premium` | `_init_generate_ctx` | LLM instance for critical-severity topics |
+| `llm_mini` | `_init_generate_ctx` | LLM instance for moderate/minor topics |
+| `formats` | `_init_generate_ctx` | Requested output format list |
+| `timestamp` | `_init_generate_ctx` | Run timestamp string (`YYYYMMDD_HHMMSS`) |
+| `modules_md` | `_generate_all_modules` | Generated markdown per topic |
+| `topic_modules_map` | `_generate_all_modules` | `{topic_name: module_md}` for script generation |
+| `slide_data` | `_build_pdf_and_ppt` | Structured PPT JSON (or `None` if PPT skipped) |
+| `ppt_path` | `_build_pdf_and_ppt` | Path to generated PPTX file |
+| `topic_slide_map` | `_build_pdf_and_ppt` | `{topic_name: [slide_indices]}` |
+
+**`_ScriptCtx`** — script generation context, wraps `_GenerateCtx` with per-run script state.
+
+| Field | Description |
+|-------|-------------|
+| `gen` | The parent `_GenerateCtx` instance |
+| `llm_script` | LLM instance for script generation (premium, temperature 0.55) |
+| `used_hooks` | Shared list of hook types used so far (thread-safe append via `hooks_lock`) |
+| `hooks_lock` | `threading.Lock` protecting `used_hooks` |
+
+### Extracted Helpers from `generate_node`
+
+`generate_node` was reduced from ~115 statements to ~10 by extracting 12 focused helpers:
+
+| Helper | Purpose |
+|--------|---------|
+| `_init_generate_ctx` | Build `_GenerateCtx` from pipeline state; queries ChromaDB, gets LLMs |
+| `_generate_all_modules` | Parallel module generation via `ThreadPoolExecutor`; writes to `ctx.modules_md` |
+| `_build_pdf_and_ppt` | Route to PDF-only, PPT-only, or parallel PDF+PPT based on requested formats |
+| `_build_pdf_ppt_parallel` | Run `build_pdf` and `_structure_slides_parallel` concurrently |
+| `_build_pdf_only` | Build PDF output only |
+| `_build_ppt_only` | Structure and build PPT output only |
+| `_handle_scripts_videos` | Entry point for script/video generation; selects PPT-aligned or fallback path |
+| `_handle_ppt_aligned_path` | Generate PPT-aligned scripts then optionally render videos |
+| `_handle_fallback_path` | Generate per-module scripts then optionally render videos |
+| `_render_videos` | Export slide images and call `_build_videos_dispatch` |
+| `_save_raw_outputs` | Write `_raw_outputs.json` sidecar for the eval framework |
+| `_merge_slide_data` | Embed PPT JSON into the raw outputs dict |
+
+Additionally, two helpers were extracted from previously large functions:
+
+| Helper | Extracted from | Purpose |
+|--------|---------------|---------|
+| `_invoke_with_retry` | `_generate_module` | LLM invocation loop with validation and best-effort fallback |
+| `_collect_slide_sources` | `_get_slide_images` | Collect candidate slide source files in priority order |
+
+### Logging
+
+All `print()` calls have been replaced with `logger.info()` / `logger.warning()` using lazy `%s` formatting. The module creates its logger at the top level:
+
+```python
+logger = logging.getLogger(__name__)
+```
+
+---
 
 ## Video Dispatch
 
