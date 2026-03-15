@@ -17,6 +17,8 @@ function statusBadgeClass(status: string): string {
     case "error":
     case "cancelled":
       return "badge-error";
+    case "pending":
+      return "bg-accent-blue/20 text-accent-blue";
     default:
       return "bg-bg-tertiary text-text-secondary";
   }
@@ -110,7 +112,8 @@ function JobCard({
     },
   });
 
-  const canRerun = job.status === "error" || job.status === "cancelled";
+  const canRerun = job.status === "error" || job.status === "cancelled" || job.status === "pending";
+  const rerunLabel = job.status === "pending" ? "Resume" : "Re-run";
   const linkTo = job.status === "running" ? `/progress/${job.id}` : `/results/${job.id}`;
 
   return (
@@ -133,7 +136,7 @@ function JobCard({
             className="rounded-md bg-accent-blue/20 px-3 py-1 text-xs font-medium text-accent-blue transition hover:bg-accent-blue/30 disabled:opacity-40"
             data-testid="rerun-btn"
           >
-            {rerunMutation.isPending ? "Starting..." : "Re-run"}
+            {rerunMutation.isPending ? "Starting..." : rerunLabel}
           </button>
         )}
         {rerunMutation.isError && (
