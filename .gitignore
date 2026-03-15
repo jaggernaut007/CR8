@@ -1,11 +1,9 @@
 .env
-# Claude Code — local/personal files only (shared config in .claude/ IS tracked)
+# Claude Code system files
+.claude/
 CLAUDE.local.md
 *.local.md
-.claude/settings.local.json
-.claude/statsig/
-.claude/todos.json
-.claude/credentials.json
+.mcp.json
 chroma_db/
 __pycache__/
 *.pyc
@@ -30,3 +28,6 @@ frontend/react-app/node_modules/
 frontend/react-app/test-results/
 .playwright-mcp/
 *.zip
+# Code intelligence (Nexus-MCP local data)
+.nexus/
+.codegrok/

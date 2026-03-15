@@ -16,7 +16,7 @@ Read the relevant note before implementing any feature that uses an external lib
 
 | Topic | File | Version | Date | Status |
 |-------|------|---------|------|--------|
-| Code Intelligence & Project Management Tools | [code-intelligence-tools.md](code-intelligence-tools.md) | CodeGrok MCP, code-graph-mcp, GitHub Projects V2, Notion MCP | 2026-03-06 | Current |
+| Code Intelligence & Project Management Tools | [code-intelligence-tools.md](code-intelligence-tools.md) | Nexus-MCP (replaces CodeGrok + code-graph-mcp), GitHub Projects V2, Notion MCP | 2026-03-12 | Current |
 | GitLab Knowledge Graph for AI Context | [gitlab-knowledge-graph.md](gitlab-knowledge-graph.md) | GitLab 18.4+ (beta), LadybugDB | 2026-03-06 | Current |
 | Kokoro TTS | [kokoro-tts.md](kokoro-tts.md) | >=0.9 | 2026-03-03 | Current |
 | MoviePy v2 | [moviepy-v2.md](moviepy-v2.md) | >=2.0 | 2026-03-03 | Current |
@@ -38,6 +38,12 @@ Read the relevant note before implementing any feature that uses an external lib
 | fpdf2 PDF Generation | [fpdf2.md](fpdf2.md) | >=2.8 | 2026-03-09 | Current |
 | python-pptx PowerPoint Generation | [python-pptx.md](python-pptx.md) | >=1.0 | 2026-03-09 | Current |
 | google-cloud-storage SDK | [google-cloud-storage.md](google-cloud-storage.md) | >=2.14 | 2026-03-09 | Current |
+
+## Architecture Decision Records
+
+| ADR | Topic | Date |
+|-----|-------|------|
+| ADR-011 | [Code Knowledge Graph (Nexus-MCP — replaces CodeGrok + code-graph-mcp)](../adr/ADR-011-code-knowledge-graph.md) | 2026-03-12 |
 
 ## Priority Research Needed
 

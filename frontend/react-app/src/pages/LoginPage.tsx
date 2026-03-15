@@ -159,7 +159,7 @@ export default function LoginPage() {
             How it works
           </h3>
           <div className="grid grid-cols-3 gap-4 text-center">
-            <Step number="1" title="Upload" desc="Drop your curriculum PDF" />
+            <Step number="1" title="Upload" desc="Drop your curriculum PDF/PPTX" />
             <Step number="2" title="Generate" desc="AI creates learning materials" />
             <Step number="3" title="Learn" desc="Interactive content & quizzes" />
           </div>

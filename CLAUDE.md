@@ -32,6 +32,7 @@
 - **Context7** — version-specific library docs. Use before web search for any library question.
 - **Playwright** — browser automation. Use to test web UI at localhost:8080.
 - **Sequential Thinking** — structured reasoning for architecture decisions.
+- **Nexus-MCP** — unified code intelligence: hybrid search (vector + BM25 + graph via RRF), structural analysis (callers, callees, impact, complexity), and semantic memory. Replaces CodeGrok + code-graph-mcp. Use `search` for "how does X work?", `find_callers`/`impact` for "what calls Y?", `explain` for combined understanding, `remember`/`recall` for persistent project knowledge. 15 tools, fully local, token-budgeted (summary/detailed/full).
 
 ## Skills Available
 <!-- Skills are loaded on-demand — only metadata is preloaded -->

@@ -4,7 +4,7 @@
      Reference from AGENTS.md so the agent knows these exist. -->
 
 **Date:** 2026-03-06
-**Status:** Accepted
+**Status:** Superseded (2026-03-14 — simplified to 2-tier: GPU Primary → CPU Video. GPU Fallback in europe-west1 removed to cut Artifact Registry storage costs.)
 **Deciders:** Shreyas Jagannath (engineering lead)
 
 ---

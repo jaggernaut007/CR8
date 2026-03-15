@@ -6,6 +6,10 @@
       "env": {
         "NEON_API_KEY": "${NEON_API_KEY}"
       }
+    },
+    "nexus-mcp": {
+      "command": "/Users/shreyasjagannath/dev/Nexus-MCP/.venv/bin/nexus-mcp",
+      "args": []
     }
   }
 }

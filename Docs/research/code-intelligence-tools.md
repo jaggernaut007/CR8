@@ -82,7 +82,7 @@ Indexes Python, JavaScript, TypeScript, C, C++, Go, Java, Kotlin, Bash (~9 langu
 Multi-language code graph analyzer using ast-grep backend. Provides 9 different analysis tools (get_definitions, get_callers, get_callees, get_type_references, get_import_graph, etc.) across 25+ programming languages. Includes file watcher that auto-reindexes on changes (2-second debouncing).
 
 **Setup complexity:** Low
-- Python 3.12+ required
+- Python 3.10+ required
 - `uv add code-graph-mcp` or `pip install code-graph-mcp`
 - Configuration: `claude mcp add --scope project code-graph-mcp code-graph-mcp`
 - Optional external config at `~/.codegraph/config.json`
@@ -101,7 +101,7 @@ Multi-language code graph analyzer using ast-grep backend. Provides 9 different 
 - Growing adoption in multi-language codebases
 
 **Key gotchas:**
-- Python 3.12+ requirement (CR8 uses 3.11, may need upgrade)
+- Python 3.10+ requirement (CR8 uses 3.11, may need upgrade)
 - File watcher requires active daemon (consumes resources)
 - Slower initial indexing than CodeGrok
 - Better for structural analysis than semantic search
@@ -428,7 +428,7 @@ These are behavioral patterns that can reduce token usage by 40-70% with zero ad
 - **Function definitions only:** Won't find all usages of a function, only definitions. Use grep/code-graph-mcp for that.
 
 ### code-graph-mcp Gotchas
-- **Python 3.12 requirement:** CR8 uses 3.11. May need `pyenv` to run alongside main environment.
+- **Python 3.10+requirement:** CR8 uses 3.11. May need `pyenv` to run alongside main environment.
 - **File watcher overhead:** Running daemon consumes ~100-200MB RAM if watching 5000+ files.
 - **Initial index slower:** code-graph-mcp slower than CodeGrok on first parse of large codebase.
 
@@ -471,7 +471,7 @@ Based on this research, CR8 should:
 2. **Add code-graph-mcp as secondary tool** (v0.5 Phase 2 or v0.6)
    - Setup time: 15 minutes
    - Complements CodeGrok for relationship discovery (call graphs, imports)
-   - May require Python 3.12 compatibility check (CR8 currently 3.11)
+   - May require Python 3.10+compatibility check (CR8 currently 3.11)
    - Defer if Pyenv overhead too high; CodeGrok alone is 90% of value
 
 3. **Create GitHub Projects board for active phases** (v0.5 start)
@@ -515,11 +515,11 @@ Based on this research, CR8 should:
 
 ### Phase 2.5 (v0.5 Post-Launch)
 - **Week 1:** Upgrade Notion with database structure (Feature | Status | Phase | Owner | Blocker | Link)
-- **Week 1:** Document code-graph-mcp setup (Python 3.12 compat check, pyenv guidance)
+- **Week 1:** Document code-graph-mcp setup (Python 3.10+compat check, pyenv guidance)
 - **Week 2:** Run code-graph-mcp alongside CodeGrok; measure which tool better for typical "find callers of function X" queries
 
 ### Phase 3 (v0.6, ~4 weeks)
-- **Optional:** Add code-graph-mcp as standard tool if Python 3.12 upgrade done
+- **Optional:** Add code-graph-mcp as standard tool if Python 3.10+upgrade done
 - Monitor cost/token metrics
 - Revisit Linear MCP if team grows to 4+
 

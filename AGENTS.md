@@ -69,7 +69,7 @@ A task is complete only when ALL of the following are true:
 ## Session Start Protocol
 1. Read `PROGRESS.md` for current project state
 2. Run `./scripts/init.sh` to verify the app is healthy
-3. Verify MCP servers are connected (`/mcp`) — Context7, Playwright, Sequential Thinking
+3. Verify MCP servers are connected (`/mcp`) — Context7, Playwright, Sequential Thinking, Nexus-MCP
 4. Fix any failures BEFORE starting new work
 
 ## Key Directories
@@ -95,12 +95,14 @@ Agents have access to MCP tools for external capabilities:
 | **Playwright** | `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_console_messages`, `browser_network_requests` | `code-reviewer`, `debug-detective`, `docs-writer` |
 | **Sequential Thinking** | `sequentialthinking` | `adr-writer`, `prompt-optimizer`, `eval-judge`, `research-assistant`, `docs-writer` |
 | **Snyk** | `snyk_test`, `snyk_code_scan`, `snyk_package_health_check` | `research-assistant`, `code-reviewer` |
+| **Nexus-MCP** | `index`, `search`, `find_symbol`, `find_callers`, `find_callees`, `analyze`, `impact`, `explain`, `overview`, `architecture`, `remember`, `recall`, `forget`, `status`, `health` | All agents (hybrid code search + structural analysis + semantic memory) |
 
 **When to use each:**
 - **Context7** — before writing code that uses any external library; before documenting library APIs
 - **Playwright** — when reviewing or debugging frontend changes (localhost:8080)
 - **Sequential Thinking** — when reasoning through architectural trade-offs for ADRs
 - **Snyk** — when adding new dependencies (package health check), during code review (SAST scan), and when auditing dependency vulnerabilities
+- **Nexus-MCP** — unified code intelligence (replaces CodeGrok + code-graph-mcp). Use `search` for semantic queries ("how does X work?"), `find_callers`/`find_callees`/`impact` for structural analysis before refactors, `explain` for combined understanding of a symbol, `analyze` for complexity/quality metrics, `architecture` for high-level project structure, `remember`/`recall` for persistent project knowledge across sessions. Token-budgeted responses (summary/detailed/full) — request only the detail level needed.
 
 ## Subagent Routing
 Claude Code routes to these agents automatically when the situation matches:
@@ -111,8 +113,8 @@ Claude Code routes to these agents automatically when the situation matches:
 | After running `python -m backend.evals compare` | `eval-judge` | opus | Sequential Thinking |
 | When iterating on any prompt in `backend/prompts/` | `prompt-optimizer` | opus | Sequential Thinking |
 | After every wave of implementation (write + verify tests) | `test-writer` | sonnet | Context7 |
-| After every wave of implementation (quality + lint + architecture + Snyk scan) | `code-reviewer` | sonnet | Playwright, Context7, Snyk |
-| When `make test` produces failures | `debug-detective` | sonnet | Playwright, Context7 |
+| After every wave of implementation (quality + lint + architecture + Snyk scan) | `code-reviewer` | sonnet | Playwright, Context7, Snyk, Nexus-MCP |
+| When `make test` produces failures | `debug-detective` | sonnet | Playwright, Context7, Nexus-MCP |
 | Before committing (update mk-docs, CHANGELOG, PM-Docs, AGENTS.md counts, PROGRESS.md, llms.txt) | `docs-writer` | sonnet | Context7, Playwright |
 | Before using any external library or API (includes security assessment) | `research-assistant` | haiku | Context7, Sequential Thinking, Snyk |
 

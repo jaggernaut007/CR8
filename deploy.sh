@@ -113,6 +113,12 @@ if [[ "${RUN_SETUP}" == "true" ]]; then
     echo "  # Optional — HuggingFace token (GPU service model downloads)"
     echo "  echo -n 'hf_YOUR-TOKEN' | gcloud secrets create HF_TOKEN --data-file=- --replication-policy=automatic"
     echo ""
+    echo "  # Required — Database (Neon PostgreSQL)"
+    echo "  echo -n 'postgresql://user:pass@host/db?sslmode=require' | gcloud secrets create DATABASE_URL --data-file=- --replication-policy=automatic"
+    echo ""
+    echo "  # Required — JWT signing secret (32+ bytes)"
+    echo "  echo -n \"\$(openssl rand -hex 32)\" | gcloud secrets create JWT_SECRET --data-file=- --replication-policy=automatic"
+    echo ""
     echo "  # Optional — HeyGen video generation"
     echo "  echo -n 'YOUR-KEY' | gcloud secrets create HEYGEN_API_KEY --data-file=- --replication-policy=automatic"
     echo ""
@@ -125,7 +131,7 @@ if [[ "${RUN_SETUP}" == "true" ]]; then
     echo "  SA=\"\${PROJECT_NUMBER}-compute@developer.gserviceaccount.com\""
     echo ""
     echo "  # Secrets access (all secrets)"
-    echo "  for SECRET in OPENAI_API_KEY TAVILY_API_KEY AUTH_PASSWORD HF_TOKEN HEYGEN_API_KEY LANGCHAIN_API_KEY; do"
+    echo "  for SECRET in OPENAI_API_KEY TAVILY_API_KEY AUTH_PASSWORD HF_TOKEN HEYGEN_API_KEY LANGCHAIN_API_KEY DATABASE_URL JWT_SECRET; do"
     echo "    gcloud secrets add-iam-policy-binding \$SECRET \\"
     echo "      --member=\"serviceAccount:\${SA}\" \\"
     echo "      --role=\"roles/secretmanager.secretAccessor\" 2>/dev/null || true"
@@ -241,7 +247,7 @@ if [[ "${DEPLOY_CPU}" == "true" ]]; then
         --min-instances=0 \
         --max-instances=1 \
         --no-cpu-throttling \
-        --set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest,TAVILY_API_KEY=TAVILY_API_KEY:latest,AUTH_PASSWORD=AUTH_PASSWORD:latest,HF_TOKEN=HF_TOKEN:latest,HEYGEN_API_KEY=HEYGEN_API_KEY:latest,LANGCHAIN_API_KEY=LANGCHAIN_API_KEY:latest" \
+        --set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest,TAVILY_API_KEY=TAVILY_API_KEY:latest,AUTH_PASSWORD=AUTH_PASSWORD:latest,HF_TOKEN=HF_TOKEN:latest,HEYGEN_API_KEY=HEYGEN_API_KEY:latest,LANGCHAIN_API_KEY=LANGCHAIN_API_KEY:latest,DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest" \
         --set-env-vars="GPU_SERVICE_URL=${GPU_URL},CPU_VIDEO_SERVICE_URL=${CPU_VIDEO_URL},GCS_BUCKET=${GCS_BUCKET},OPENAI_MODEL=gpt-5.1,OPENAI_MODEL_PREMIUM=gpt-5.1,OPENAI_MODEL_MINI=gpt-5-mini,OPENAI_MODEL_NANO=gpt-5-nano,CHROMA_PERSIST_DIR=./chroma_db,LANGCHAIN_TRACING_V2=true,LANGCHAIN_PROJECT=cr8-prototype,MAX_WORKERS=12,VIDEO_MAX_WORKERS=6,VIDEO_PROVIDER=kokoro,COOKIE_SECURE=true"
 
     CPU_URL=$(gcloud run services describe "${CPU_SERVICE_NAME}" \

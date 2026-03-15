@@ -1,4 +1,4 @@
-.PHONY: install test test-fast run clean serve dev docker-build docker-run docs-serve docs-build docs-deploy lint lint-fix build-frontend e2e test-react e2e-react
+.PHONY: install test test-fast run clean serve dev docker-build docker-run docs-serve docs-build docs-deploy lint lint-fix build-frontend e2e test-react e2e-react reindex
 
 install:
 	uv sync --all-extras
@@ -56,3 +56,8 @@ test-react:
 
 e2e-react:
 	cd frontend/react-app && npx playwright test
+
+reindex:  ## Re-index codebase for Nexus-MCP code intelligence
+	@echo "Re-indexing codebase for Nexus-MCP (hybrid search + code graph)..."
+	@echo "Use Nexus-MCP 'index' tool in Claude Code to trigger incremental re-index."
+	@echo "Nexus-MCP supports incremental indexing — only changed files are re-processed."

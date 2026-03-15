@@ -8,10 +8,12 @@
 
 ## TL;DR Recommendation
 
-Add **CodeGrok** (code intelligence) + **GitHub Projects V2** (issue tracking) + **token optimization strategies** to improve codebase knowledge and reduce context spending by 40-60%.
+**UPDATE (2026-03-12):** CodeGrok + code-graph-mcp have been consolidated into **Nexus-MCP** — a single unified server with hybrid search (vector + BM25 + graph), structural analysis, and semantic memory. 15 tools, <350MB RAM, fully local, MIT licensed.
 
-**Effort:** 1 hour setup, no budget required
-**Timeline:** v0.5 Phase 2 (after React SPA done)
+Add **Nexus-MCP** (code intelligence) + **GitHub Projects V2** (issue tracking) + **token optimization strategies** to improve codebase knowledge and reduce context spending by 40-60%.
+
+**Effort:** 30 min setup (already installed at `~/dev/Nexus-MCP/`)
+**Status:** DONE — configured in `.claude/mcp.json`
 
 ---
 
@@ -25,28 +27,36 @@ Add **CodeGrok** (code intelligence) + **GitHub Projects V2** (issue tracking) +
 
 ## Solution: 3-Part Combo
 
-### 1. CodeGrok MCP (Code Intelligence)
+### 1. Nexus-MCP (Unified Code Intelligence)
 
-**What:** Semantic code search. "Find all code related to video building" → returns `video_builder.py`, `gpu_client.py`, `tts_engine.py` snippets, not entire files.
+**What:** Hybrid code search + structural analysis + semantic memory in one server. "Find all code related to video building" → returns `video_builder.py`, `gpu_client.py`, `tts_engine.py` snippets via vector+BM25+graph fusion, re-ranked with FlashRank. Replaces the previous CodeGrok + code-graph-mcp dual setup.
 
-**Setup:** 30 minutes
+**Setup:** Already installed at `~/dev/Nexus-MCP/`
 ```bash
-git clone https://github.com/dondetir/CodeGrok_mcp
-cd CodeGrok_mcp
-./setup.sh  # Python 3.10+ required
+cd ~/dev/Nexus-MCP
+./setup.sh  # Python 3.10+ required (one-time)
 ```
 
-**Token savings:** 10x per code search query
-- Before: Load 20 files (5K tokens) to answer "how do we build videos?"
-- After: Query CodeGrok (500 tokens)
+**15 Tools:**
+- `search` — hybrid search (vector + BM25 + graph fusion via RRF)
+- `find_symbol`, `find_callers`, `find_callees` — structural graph queries
+- `analyze`, `impact`, `explain` — complexity, change impact, combined understanding
+- `overview`, `architecture` — project-level analysis
+- `remember`, `recall`, `forget` — persistent semantic memory
+- `index`, `status`, `health` — indexing and diagnostics
+
+**Token savings:** 10-100x per query (token-budgeted responses)
+- `summary` ~500 tokens — counts, scores, file:line pointers
+- `detailed` ~2,000 tokens — signatures, types, line ranges, docstrings
+- `full` ~8,000 tokens — full code snippets, relationships, metadata
 
 **Why it's safe:**
 - MIT license
-- Local storage (.codegrok/ directory)
-- No external APIs
-- Single maintainer, active development
+- Local storage (`.nexus/` directory, gitignored)
+- No external APIs, no cloud dependencies
+- <350MB RAM, ONNX Runtime embeddings
 
-**Language support:** Python, JavaScript, TypeScript, C, C++, Go, Java, Kotlin, Bash
+**Language support:** 25+ languages (Python, JavaScript, TypeScript, Go, Java, Rust, C, C++, and more)
 
 ---
 
@@ -111,30 +121,20 @@ Extended thinking enabled by default (31,999 token budget). Disable for trivial 
 
 ## Implementation Timeline
 
-### v0.5 Phase 2 (React SPA Sprint, 2 weeks)
+### DONE (2026-03-12)
 
-**Week 1:**
-- [ ] Add CodeGrok MCP (.claude/mcp.json + setup)
-- [ ] Run initial index (5K backend files, 2-5 min)
-- [ ] Test 5 semantic searches ("how do we X?")
-- [ ] Add GitHub Projects V2 MCP, create "v0.5 Phase 2" board, link 10+ issues
+- [x] Install Nexus-MCP (`~/dev/Nexus-MCP/`)
+- [x] Configure in `.claude/mcp.json` (replaces CodeGrok + code-graph-mcp)
+- [x] Update all docs (AGENTS.md, CLAUDE.md, ADR-011, agentic-guide, developer-workflow)
+- [x] Update `.gitignore` (`.nexus/` directory)
+- [x] Update `scripts/init.sh` health check
+- [x] Update `Makefile` reindex target
 
-**Week 2:**
+### Remaining
+
+- [ ] Add GitHub Projects V2 MCP, create sprint board, link issues
 - [ ] Adopt `/clear` pattern: separate backend/frontend work into 2 sessions
-- [ ] Test Plan mode on a 5-file refactor (expected 40-60% token savings)
-- [ ] Document in CLAUDE.md
-
-### v0.5 Post-Launch (1 week)
-
-- [ ] Upgrade Notion: create Feature tracking database (Status | Phase | Owner | Blocker | Link)
-- [ ] Export PROGRESS.md into Notion (one-time)
-- [ ] Keep PROGRESS.md as session cache (read-only from Notion export)
-
-### Optional: v0.5 Phase 3 / v0.6 (Future)
-
-- [ ] Add code-graph-mcp (multi-language call graphs) if needed
-  - Requires Python 3.12 (CR8 currently 3.11)
-  - Complements CodeGrok for "show me all callers of function X" queries
+- [ ] Run initial Nexus-MCP index on CR8 codebase and validate search quality
 
 ---
 
@@ -154,7 +154,7 @@ Extended thinking enabled by default (31,999 token budget). Disable for trivial 
 |--------|---------|-------|-------------|
 | Avg context/response | 50-60K | 25-30K | **45-50% less** |
 | Response time | 8-12s | 3-5s | **60% faster** |
-| Code search friction | Manual digging | 1-2 CodeGrok queries | **80% easier** |
+| Code search friction | Manual digging | 1-2 Nexus-MCP queries | **80% easier** |
 | Feature query speed | Manual grep | Notion DB query | **70% faster** |
 | Phase transitions | High (stale context) | Low (/clear resets) | **50% less overhead** |
 
@@ -164,8 +164,7 @@ Extended thinking enabled by default (31,999 token budget). Disable for trivial 
 
 | Tool | Cost | Setup | Maintenance |
 |------|------|-------|------------|
-| CodeGrok | Free | 30 min | 5 min/week (reindex) |
-| code-graph-mcp | Free | 15 min | 5 min/week |
+| Nexus-MCP | Free | 30 min (done) | 5 min/week (reindex) |
 | GitHub Projects V2 | Free | 5 min | 10 min/week |
 | Notion MCP | Included (already $) | 10 min | 5 min/week |
 | Token optimization | Free | 0 min | 0 min (behavior change) |
@@ -175,8 +174,8 @@ Extended thinking enabled by default (31,999 token budget). Disable for trivial 
 
 ## FAQ
 
-**Q: Will CodeGrok slow down my iterations?**
-A: No. First index ~2-5 min (one-time). After that, queries are instant + hugely reduce token cost.
+**Q: Will Nexus-MCP slow down my iterations?**
+A: No. First index ~2-5 min (one-time). After that, incremental indexing only processes changed files. Queries are instant + hugely reduce token cost.
 
 **Q: Do I have to move to GitHub Projects?**
 A: No. It's optional and complementary to Notion. Use GitHub Projects for active sprint tracking, Notion for backlog.
@@ -184,18 +183,19 @@ A: No. It's optional and complementary to Notion. Use GitHub Projects for active
 **Q: What if I use Cursor instead of Claude Code?**
 A: All tools are MCP-based, work with any MCP client (Cursor, Windsurf, Continue, Zed, Claude Desktop).
 
-**Q: Will Python 3.10 requirement for CodeGrok break CI?**
-A: No. CR8 uses 3.11+, both satisfy CodeGrok's requirement. code-graph-mcp needs 3.12 (optional for later).
+**Q: Why Nexus-MCP instead of CodeGrok + code-graph-mcp?**
+A: Nexus-MCP consolidates both into one server with additional benefits: hybrid fusion (vector+BM25+graph), token-budgeted responses, semantic memory, impact analysis, and architecture overview. One process, <350MB RAM, 15 tools.
 
 **Q: How much token savings can I expect?**
-A: 40-60% with full implementation. CodeGrok alone = 30-40%. Token optimization strategies = 20-30%.
+A: 40-60% with full implementation. Nexus-MCP alone = 30-50% (hybrid search is more precise than vector-only). Token optimization strategies = 20-30%.
 
 ---
 
 ## Reading List
 
 - **Full research:** `docs/research/code-intelligence-tools.md` (15 min read)
-- **CodeGrok setup:** https://github.com/dondetir/CodeGrok_mcp (10 min setup)
+- **Nexus-MCP:** https://github.com/jaggernaut007/Nexus-MCP (installed at `~/dev/Nexus-MCP/`)
+- **ADR-011:** `docs/adr/ADR-011-code-knowledge-graph.md` (decision record)
 - **Claude Code token optimization:** https://code.claude.com/docs/en/costs (5 min read)
 - **GitHub Projects V2 MCP:** https://github.com/github/github-mcp-server (5 min setup)
 

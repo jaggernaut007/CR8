@@ -75,6 +75,16 @@ else
   echo "  ⚠ Docs build has warnings (non-blocking — fix when convenient)"
 fi
 
+# ── 6. Code Intelligence MCPs ────────────────────────────────────────────────
+echo ""
+echo "▶ Checking code intelligence tools..."
+if [ -f "$HOME/dev/Nexus-MCP/.venv/bin/nexus-mcp" ]; then
+  echo "  ✓ Nexus-MCP installed (hybrid search + code graph + semantic memory)"
+else
+  echo "  ⚠ Nexus-MCP not found — install: cd ~/dev/Nexus-MCP && ./setup.sh"
+fi
+echo "  ℹ Run /mcp in Claude Code to verify MCP servers are connected"
+
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""
 echo "═══════════════════════════════════════════"

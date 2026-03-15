@@ -103,7 +103,7 @@ Grant the Cloud Run service account access to read secrets:
 ```bash
 PROJECT_NUMBER=$(gcloud projects describe YOUR_PROJECT_ID --format='value(projectNumber)')
 
-for SECRET in OPENAI_API_KEY TAVILY_API_KEY; do
+for SECRET in OPENAI_API_KEY TAVILY_API_KEY DATABASE_URL JWT_SECRET; do
     gcloud secrets add-iam-policy-binding $SECRET \
         --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
         --role="roles/secretmanager.secretAccessor"

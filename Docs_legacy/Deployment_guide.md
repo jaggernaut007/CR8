@@ -93,6 +93,12 @@ echo -n 'sk-your-openai-key' | gcloud secrets create OPENAI_API_KEY \
 echo -n 'tvly-your-tavily-key' | gcloud secrets create TAVILY_API_KEY \
     --data-file=- --replication-policy=automatic
 
+echo -n 'postgresql://user:pass@host/db?sslmode=require' | gcloud secrets create DATABASE_URL \
+    --data-file=- --replication-policy=automatic
+
+echo -n "$(openssl rand -hex 32)" | gcloud secrets create JWT_SECRET \
+    --data-file=- --replication-policy=automatic
+
 # Optional (for video generation)
 echo -n 'your-heygen-key' | gcloud secrets create HEYGEN_API_KEY \
     --data-file=- --replication-policy=automatic
@@ -103,7 +109,7 @@ Grant the Cloud Run service account access to read secrets:
 ```bash
 PROJECT_NUMBER=$(gcloud projects describe YOUR_PROJECT_ID --format='value(projectNumber)')
 
-for SECRET in OPENAI_API_KEY TAVILY_API_KEY; do
+for SECRET in OPENAI_API_KEY TAVILY_API_KEY DATABASE_URL JWT_SECRET; do
     gcloud secrets add-iam-policy-binding $SECRET \
         --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
         --role="roles/secretmanager.secretAccessor"
@@ -209,6 +215,8 @@ Injected from Secret Manager via `--set-secrets`:
 |--------|----------|-------------|
 | `OPENAI_API_KEY` | Yes | OpenAI API key |
 | `TAVILY_API_KEY` | Yes | Tavily web search key |
+| `DATABASE_URL` | Yes | Neon Postgres connection string (auth/jobs/quiz) |
+| `JWT_SECRET` | Yes | 32+ byte hex string for JWT token signing |
 | `HEYGEN_API_KEY` | No | HeyGen video generation key |
 
 ---
