@@ -18,7 +18,7 @@ function statusBadgeClass(status: string): string {
     case "cancelled":
       return "badge-error";
     case "pending":
-      return "bg-accent-blue/20 text-accent-blue";
+      return "badge-pending";
     default:
       return "bg-bg-tertiary text-text-secondary";
   }
@@ -114,7 +114,10 @@ function JobCard({
 
   const canRerun = job.status === "error" || job.status === "cancelled" || job.status === "pending";
   const rerunLabel = job.status === "pending" ? "Resume" : "Re-run";
-  const linkTo = job.status === "running" ? `/progress/${job.id}` : `/results/${job.id}`;
+  const linkTo =
+    job.status === "running" || job.status === "pending"
+      ? `/progress/${job.id}`
+      : `/results/${job.id}`;
 
   return (
     <div className="glass flex items-center justify-between p-4 transition hover:glass-hover">

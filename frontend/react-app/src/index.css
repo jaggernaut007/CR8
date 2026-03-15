@@ -83,6 +83,12 @@ body {
   border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
+@utility badge-pending {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--color-accent-blue);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
 /* Focus ring for accessibility (WCAG 2.1 AA) */
 @utility focus-ring {
   outline: 2px solid var(--color-accent-blue);

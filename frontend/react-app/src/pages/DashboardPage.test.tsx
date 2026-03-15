@@ -310,6 +310,78 @@ describe("DashboardPage — Re-run button", () => {
     });
   });
 
+  it("shows Resume button for pending jobs", async () => {
+    mockFetchJobs.mockResolvedValue({
+      jobs: [
+        {
+          id: "job-pend2",
+          filename: "pending.pdf",
+          status: "pending",
+          stage: null,
+          percent: 0,
+          created_at: "2026-03-01T00:00:00Z",
+          formats: ["pdf"],
+        },
+      ],
+      total: 1,
+    });
+
+    renderWithProviders(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("rerun-btn")).toHaveTextContent("Resume");
+    });
+  });
+
+  it("shows Pending badge for pending jobs", async () => {
+    mockFetchJobs.mockResolvedValue({
+      jobs: [
+        {
+          id: "job-pend3",
+          filename: "pending.pdf",
+          status: "pending",
+          stage: null,
+          percent: 0,
+          created_at: "2026-03-01T00:00:00Z",
+          formats: ["pdf"],
+        },
+      ],
+      total: 1,
+    });
+
+    renderWithProviders(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Pending")).toBeInTheDocument();
+    });
+  });
+
+  it("pending job card links to /progress not /results", async () => {
+    mockFetchJobs.mockResolvedValue({
+      jobs: [
+        {
+          id: "job-pend4",
+          filename: "pending.pdf",
+          status: "pending",
+          stage: null,
+          percent: 0,
+          created_at: "2026-03-01T00:00:00Z",
+          formats: ["pdf"],
+        },
+      ],
+      total: 1,
+    });
+
+    renderWithProviders(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("pending.pdf")).toBeInTheDocument();
+    });
+
+    const link = screen.getByText("pending.pdf").closest("a");
+    expect(link).toHaveAttribute("href", "/progress/job-pend4");
+  });
+
   it("button is disabled while re-run mutation is pending", async () => {
     mockFetchJobs.mockResolvedValue({
       jobs: [
