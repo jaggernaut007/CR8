@@ -4,9 +4,9 @@
  * Uses Tanstack Query to fetch jobs from the API with automatic refetching.
  */
 
-import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router";
-import { fetchJobs } from "@/api/jobs";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate } from "react-router";
+import { fetchJobs, startPipeline, type Job } from "@/api/jobs";
 
 function statusBadgeClass(status: string): string {
   switch (status) {
@@ -35,6 +35,8 @@ function StatusBadge({ status, percent }: { status: string; percent: number }) {
 }
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data, isLoading, error } = useQuery({
     queryKey: ["jobs"],
     queryFn: () => fetchJobs(),
@@ -69,13 +71,13 @@ export default function DashboardPage() {
         <div className="glass glass-shadow p-12 text-center">
           <p className="text-lg text-text-secondary">No generations yet</p>
           <p className="mt-2 text-sm text-text-muted">
-            Upload a curriculum PDF to get started
+            Upload a curriculum PDF/PPTX to get started
           </p>
           <Link
             to="/upload"
             className="mt-6 inline-block accent-gradient rounded-lg px-6 py-2.5 font-medium text-white transition hover:opacity-90"
           >
-            Upload PDF
+            Upload PDF/PPTX
           </Link>
         </div>
       )}
@@ -83,23 +85,62 @@ export default function DashboardPage() {
       {data && data.jobs.length > 0 && (
         <div className="space-y-3">
           {data.jobs.map((job) => (
-            <Link
-              key={job.id}
-              to={job.status === "running" ? `/progress/${job.id}` : `/results/${job.id}`}
-              className="glass flex items-center justify-between p-4 transition hover:glass-hover"
-            >
-              <div>
-                <p className="font-medium text-text-primary">{job.filename}</p>
-                <p className="mt-1 text-xs text-text-muted">
-                  {new Date(job.created_at).toLocaleDateString()} &middot;{" "}
-                  {job.formats.join(", ").toUpperCase()}
-                </p>
-              </div>
-              <StatusBadge status={job.status} percent={job.percent} />
-            </Link>
+            <JobCard key={job.id} job={job} navigate={navigate} queryClient={queryClient} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function JobCard({
+  job,
+  navigate,
+  queryClient,
+}: {
+  job: Job;
+  navigate: (path: string) => void;
+  queryClient: ReturnType<typeof useQueryClient>;
+}) {
+  const rerunMutation = useMutation({
+    mutationFn: () => startPipeline(job.id, job.formats),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      navigate(`/progress/${job.id}`);
+    },
+  });
+
+  const canRerun = job.status === "error" || job.status === "cancelled";
+  const linkTo = job.status === "running" ? `/progress/${job.id}` : `/results/${job.id}`;
+
+  return (
+    <div className="glass flex items-center justify-between p-4 transition hover:glass-hover">
+      <Link to={linkTo} className="flex-1">
+        <p className="font-medium text-text-primary">{job.filename}</p>
+        <p className="mt-1 text-xs text-text-muted">
+          {new Date(job.created_at).toLocaleDateString()} &middot;{" "}
+          {job.formats.join(", ").toUpperCase()}
+        </p>
+      </Link>
+      <div className="flex items-center gap-3">
+        {canRerun && (
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              rerunMutation.mutate();
+            }}
+            disabled={rerunMutation.isPending}
+            className="rounded-md bg-accent-blue/20 px-3 py-1 text-xs font-medium text-accent-blue transition hover:bg-accent-blue/30 disabled:opacity-40"
+            data-testid="rerun-btn"
+          >
+            {rerunMutation.isPending ? "Starting..." : "Re-run"}
+          </button>
+        )}
+        {rerunMutation.isError && (
+          <span className="text-xs text-error">Upload expired — re-upload file</span>
+        )}
+        <StatusBadge status={job.status} percent={job.percent} />
+      </div>
     </div>
   );
 }

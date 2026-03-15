@@ -8,7 +8,7 @@
 import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { fetchJob, downloadUrl, type Job } from "@/api/jobs";
+import { fetchJob, startPipeline, downloadUrl, type Job } from "@/api/jobs";
 import { fetchQuizzesByJob, generateQuiz } from "@/api/quiz";
 import ContentTabs from "@/components/ContentTabs";
 import PdfViewer from "@/components/viewers/PdfViewer";
@@ -125,6 +125,11 @@ export default function ResultsPage() {
             </div>
           )}
 
+          {/* Add Video option (only when video wasn't generated) */}
+          {job.status === "complete" && !job.formats.includes("video") && (
+            <AddVideoSection jobId={jobId!} formats={job.formats} navigate={navigate} />
+          )}
+
           {/* Quiz section (only for complete jobs) */}
           {job.status === "complete" && (
             <QuizSection jobId={jobId!} navigate={navigate} />
@@ -151,6 +156,45 @@ function availableDownloads(job: Job) {
     if (key === "scripts" || key === "videos") return job.formats.includes("video");
     return false;
   });
+}
+
+function AddVideoSection({
+  jobId,
+  formats,
+  navigate,
+}: {
+  jobId: string;
+  formats: string[];
+  navigate: (path: string) => void;
+}) {
+  const mutation = useMutation({
+    mutationFn: () => {
+      const newFormats = [...new Set([...formats, "ppt", "video"])];
+      return startPipeline(jobId, newFormats);
+    },
+    onSuccess: () => navigate(`/progress/${jobId}`),
+  });
+
+  return (
+    <div className="mt-6 space-y-3" data-testid="add-video-section">
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary">
+        Video
+      </h2>
+      <button
+        onClick={() => mutation.mutate()}
+        disabled={mutation.isPending}
+        className="glass w-full p-4 text-center text-sm font-medium transition hover:glass-hover disabled:opacity-40"
+        data-testid="generate-video-btn"
+      >
+        {mutation.isPending ? "Starting Video Generation..." : "Generate Video"}
+      </button>
+      {mutation.isError && (
+        <div className="badge-error rounded-lg p-3 text-sm">
+          Failed to start video generation.
+        </div>
+      )}
+    </div>
+  );
 }
 
 function QuizSection({ jobId, navigate }: { jobId: string; navigate: (path: string) => void }) {

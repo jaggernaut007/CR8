@@ -149,6 +149,48 @@ class TestRunVideoJob:
         assert job["progress"]["phase"] == "complete"
         assert job["progress"]["percent"] == 100
 
+    def test_pptx_export_called_when_manifest_has_pptx_name_and_no_slides(
+        self, mock_gcs, mock_tts, mock_compose, mock_parse, mock_slugify, mock_get_topic_images
+    ):
+        """When manifest has pptx_name and empty slide_images, _export_slides_from_pptx is used."""
+        mock_gcs.download_manifest.return_value = {
+            "job_id": "pptx_job",
+            "topics": [{"name": "Topic A"}],
+            "scripts": ["[SLIDE 1]\nHello."],
+            "slide_images": [],
+            "pptx_name": "deck.pptx",
+            "topic_slide_map": None,
+            "config": {},
+        }
+        mock_gcs.download_pptx.return_value = "/tmp/workdir/deck.pptx"
+
+        with patch("gpu_service.worker._export_slides_from_pptx") as mock_export:
+            mock_export.return_value = ["/tmp/slides/slide_001.png"]
+            run_video_job("vj_pptx", "gs://bucket/pptx_job")
+
+        mock_export.assert_called_once()
+
+    def test_regular_slide_download_used_when_slide_images_present(
+        self, mock_gcs, mock_tts, mock_compose, mock_parse, mock_slugify, mock_get_topic_images
+    ):
+        """When manifest has both slide_images and pptx_name, regular download is used (not PPTX export)."""
+        mock_gcs.download_manifest.return_value = {
+            "job_id": "both_job",
+            "topics": [{"name": "Topic A"}],
+            "scripts": ["[SLIDE 1]\nHello."],
+            "slide_images": ["slide_001.png"],
+            "pptx_name": "deck.pptx",
+            "topic_slide_map": None,
+            "config": {},
+        }
+        mock_gcs.download_slides.return_value = ["/tmp/slides/slide_001.png"]
+
+        with patch("gpu_service.worker._export_slides_from_pptx") as mock_export:
+            run_video_job("vj_both", "gs://bucket/both_job")
+
+        mock_gcs.download_slides.assert_called_once()
+        mock_export.assert_not_called()
+
 
 class TestGetJob:
     def test_returns_none_for_unknown(self):

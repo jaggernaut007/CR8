@@ -47,6 +47,29 @@ class CPUGCSClient:
         except Exception as exc:
             raise RuntimeError(f"GCS slide download failed ({gcs_prefix}): {exc}") from exc
 
+    def download_pptx(self, gcs_prefix: str, pptx_name: str, local_dir: str) -> str:
+        """Download a PPTX file from GCS for local slide export.
+
+        Args:
+            gcs_prefix: GCS job prefix.
+            pptx_name: Filename of the PPTX in the input folder.
+            local_dir: Local directory to save the file.
+
+        Returns:
+            Local path to the downloaded PPTX.
+        """
+        try:
+            prefix = _strip_gs_prefix(gcs_prefix)
+            safe_name = os.path.basename(pptx_name)
+            os.makedirs(local_dir, exist_ok=True)
+            blob = self._bucket.blob(f"{prefix}/input/{safe_name}")
+            local_path = os.path.join(local_dir, safe_name)
+            blob.download_to_filename(local_path)
+            logger.info("Downloaded PPTX: %s", local_path)
+            return local_path
+        except Exception as exc:
+            raise RuntimeError(f"GCS PPTX download failed ({gcs_prefix}): {exc}") from exc
+
     def upload_videos(self, gcs_prefix: str, local_paths: list[str]) -> list[str]:
         """Upload MP4 files to ``{gcs_prefix}/output/``. Returns GCS blob names."""
         try:

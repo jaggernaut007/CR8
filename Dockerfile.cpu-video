@@ -28,7 +28,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
     "pydantic-settings>=2.0" \
     "google-cloud-storage>=2.14" \
     "requests>=2.31" \
-    "langsmith>=0.2"
+    "langsmith>=0.2" \
+    "pymupdf>=1.24"
 
 # Pre-download Kokoro model + voice file so runtime needs no HuggingFace access.
 # Cloud Run blocks outbound connections to HuggingFace Hub at runtime.
@@ -43,12 +44,14 @@ print('Kokoro model + voice cached successfully')"
 # ---- Stage 2: Runtime ----
 FROM python:3.11-slim AS runtime
 
-# Stock ffmpeg (with libx264), espeak-ng for Kokoro, libsndfile for soundfile
+# Stock ffmpeg (with libx264), espeak-ng for Kokoro, libsndfile for soundfile,
+# libreoffice-impress for PPTX→PNG conversion when slide images not pre-exported.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     espeak-ng \
     libsndfile1 \
     libglib2.0-0 \
+    libreoffice-impress \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/venv /opt/venv
@@ -70,6 +73,7 @@ COPY backend/services/tts_engine.py backend/services/tts_engine.py
 COPY backend/services/video_builder.py backend/services/video_builder.py
 COPY backend/services/gpu_utils.py backend/services/gpu_utils.py
 COPY backend/services/script_parser.py backend/services/script_parser.py
+COPY backend/services/file_parser.py backend/services/file_parser.py
 
 # Copy the CPU video service package
 COPY cpu_video_service/ ./cpu_video_service/

@@ -55,6 +55,24 @@ Total: **1063 pytest** + **124 Vitest** + **17 Playwright E2E** = **1204 tests**
 
 ---
 
+## Unreleased — Video Cloud Run Fix + UI Re-run Features
+
+### Added
+- `frontend/react-app/src/pages/ResultsPage.tsx`: `AddVideoSection` component — when a completed job was generated without video format, a "Generate Video" button appears and re-runs the pipeline with video included. Calls `POST /api/start` with the existing job ID and extended formats list, then redirects to the progress page.
+- `frontend/react-app/src/pages/DashboardPage.tsx`: `JobCard` component gains a "Re-run" button for jobs in `error` or `cancelled` status. Calls `POST /api/start` with the original formats and redirects to the progress page on success.
+- `frontend/job_routes.py`: `_persist_job_start()` now handles re-runs — if a job already exists in the DB (identified by `short_id`), it updates `output_formats`, resets `status` to `running`, and clears `progress_pct` / `current_stage` instead of failing on a duplicate insert.
+
+### Fixed
+- `backend/pipeline/agent_generate.py`: `_get_slide_images()` catches `FileNotFoundError` from `export_slides_as_images()` and returns `[]` with a warning log instead of raising. This prevents video jobs from crashing on the CPU pipeline container (Cloud Run), which does not have LibreOffice installed.
+- `backend/services/gcs_client.py`: `upload_job_inputs()` accepts an optional `pptx_path` parameter. When no local slide images are available and a PPTX path is provided, the PPTX is uploaded to GCS so the remote GPU / CPU-video worker can convert it to PNGs.
+- `backend/pipeline/agent_generate.py`: `_VideoJobInputs` dataclass gains a `ppt_path` field. `_build_videos_gpu()` checks whether slide images are absent and a `ppt_path` is set; if so, it passes the PPTX to `GCSVideoClient.upload_job_inputs()` for remote export. The GCS manifest includes `pptx_name` for the remote worker.
+- `Dockerfile.gpu` and `Dockerfile.cpu-video`: Added `pymupdf` Python dependency and copied `backend/services/file_parser.py` so GPU and CPU-video workers can perform PPTX-to-PNG conversion using PyMuPDF and LibreOffice.
+- `Dockerfile.cpu-video`: Added `libreoffice-impress` system package so the CPU-video worker can convert PPTX to PNGs when remote slide export is requested.
+- `gpu_service/worker.py` and `cpu_video_service/worker.py`: Added PPTX detection and export step before TTS synthesis. When the manifest includes `pptx_name`, the worker downloads the PPTX from GCS and calls `export_slides_as_images()` to produce PNGs locally. Guard added to prevent importing `scripts` as a module name.
+- `gpu_service/gcs_client.py` and `cpu_video_service/gcs_client.py`: Added `download_pptx(job_id, pptx_name, local_dir)` method to support the new PPTX remote export flow.
+
+---
+
 ## Unreleased — E2E Bug Fixes (Post-v0.5.4 Session)
 
 ### Bug Fixes

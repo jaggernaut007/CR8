@@ -201,16 +201,7 @@ async def start(request: Request, body: dict):
     jobs[job_id] = capture
     logger.info("Starting pipeline: job=%s formats=%s files=%d", job_id, formats, len(input_files))
 
-    # Persist job to DB so quiz/results can find it later
-    pool = getattr(request.app.state, "db_pool", None)
-    user = getattr(request.state, "user", None)
-    if pool and user and user.get("user_id") != "legacy-session":
-        from backend.services.db_client import create_job
-        file_names = [os.path.basename(f) for f in input_files]
-        try:
-            await create_job(pool, str(user["user_id"]), job_id, file_names, ",".join(formats))
-        except Exception:
-            logger.warning("Failed to persist job to DB: job=%s", job_id, exc_info=True)
+    await _persist_job_start(request, job_id, input_files, formats)
 
     asyncio.get_running_loop().run_in_executor(
         None, _run_pipeline_sync, input_files, formats, capture
@@ -291,6 +282,45 @@ async def _maybe_persist_result(request: Request, job_id: str, capture) -> None:
         },
     )
     logger.info("Persisted pipeline result to DB: job_id=%s", job_id)
+
+
+async def _persist_job_start(
+    request: Request, job_id: str, input_files: list[str], formats: list[str],
+) -> None:
+    """Persist or update a job in the DB when the pipeline starts.
+
+    For new jobs, inserts a row. For re-runs (e.g. adding video to a
+    previously completed job), updates formats and resets status.
+
+    Args:
+        request: FastAPI request (for DB pool and user access).
+        job_id: 8-char hex job identifier.
+        input_files: List of uploaded file paths.
+        formats: Requested output formats.
+    """
+    pool = getattr(request.app.state, "db_pool", None)
+    user = getattr(request.state, "user", None)
+    if not pool or not user or user.get("user_id") == "legacy-session":
+        return
+
+    from backend.services.db_client import create_job, get_job_by_short_id
+
+    try:
+        existing = await get_job_by_short_id(pool, job_id)
+        if existing:
+            await pool.execute(
+                "UPDATE jobs SET output_formats = $1, status = 'running', "
+                "progress_pct = 0, current_stage = NULL, updated_at = now() "
+                "WHERE id = $2",
+                ",".join(formats),
+                existing["id"],
+            )
+            logger.info("Re-run: updated job formats: job=%s formats=%s", job_id, formats)
+        else:
+            file_names = [os.path.basename(f) for f in input_files]
+            await create_job(pool, str(user["user_id"]), job_id, file_names, ",".join(formats))
+    except Exception:
+        logger.warning("Failed to persist job to DB: job=%s", job_id, exc_info=True)
 
 
 # --- Cancel endpoint ------------------------------------------------------

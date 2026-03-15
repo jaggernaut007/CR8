@@ -53,7 +53,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
     "pydantic-settings>=2.0" \
     "google-cloud-storage>=2.14" \
     "requests>=2.31" \
-    "langsmith>=0.2"
+    "langsmith>=0.2" \
+    "pymupdf>=1.24"
 
 # Pre-download Kokoro model + voice file so runtime needs no HuggingFace access
 ENV HF_HOME=/opt/hf_cache
@@ -81,6 +82,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 \
     libx264-163 \
     espeak-ng \
+    libreoffice-impress \
     && rm -rf /var/lib/apt/lists/* \
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
     && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
@@ -121,6 +123,7 @@ COPY backend/services/tts_engine.py backend/services/tts_engine.py
 COPY backend/services/video_builder.py backend/services/video_builder.py
 COPY backend/services/gpu_utils.py backend/services/gpu_utils.py
 COPY backend/services/script_parser.py backend/services/script_parser.py
+COPY backend/services/file_parser.py backend/services/file_parser.py
 
 # Copy the GPU service package
 COPY gpu_service/ ./gpu_service/

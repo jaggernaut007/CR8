@@ -3,9 +3,30 @@
      Updated at the end of every session using the session-handoff skill. -->
 
 ## Current Status
-**Last updated:** 2026-03-13
-**Overall project phase:** v0.5.5 complete — production bug fixes (asyncpg DataError serialisation, Content-Length middleware corruption)
+**Last updated:** 2026-03-15
+**Overall project phase:** v0.5.5+ — Cloud Run video fix (LibreOffice fallback, remote PPTX export) + UI re-run features
 **Current version:** v0.5.5
+
+## Cloud Run Video Fix + UI Re-run Features (2026-03-15)
+> Video pipeline crashed on Cloud Run CPU container (no LibreOffice). Fixed via graceful fallback + remote PPTX export via GCS. Added "Generate Video" and "Re-run" UI actions.
+
+### Backend — Video Pipeline LibreOffice Fallback (COMPLETE)
+- `backend/pipeline/agent_generate.py` — `_get_slide_images()` catches `FileNotFoundError` from `export_slides_as_images()` and returns `[]`; logs a warning instead of raising. Video jobs no longer crash on CPU Cloud Run (which has no LibreOffice).
+- `backend/pipeline/agent_generate.py` — `_VideoJobInputs` gains `ppt_path` field. `_build_videos_gpu()` detects absent slide images and present PPTX, uploads PPTX to GCS for remote worker to convert.
+- `backend/services/gcs_client.py` — `upload_job_inputs()` accepts optional `pptx_path`; when no local slides exist, uploads the PPTX under `{job_id}/input/` so remote workers can convert it. Content-Type set to `application/vnd.openxmlformats-officedocument.presentationml.presentation`.
+- `gpu_service/gcs_client.py`, `cpu_video_service/gcs_client.py` — Added `download_pptx(job_id, pptx_name, local_dir)`.
+- `gpu_service/worker.py`, `cpu_video_service/worker.py` — PPTX detection and export step added before TTS synthesis. Guard added against Python importing `scripts` as a module.
+- `Dockerfile.gpu` — Added `pymupdf` dependency + copied `backend/services/file_parser.py`.
+- `Dockerfile.cpu-video` — Added `libreoffice-impress` system package + `pymupdf` + `file_parser.py`.
+
+### Backend — Re-run Support (COMPLETE)
+- `frontend/job_routes.py` — `_persist_job_start()` checks for an existing DB job on `POST /api/start`. If found, updates `output_formats`, resets `status`, `progress_pct`, `current_stage` for a re-run instead of failing with a duplicate insert error.
+
+### Frontend — UI Actions (COMPLETE)
+- `frontend/react-app/src/pages/ResultsPage.tsx` — `AddVideoSection` component added. Renders "Generate Video" button on completed jobs that were not generated with video format. Calls `POST /api/start` with `[...existingFormats, "ppt", "video"]` and redirects to progress page.
+- `frontend/react-app/src/pages/DashboardPage.tsx` — `JobCard` component extended with "Re-run" button for `error` / `cancelled` jobs. Calls `POST /api/start` with original formats, invalidates jobs query, redirects to progress page.
+
+---
 
 ## Post-v0.5.4 E2E Bug Fix Session (2026-03-09)
 > Fixes discovered during end-to-end testing of the React SPA against the live FastAPI server.
@@ -70,6 +91,11 @@
 - **Quiz React UI** — `QuizPage.tsx`, `QuizResultsPage.tsx`, `QuestionCard.tsx`, `QuizProgressBar.tsx`, `ScoreSummary.tsx`, `src/api/quiz.ts`; `App.tsx` routes updated; `ResultsPage.tsx` includes `QuizSection`
 - **`curriculum_scope` schema column** — `TEXT` column added to `quizzes` table in `backend/db/schema.sql`
 - **Security hardening (post-v0.5.3)** — Settings validator rejects weak JWT_SECRET/OPENAI_API_KEY at startup; rate limiting on /register; job ownership enforcement on GET /api/jobs/{id}; formats allowlist on /api/start; pagination cap on /api/jobs; GCS path sanitisation
+- **Cloud Run video fix** — `_get_slide_images()` catches `FileNotFoundError` (no LibreOffice on CPU pipeline container) and returns []; PPTX uploaded to GCS for remote worker to convert instead
+- **Remote PPTX export** — `GCSVideoClient.upload_job_inputs()` accepts `pptx_path`; GPU/CPU-video workers download and convert PPTX to PNGs when no local slide images are available
+- **"Generate Video" on ResultsPage** — `AddVideoSection` lets users add video to a completed job that was generated without it; re-runs pipeline with extended formats
+- **"Re-run" on DashboardPage** — Error/cancelled jobs show a Re-run button that resets and restarts the pipeline with the same formats
+- **Re-run backend support** — `_persist_job_start()` updates existing DB job on re-run instead of failing on duplicate insert
 - **Crash resilience** — MoviePy clips released in try/finally; Tavily errors return [] instead of crashing Research agent; GPU client validates video_job_id in submit response
 - **Observability** — All pipeline agent exception handlers now call logger.exception(); video_builder uses exc_info=True throughout
 - **research-assistant agent now security-aware** — mandatory security assessment on new dependencies (CVE scan, license audit, maintenance health, dependency tree, supply chain risk); Sequential Thinking for evaluating trade-offs

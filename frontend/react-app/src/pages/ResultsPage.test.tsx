@@ -4,6 +4,7 @@ import ResultsPage from "./ResultsPage";
 
 vi.mock("@/api/jobs", () => ({
   fetchJob: vi.fn(),
+  startPipeline: vi.fn(),
   downloadUrl: vi.fn((jobId: string, type: string) => `/api/download/${jobId}/${type}`),
   fetchSlides: vi.fn().mockResolvedValue({ slides: [], total: 0 }),
   fetchVideos: vi.fn().mockResolvedValue({ videos: [] }),
@@ -18,9 +19,10 @@ vi.mock("@/api/quiz", () => ({
   generateQuiz: vi.fn(),
 }));
 
-import { fetchJob } from "@/api/jobs";
+import { fetchJob, startPipeline } from "@/api/jobs";
 import { fetchQuizzesByJob, generateQuiz } from "@/api/quiz";
 const mockFetchJob = vi.mocked(fetchJob);
+const mockStartPipeline = vi.mocked(startPipeline);
 const mockFetchQuizzesByJob = vi.mocked(fetchQuizzesByJob);
 const mockGenerateQuiz = vi.mocked(generateQuiz);
 
@@ -44,11 +46,22 @@ const _completeJob = {
   formats: ["pdf", "ppt", "video"],
 };
 
+const _completeJobNoVideo = {
+  id: "job-456",
+  filename: "lecture.pdf",
+  status: "complete" as const,
+  stage: null,
+  percent: 100,
+  created_at: "2026-03-01T00:00:00Z",
+  formats: ["pdf", "ppt"],
+};
+
 beforeEach(() => {
   resetMockAuth();
   vi.clearAllMocks();
   mockFetchQuizzesByJob.mockResolvedValue({ quizzes: [] });
   mockGenerateQuiz.mockResolvedValue({ quiz_id: "new-quiz-1", question_count: 20 });
+  mockStartPipeline.mockResolvedValue({ status: "running" });
   mockNavigate.mockClear();
 });
 
@@ -410,5 +423,124 @@ describe("ResultsPage — QuizSection", () => {
     });
 
     expect(screen.queryByTestId("quiz-section")).not.toBeInTheDocument();
+  });
+});
+
+// ── AddVideoSection tests ─────────────────────────────────────────────────────
+
+describe("ResultsPage — AddVideoSection", () => {
+  it("renders 'Generate Video' button when formats does not include video", async () => {
+    mockFetchJob.mockResolvedValue(_completeJobNoVideo);
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generate-video-btn")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("generate-video-btn")).toHaveTextContent("Generate Video");
+  });
+
+  it("does not render AddVideoSection when formats already includes video", async () => {
+    mockFetchJob.mockResolvedValue(_completeJob); // has video
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Generation Complete")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTestId("generate-video-btn")).not.toBeInTheDocument();
+  });
+
+  it("clicking Generate Video calls startPipeline with video added to formats", async () => {
+    mockFetchJob.mockResolvedValue(_completeJobNoVideo);
+    // Keep pending so we can assert before navigation fires
+    mockStartPipeline.mockReturnValue(new Promise(() => {}));
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generate-video-btn")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("generate-video-btn"));
+
+    await waitFor(() => {
+      expect(mockStartPipeline).toHaveBeenCalledWith(
+        "job-456",
+        expect.arrayContaining(["ppt", "video"]),
+      );
+    });
+  });
+
+  it("shows 'Starting Video Generation...' while mutation is pending", async () => {
+    mockFetchJob.mockResolvedValue(_completeJobNoVideo);
+    mockStartPipeline.mockReturnValue(new Promise(() => {}));
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generate-video-btn")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("generate-video-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generate-video-btn")).toHaveTextContent(
+        "Starting Video Generation...",
+      );
+    });
+  });
+
+  it("button is disabled while mutation is pending", async () => {
+    mockFetchJob.mockResolvedValue(_completeJobNoVideo);
+    mockStartPipeline.mockReturnValue(new Promise(() => {}));
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generate-video-btn")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("generate-video-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generate-video-btn")).toBeDisabled();
+    });
+  });
+
+  it("navigates to /progress/:jobId on successful video generation start", async () => {
+    mockFetchJob.mockResolvedValue(_completeJobNoVideo);
+    mockStartPipeline.mockResolvedValue({ status: "running" });
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generate-video-btn")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("generate-video-btn"));
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/progress/job-456");
+    });
+  });
+
+  it("shows error message when startPipeline fails", async () => {
+    mockFetchJob.mockResolvedValue(_completeJobNoVideo);
+    mockStartPipeline.mockRejectedValue(new Error("Server error"));
+
+    renderWithProviders(<ResultsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("generate-video-btn")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("generate-video-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Failed to start video generation.")).toBeInTheDocument();
+    });
   });
 });

@@ -62,6 +62,29 @@ PPT structuring runs in parallel with PDF generation:
 - **Hook variety** is enforced via a thread-safe tracker that prevents consecutive scripts from using the same hook type (question, statistic, analogy, myth-buster, etc.)
 - Scripts are generated using GPT-5.1 at temperature 0.55 for creative writing
 
+## Video Dispatch
+
+The `_VideoJobInputs` dataclass groups the six arguments needed for video dispatch (avoids exceeding the 5-argument function limit):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `video_topics` | `list[dict]` | Topics to render (up to `VIDEO_TOPIC_LIMIT`) |
+| `scripts` | `list[str]` | One script per topic |
+| `video_dir` | `str` | Output directory for MP4s |
+| `slide_images` | `list[str]` | Pre-exported slide PNG paths (may be empty) |
+| `topic_slide_map` | `dict \| None` | Maps topic names to 0-based slide indices |
+| `ppt_path` | `str \| None` | Path to generated PPTX (used for remote export when local LibreOffice is absent) |
+
+### Slide Export and LibreOffice Fallback
+
+`_get_slide_images()` exports the PPTX to PNGs for local video composition. On Cloud Run, the CPU pipeline container does not include LibreOffice. When `export_slides_as_images()` raises `FileNotFoundError`, the function returns an empty list and logs a warning. The remote GPU or CPU-video worker (both include `libreoffice-impress`) performs the conversion after downloading the PPTX from GCS.
+
+```
+_get_slide_images(state, video_dir, ppt_path=ppt_path)
+  ├── LibreOffice present → export_slides_as_images() → list of PNGs
+  └── FileNotFoundError  → logger.warning(...)        → []  (deferred to remote worker)
+```
+
 ## Console Output
 
 ```

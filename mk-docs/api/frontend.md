@@ -230,6 +230,11 @@ The pipeline runs in a background thread. Progress is tracked via `ProgressCaptu
 
 The `formats` field is validated against the allowlist `{"pdf", "ppt", "script", "video"}`. A non-list value or any format not in the allowlist returns HTTP 422.
 
+**Re-run behaviour**: If the `job_id` already has a DB record (e.g. a previously completed, errored, or cancelled job), `POST /api/start` updates the existing record's `output_formats` and resets `status` to `running` instead of inserting a duplicate. This supports two UI flows:
+
+- **Generate Video** on the ResultsPage — adds `"video"` to the formats of a job that completed without it
+- **Re-run** on the DashboardPage — retries a job that errored or was cancelled with its original formats
+
 ## Progress Polling
 
 ```

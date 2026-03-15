@@ -7,6 +7,7 @@ the GPU container image.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import tempfile
@@ -18,6 +19,35 @@ from gpu_service.config import gpu_settings
 from gpu_service.gcs_client import GPUGCSClient
 
 logger = logging.getLogger(__name__)
+
+
+def _export_slides_from_pptx(
+    gcs: GPUGCSClient,
+    gcs_prefix: str,
+    pptx_name: str,
+    workdir: str,
+    slide_dir: str,
+) -> list[str]:
+    """Download PPTX from GCS and export slide PNGs via LibreOffice.
+
+    Args:
+        gcs: GCS client instance.
+        gcs_prefix: GCS job prefix.
+        pptx_name: Filename of the PPTX in GCS input folder.
+        workdir: Temporary working directory.
+        slide_dir: Output directory for slide PNGs.
+
+    Returns:
+        Sorted list of exported slide image paths.
+    """
+    from backend.services.file_parser import export_slides_as_images
+
+    logger.info("No pre-exported slides — converting PPTX on GPU worker: %s", pptx_name)
+    pptx_path = gcs.download_pptx(gcs_prefix, pptx_name, workdir)
+    images = export_slides_as_images(pptx_path, slide_dir, dpi=144)
+    logger.info("Exported %d slide images from PPTX", len(images))
+    return images
+
 
 # In-memory job store (single instance, max 1 concurrent job)
 _jobs: dict[str, dict] = {}
@@ -103,7 +133,14 @@ def run_video_job(video_job_id: str, gcs_prefix: str) -> None:
             fps = config.get("fps", gpu_settings.video_fps)
 
             slide_dir = os.path.join(workdir, "slides")
-            slide_images = gcs.download_slides(gcs_prefix, slide_names, slide_dir)
+            pptx_name = manifest.get("pptx_name")
+
+            if slide_names:
+                slide_images = gcs.download_slides(gcs_prefix, slide_names, slide_dir)
+            elif pptx_name:
+                slide_images = _export_slides_from_pptx(gcs, gcs_prefix, pptx_name, workdir, slide_dir)
+            else:
+                slide_images = []
 
             total = len(topics)
             output_dir = os.path.join(workdir, "output")
@@ -112,11 +149,11 @@ def run_video_job(video_job_id: str, gcs_prefix: str) -> None:
             os.makedirs(scripts_dir, exist_ok=True)
 
             if not slide_images:
-                raise RuntimeError("No slide images downloaded from GCS")
+                raise RuntimeError("No slide images available (no PNGs or PPTX provided)")
 
             # Pad scripts if fewer scripts than topics: replay the last script.
             # This handles edge cases where script generation partially failed.
-            if len(scripts) < total:
+            if scripts and len(scripts) < total:
                 scripts = list(scripts) + [scripts[-1]] * (total - len(scripts))
 
             # ---- Step 2: Sequential TTS (GPU) ----
@@ -283,10 +320,8 @@ def run_video_job(video_job_id: str, gcs_prefix: str) -> None:
         }
         with _jobs_lock:
             _jobs[video_job_id] = cancel_status
-        try:
+        with contextlib.suppress(Exception):
             gcs.upload_status(gcs_prefix, cancel_status)
-        except Exception:
-            pass
 
     except Exception as exc:
         logger.error("Video job %s failed: %s\n%s", video_job_id, exc, traceback.format_exc())
@@ -298,11 +333,8 @@ def run_video_job(video_job_id: str, gcs_prefix: str) -> None:
         }
         with _jobs_lock:
             _jobs[video_job_id] = error_status
-
-        try:
+        with contextlib.suppress(Exception):
             gcs.upload_status(gcs_prefix, error_status)
-        except Exception:
-            pass
 
     finally:
         _cancel_events.pop(video_job_id, None)

@@ -15,8 +15,8 @@ This document is the **single source of strategic truth** for CR8. It serves two
 
 **Update cadence:** Refresh after each minor version bump (0.4 → 0.5 → 0.6). Keep under 400 lines.
 
-**Last Updated**: 2026-03-09 (post-v0.5.4 — E2E bug fixes: job normalisation, view route auth exemption, DB result persistence, idempotent quiz generation)
-**Previous Version**: Loop Intelligence update 2026-03-09 (post-v0.5.4 Quiz Agent)
+**Last Updated**: 2026-03-15 (Cloud Run video fix — LibreOffice fallback, remote PPTX export via GCS; UI "Generate Video" and "Re-run" actions)
+**Previous Version**: 2026-03-09 (post-v0.5.4 — E2E bug fixes: job normalisation, view route auth exemption, DB result persistence, idempotent quiz generation)
 
 ---
 
@@ -48,7 +48,7 @@ CR8 is a **late-prototype / early-product**. The content generation pipeline is 
 | PDF + PPT + Video Script output | Complete, deployed |
 | Narrated slide video (Kokoro TTS, open-source) | Complete, deployed |
 | GPU video service (NVIDIA L4, Cloud Run) | Complete, deployed |
-| 3-tier video fallback (GPU → GPU fallback → CPU) | Complete, deployed |
+| 2-tier video fallback (GPU primary → CPU video) | Complete, deployed (GPU fallback tier removed 2026-03-14 to cut costs) |
 | Web UI (FastAPI + Jinja2 prototype) | Complete, deployed |
 | Security hardening (CORS, CSP, auth middleware, config validators, ownership checks) | Complete |
 | Database layer (Neon PostgreSQL, 8 tables) | Complete |
@@ -94,8 +94,9 @@ Three-container deployment on GCP Cloud Run, all scale to zero (~£0 idle):
 
 - **CPU pipeline service** (europe-west2) — 3-agent pipeline + web UI + API
 - **GPU video service — Primary** (europe-west4, NVIDIA L4) — fastest video (~2-3 min per job)
-- **GPU video service — Fallback** (europe-west1, NVIDIA L4) — hot standby
-- **CPU video service** (europe-west2, 8 vCPU) — slower but always available (~20-30 min)
+- **CPU video service** (europe-west2, 8 vCPU) — slower fallback, always available (~20-30 min)
+
+The GPU fallback tier (europe-west1) was removed on 2026-03-14 to reduce Artifact Registry storage costs (~£10/mo saved). The 2-tier chain (GPU primary → CPU video) provides sufficient resilience for the current user volume.
 
 Video data moves between services via GCS. Service-to-service calls authenticated with OIDC.
 
@@ -112,7 +113,9 @@ Five new API endpoints: start quiz, get question, submit answer, get results, li
 - **Neon PostgreSQL** — 8 tables (users, jobs, quizzes, quiz_questions, quiz_attempts, quiz_responses, chat_sessions, chat_messages), async via asyncpg. Schema includes Bloom's taxonomy, difficulty levels, one-attempt-only constraint, and pre-provisioned chat tables for v0.5.1. Post-v0.5.3: `ON DELETE CASCADE` on jobs FK, index on quiz_questions ordered lookup.
 - **Dual auth** — JWT (PyJWT + bcrypt) for API consumers + legacy session auth for existing web UI
 - **Security** — SecurityHeadersMiddleware (CSP, X-Frame-Options, etc.), CORS locked to configured origins, AuthMiddleware on all non-public paths. Rate limiting covers both login and registration. Job ownership enforced on GET /api/jobs/{id}. Settings validator rejects weak JWT secrets at startup.
-- **Pipeline resilience** — Tavily search failures return empty results instead of crashing the Research agent. MoviePy clips released on composition failure. GPU service submit validates response before polling begins. Content viewer routes now survive server restarts by reading file paths from the database. Idempotent quiz generation prevents duplicate quizzes from repeated button presses.
+- **Pipeline resilience** — Tavily search failures return empty results instead of crashing the Research agent. MoviePy clips released on composition failure. GPU service submit validates response before polling begins. Content viewer routes now survive server restarts by reading file paths from the database. Idempotent quiz generation prevents duplicate quizzes from repeated button presses. Video jobs no longer crash on the CPU pipeline container (Cloud Run) — slide export gracefully defers to the GPU/CPU-video worker via PPTX upload to GCS when LibreOffice is absent locally.
+
+**Re-run and video add-on** — Users can now click "Generate Video" on a completed job that was run without video format. Error and cancelled jobs display a "Re-run" button on the dashboard. The backend handles both by updating the existing DB job record rather than inserting a duplicate.
 
 ---
 

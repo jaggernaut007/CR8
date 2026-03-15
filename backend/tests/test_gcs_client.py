@@ -94,6 +94,83 @@ class TestUploadJobInputs:
         result = gcs_client.upload_job_inputs("job99", [], {})
         assert result == "gs://my-bucket/job99"
 
+    def test_uploads_pptx_when_pptx_path_set_and_no_slides(self, gcs_client, mock_storage, tmp_path):
+        """When pptx_path is given and slide_images is empty, the PPTX is uploaded."""
+        _, mock_bucket = mock_storage
+        mock_blob = MagicMock()
+        mock_bucket.blob.return_value = mock_blob
+
+        pptx_file = tmp_path / "deck.pptx"
+        pptx_file.write_bytes(b"PPTX_DATA")
+
+        gcs_client.upload_job_inputs("job1", [], {}, pptx_path=str(pptx_file))
+
+        mock_bucket.blob.assert_any_call("job1/input/deck.pptx")
+
+    def test_does_not_upload_pptx_when_slide_images_present(self, gcs_client, mock_storage, tmp_path):
+        """When pptx_path is given but slide_images is non-empty, the PPTX is NOT uploaded."""
+        _, mock_bucket = mock_storage
+        mock_blob = MagicMock()
+        mock_bucket.blob.return_value = mock_blob
+
+        slide = tmp_path / "slide_001.png"
+        slide.write_bytes(b"PNG")
+        pptx_file = tmp_path / "deck.pptx"
+        pptx_file.write_bytes(b"PPTX_DATA")
+
+        gcs_client.upload_job_inputs("job2", [str(slide)], {}, pptx_path=str(pptx_file))
+
+        # Only manifest and slide blob calls — no pptx blob
+        calls = [call[0][0] for call in mock_bucket.blob.call_args_list]
+        assert not any("deck.pptx" in c for c in calls)
+
+    def test_does_not_upload_pptx_when_pptx_path_is_none(self, gcs_client, mock_storage, tmp_path):
+        """When pptx_path=None, no PPTX blob is created."""
+        _, mock_bucket = mock_storage
+        mock_blob = MagicMock()
+        mock_bucket.blob.return_value = mock_blob
+
+        gcs_client.upload_job_inputs("job3", [], {}, pptx_path=None)
+
+        # Only the manifest blob should be created
+        assert mock_bucket.blob.call_count == 1
+        mock_bucket.blob.assert_called_with("job3/input/manifest.json")
+
+    def test_pptx_uploaded_with_correct_content_type(self, gcs_client, mock_storage, tmp_path):
+        """PPTX blob must use the Office Open XML content-type."""
+        _, mock_bucket = mock_storage
+        mock_blob = MagicMock()
+        mock_bucket.blob.return_value = mock_blob
+
+        pptx_file = tmp_path / "slides.pptx"
+        pptx_file.write_bytes(b"PPTX")
+
+        gcs_client.upload_job_inputs("job4", [], {}, pptx_path=str(pptx_file))
+
+        # The upload_from_filename call for the PPTX should carry the correct MIME type
+        calls = mock_blob.upload_from_filename.call_args_list
+        assert any(
+            call[1].get("content_type") == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            for call in calls
+        )
+
+    def test_pptx_blob_name_uses_basename_only(self, gcs_client, mock_storage, tmp_path):
+        """The blob path must use os.path.basename — no directory traversal in the name."""
+        _, mock_bucket = mock_storage
+        mock_blob = MagicMock()
+        mock_bucket.blob.return_value = mock_blob
+
+        subdir = tmp_path / "subdir"
+        subdir.mkdir()
+        pptx_file = subdir / "my_deck.pptx"
+        pptx_file.write_bytes(b"PPTX")
+
+        gcs_client.upload_job_inputs("job5", [], {}, pptx_path=str(pptx_file))
+
+        calls = [call[0][0] for call in mock_bucket.blob.call_args_list]
+        # The blob path for the PPTX must end with just the filename, not the full path
+        assert any(c == "job5/input/my_deck.pptx" for c in calls)
+
 
 class TestDownloadVideos:
     def test_downloads_mp4_files(self, gcs_client, mock_storage, tmp_path):

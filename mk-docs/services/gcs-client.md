@@ -26,11 +26,24 @@ cleanup_job()      ────────>  (deletes all blobs)
 
 ### Key Methods
 
-| Method | Description |
-|--------|-------------|
-| `upload_job_inputs(job_id, slide_images, manifest)` | Uploads slide PNGs + manifest JSON |
-| `download_videos(job_id, local_dir)` | Downloads completed MP4s |
-| `cleanup_job(job_id)` | Deletes all blobs under `{job_id}/` |
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `upload_job_inputs` | `(job_id, slide_images, manifest, pptx_path=None)` | Uploads slide PNGs (or PPTX for remote export) + manifest JSON |
+| `download_videos` | `(job_id, local_dir)` | Downloads completed MP4s |
+| `cleanup_job` | `(job_id)` | Deletes all blobs under `{job_id}/` |
+
+### PPTX Upload for Remote Slide Export
+
+The `upload_job_inputs` method accepts an optional `pptx_path` parameter. When the CPU pipeline container cannot export slide images locally (LibreOffice is not installed), it uploads the generated PPTX file instead. The GPU or CPU-video worker receives the PPTX via GCS and performs the conversion to PNGs.
+
+```
+upload_job_inputs(job_id, slide_images=[], manifest=..., pptx_path="outputs/gap_analysis.pptx")
+  ├── uploads manifest.json
+  ├── slide_images is empty → skips PNG upload loop
+  └── pptx_path set → uploads PPTX as {job_id}/input/gap_analysis.pptx
+```
+
+The manifest includes `pptx_name` (the basename of the uploaded PPTX) so the remote worker knows which file to convert.
 
 ## Configuration
 

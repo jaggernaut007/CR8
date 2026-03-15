@@ -47,6 +47,29 @@ class GPUGCSClient:
         except Exception as exc:
             raise RuntimeError(f"GCS slide download failed ({gcs_prefix}): {exc}") from exc
 
+    def download_pptx(self, gcs_prefix: str, pptx_name: str, local_dir: str) -> str:
+        """Download a PPTX file from GCS for local slide export.
+
+        Args:
+            gcs_prefix: GCS job prefix (e.g. ``gs://bucket/job123``).
+            pptx_name: Filename of the PPTX in the input folder.
+            local_dir: Local directory to save the file.
+
+        Returns:
+            Local path to the downloaded PPTX.
+        """
+        try:
+            prefix = _strip_gs_prefix(gcs_prefix)
+            safe_name = os.path.basename(pptx_name)
+            os.makedirs(local_dir, exist_ok=True)
+            blob = self._bucket.blob(f"{prefix}/input/{safe_name}")
+            local_path = os.path.join(local_dir, safe_name)
+            blob.download_to_filename(local_path)
+            logger.info("Downloaded PPTX: %s", local_path)
+            return local_path
+        except Exception as exc:
+            raise RuntimeError(f"GCS PPTX download failed ({gcs_prefix}): {exc}") from exc
+
     def upload_videos(self, gcs_prefix: str, local_paths: list[str]) -> list[str]:
         """Upload MP4 files to ``{gcs_prefix}/output/``. Returns GCS blob names."""
         try:
@@ -75,10 +98,12 @@ class GPUGCSClient:
             raise RuntimeError(f"GCS status upload failed ({gcs_prefix}): {exc}") from exc
 
 
+_GS_SPLIT_PARTS = 3  # gs://bucket/path → split into 4 parts, path index is 3
+
+
 def _strip_gs_prefix(gcs_prefix: str) -> str:
     """Remove ``gs://bucket-name/`` prefix, returning just the path portion."""
     if gcs_prefix.startswith("gs://"):
-        # gs://bucket/path → path
-        parts = gcs_prefix.split("/", 3)
-        return parts[3] if len(parts) > 3 else ""
+        parts = gcs_prefix.split("/", _GS_SPLIT_PARTS)
+        return parts[_GS_SPLIT_PARTS] if len(parts) > _GS_SPLIT_PARTS else ""
     return gcs_prefix

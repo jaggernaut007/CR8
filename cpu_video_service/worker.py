@@ -21,6 +21,35 @@ from cpu_video_service.gcs_client import CPUGCSClient
 
 logger = logging.getLogger(__name__)
 
+
+def _export_slides_from_pptx(
+    gcs: CPUGCSClient,
+    gcs_prefix: str,
+    pptx_name: str,
+    workdir: str,
+    slide_dir: str,
+) -> list[str]:
+    """Download PPTX from GCS and export slide PNGs via LibreOffice.
+
+    Args:
+        gcs: GCS client instance.
+        gcs_prefix: GCS job prefix.
+        pptx_name: Filename of the PPTX in GCS input folder.
+        workdir: Temporary working directory.
+        slide_dir: Output directory for slide PNGs.
+
+    Returns:
+        Sorted list of exported slide image paths.
+    """
+    from backend.services.file_parser import export_slides_as_images
+
+    logger.info("No pre-exported slides — converting PPTX on CPU worker: %s", pptx_name)
+    pptx_path = gcs.download_pptx(gcs_prefix, pptx_name, workdir)
+    images = export_slides_as_images(pptx_path, slide_dir, dpi=144)
+    logger.info("Exported %d slide images from PPTX", len(images))
+    return images
+
+
 # In-memory job store (single instance, max 1 concurrent job)
 _jobs: dict[str, dict] = {}
 _jobs_lock = threading.Lock()
@@ -128,7 +157,7 @@ def _execute_pipeline(ctx: JobContext, workdir: str) -> None:
     total = len(topics)
 
     # Pad scripts if fewer than topics
-    if len(scripts) < total:
+    if scripts and len(scripts) < total:
         scripts = list(scripts) + [scripts[-1]] * (total - len(scripts))
 
     output_dir = os.path.join(workdir, "output")
@@ -177,10 +206,18 @@ def _phase_download(ctx: JobContext, workdir: str) -> tuple[dict, list[str]]:
 
     manifest = gcs.download_manifest(gcs_prefix, workdir)
     slide_dir = os.path.join(workdir, "slides")
-    slide_images = gcs.download_slides(gcs_prefix, manifest["slide_images"], slide_dir)
+    slide_names = manifest["slide_images"]
+    pptx_name = manifest.get("pptx_name")
+
+    if slide_names:
+        slide_images = gcs.download_slides(gcs_prefix, slide_names, slide_dir)
+    elif pptx_name:
+        slide_images = _export_slides_from_pptx(gcs, gcs_prefix, pptx_name, workdir, slide_dir)
+    else:
+        slide_images = []
 
     if not slide_images:
-        raise RuntimeError("No slide images downloaded from GCS")
+        raise RuntimeError("No slide images available (no PNGs or PPTX provided)")
 
     logger.info("Downloaded %d slides for job %s", len(slide_images), vid)
     return manifest, slide_images

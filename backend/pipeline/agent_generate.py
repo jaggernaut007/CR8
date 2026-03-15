@@ -35,50 +35,55 @@ _MIN_MODULE_CHARS = 2000
 _REQUIRED_SECTIONS = ["## Module Overview", "## Learning Objectives", "## Core Content", "## Key Takeaways"]
 
 
-def _build_videos_dispatch(
-    state: PipelineState,
-    video_topics: list[dict],
-    scripts: list[str],
-    video_dir: str,
-    slide_images: list[str],
-    topic_slide_map: dict[str, list[int]] | None = None,
-) -> None:
+class _VideoJobInputs:
+    """Groups the video dispatch arguments to satisfy PLR0913 (max 5 args)."""
+
+    __slots__ = (
+        "ppt_path", "scripts", "slide_images", "topic_slide_map",
+        "video_dir", "video_topics",
+    )
+
+    def __init__(  # noqa: PLR0913
+        self,
+        video_topics: list[dict],
+        scripts: list[str],
+        video_dir: str,
+        slide_images: list[str],
+        topic_slide_map: dict[str, list[int]] | None = None,
+        ppt_path: str | None = None,
+    ) -> None:
+        self.video_topics = video_topics
+        self.scripts = scripts
+        self.video_dir = video_dir
+        self.slide_images = slide_images
+        self.topic_slide_map = topic_slide_map
+        self.ppt_path = ppt_path
+
+
+def _build_videos_dispatch(state: PipelineState, inputs: _VideoJobInputs) -> None:
     """Route video generation to remote services or local fallback.
 
     When remote video services are configured (GPU or CPU-video), uses the
-    3-tier fallback chain: GPU primary → GPU fallback → CPU-video.
+    2-tier fallback chain: GPU primary → CPU-video.
     Local ``build_videos()`` is only used when no service URLs are set
     (local development).
-
-    User cancellation (``PipelineCancelledError``) is never caught — it
-    propagates immediately so the frontend can mark the job cancelled.
     """
     if settings.should_use_video_service:
-        _build_videos_gpu(
-            state, video_topics, scripts, video_dir,
-            slide_images, topic_slide_map,
-        )
+        _build_videos_gpu(state, inputs)
         return
 
     # Local fallback — only when no video service URLs are configured (dev mode)
     _check_cancelled()
     build_videos(
-        topics=video_topics,
-        scripts=scripts,
-        output_dir=video_dir,
+        topics=inputs.video_topics,
+        scripts=inputs.scripts,
+        output_dir=inputs.video_dir,
         cancel_check=_check_cancelled,
-        **_video_kwargs(slide_images, topic_slide_map),
+        **_video_kwargs(inputs.slide_images, inputs.topic_slide_map),
     )
 
 
-def _build_videos_gpu(
-    state: PipelineState,
-    video_topics: list[dict],
-    scripts: list[str],
-    video_dir: str,
-    slide_images: list[str],
-    topic_slide_map: dict[str, list[int]] | None,
-) -> None:
+def _build_videos_gpu(state: PipelineState, inputs: _VideoJobInputs) -> None:
     """Try GPU services (primary then fallback). Raises on total failure."""
     from backend.services.gcs_client import GCSVideoClient
     from backend.services.gpu_client import VideoServiceClient
@@ -86,36 +91,14 @@ def _build_videos_gpu(
     gcs = GCSVideoClient()
     gpu = VideoServiceClient()
     job_id = state["job_id"]
+    needs_remote_export = bool(inputs.ppt_path and not inputs.slide_images)
+    pptx_name = os.path.basename(inputs.ppt_path) if needs_remote_export else None
+    manifest = _build_gpu_manifest(job_id, inputs, pptx_name)
+    pptx_upload = inputs.ppt_path if needs_remote_export else None
+
     completed = False
-
     try:
-        manifest = {
-            "job_id": job_id,
-            "topics": video_topics,
-            "scripts": scripts,
-            "topic_slide_map": topic_slide_map,
-            "slide_images": [os.path.basename(p) for p in slide_images],
-            "config": {
-                "voice": settings.kokoro_voice,
-                "lang": settings.kokoro_lang,
-                "fps": settings.video_fps,
-                "max_workers": settings.video_max_workers,
-            },
-        }
-
-        print("[Video] Uploading slides to GCS...")
-        gcs_prefix = gcs.upload_job_inputs(job_id, slide_images, manifest)
-
-        _check_cancelled()
-
-        print("[Video] Submitting video job to GPU service...")
-        video_job_id = gpu.submit_job(job_id, gcs_prefix)
-        print(f"[Video] GPU_JOB_ID: {video_job_id} (region: {gpu.base_url})")
-
-        gpu.poll_until_complete(video_job_id, cancel_check=_check_cancelled)
-
-        print("[Video] Downloading completed videos from GCS...")
-        gcs.download_videos(job_id, video_dir)
+        _submit_and_download_gpu(gcs, gpu, job_id, inputs, manifest, pptx_upload)
         completed = True
     finally:
         if not completed:
@@ -123,6 +106,40 @@ def _build_videos_gpu(
                 gcs.cleanup_job(job_id)
             except Exception:
                 logger.warning("GCS cleanup failed for job %s", job_id)
+
+
+def _submit_and_download_gpu(gcs, gpu, job_id, inputs, manifest, pptx_upload):  # noqa: PLR0913
+    """Upload inputs to GCS, submit to GPU service, and download results."""
+    pptx_name = manifest.get("pptx_name")
+    logger.info("Uploading %s to GCS: job=%s", "PPTX" if pptx_name else "slides", job_id)
+    gcs_prefix = gcs.upload_job_inputs(
+        job_id, inputs.slide_images, manifest, pptx_path=pptx_upload,
+    )
+    _check_cancelled()
+    logger.info("Submitting video job to GPU service: job=%s", job_id)
+    video_job_id = gpu.submit_job(job_id, gcs_prefix)
+    logger.info("GPU job submitted: video_job_id=%s region=%s", video_job_id, gpu.base_url)
+    gpu.poll_until_complete(video_job_id, cancel_check=_check_cancelled)
+    logger.info("Downloading completed videos from GCS: job=%s", job_id)
+    gcs.download_videos(job_id, inputs.video_dir)
+
+
+def _build_gpu_manifest(job_id: str, inputs: _VideoJobInputs, pptx_name: str | None) -> dict:
+    """Build the manifest dict sent to the GPU video service via GCS."""
+    return {
+        "job_id": job_id,
+        "topics": inputs.video_topics,
+        "scripts": inputs.scripts,
+        "topic_slide_map": inputs.topic_slide_map,
+        "slide_images": [os.path.basename(p) for p in inputs.slide_images],
+        "pptx_name": pptx_name,
+        "config": {
+            "voice": settings.kokoro_voice,
+            "lang": settings.kokoro_lang,
+            "fps": settings.video_fps,
+            "max_workers": settings.video_max_workers,
+        },
+    }
 
 
 def _video_kwargs(
@@ -175,27 +192,31 @@ def _get_slide_images(
 
     dpi = settings.slide_export_dpi
 
-    # Prefer explicit ppt_path (generated PPT with gap analysis visuals)
+    sources = []
     if ppt_path and os.path.exists(ppt_path):
-        print(f"[Video] Exporting slide images from PPT: {ppt_path}")
-        return export_slides_as_images(ppt_path, slide_img_dir, dpi=dpi)
-
-    # Fallback: check state for ppt_path (legacy)
+        sources.append(ppt_path)
     state_ppt = state.get("ppt_path", "")
-    if state_ppt and os.path.exists(state_ppt):
-        print(f"[Video] Exporting slide images from PPT: {state_ppt}")
-        return export_slides_as_images(state_ppt, slide_img_dir, dpi=dpi)
-
-    # Last resort: original input file
+    if state_ppt and os.path.exists(state_ppt) and state_ppt != ppt_path:
+        sources.append(state_ppt)
     file_paths = state.get("file_paths", [])
     if file_paths:
         src = file_paths[0]
         ext = os.path.splitext(src)[1].lower()
-        if ext in (".pdf", ".pptx"):
-            print(f"[Video] Exporting slide images from input: {src}")
-            return export_slides_as_images(src, slide_img_dir, dpi=dpi)
+        if ext in (".pdf", ".pptx") and src not in sources:
+            sources.append(src)
 
-    print("[Video] No slide source available — video will have no slide images")
+    for src in sources:
+        try:
+            logger.info("Exporting slide images from: %s", src)
+            return export_slides_as_images(src, slide_img_dir, dpi=dpi)
+        except FileNotFoundError:
+            logger.warning("LibreOffice not available for slide export — deferring to remote service")
+            return []
+        except OSError:
+            logger.warning("Slide export failed for %s", src, exc_info=True)
+            continue
+
+    logger.info("No slide source available — video will have no slide images")
     return []
 
 # Maximum retries for module generation when validation fails.
@@ -917,10 +938,10 @@ def generate_node(state: PipelineState) -> dict:
                 print(f"[Video] Generating {len(scripts)} PPT-aligned videos...")
                 slide_images = _get_slide_images(state, video_dir, ppt_path=ppt_path)
                 result["slide_images"] = slide_images
-                _build_videos_dispatch(
-                    state, video_topics, scripts, video_dir,
-                    slide_images, topic_slide_map,
+                vid_inputs = _VideoJobInputs(
+                    video_topics, scripts, video_dir, slide_images, topic_slide_map, ppt_path,
                 )
+                _build_videos_dispatch(state, vid_inputs)
                 print(f"[Video] Videos saved to {video_dir}")
         else:
             # Fallback: per-module scripts (no PPT available)
@@ -933,10 +954,10 @@ def generate_node(state: PipelineState) -> dict:
                 print(f"[Video] Generating {video_limit} videos...")
                 slide_images = _get_slide_images(state, video_dir, ppt_path=ppt_path)
                 result["slide_images"] = slide_images
-                _build_videos_dispatch(
-                    state, video_topics, scripts, video_dir,
-                    slide_images, topic_slide_map,
+                vid_inputs = _VideoJobInputs(
+                    video_topics, scripts, video_dir, slide_images, topic_slide_map, ppt_path,
                 )
+                _build_videos_dispatch(state, vid_inputs)
                 print(f"[Video] Videos saved to {video_dir}")
 
     # Save raw outputs sidecar for eval framework

@@ -35,12 +35,30 @@ When `GPU_SERVICE_URL` is configured, the generate agent routes video work to a 
 ```
 _build_videos_dispatch()
   ├── GPU_SERVICE_URL set?
-  │     YES → GCSVideoClient.upload_job_inputs()   # slide PNGs + manifest → GCS
+  │     YES → _get_slide_images()
+  │          │   ├── LibreOffice available? → export PPTX → slide PNGs locally
+  │          │   └── LibreOffice missing?  → return [] (deferred to remote worker)
+  │          → GCSVideoClient.upload_job_inputs()
+  │          │   ├── slide PNGs present → upload PNGs + manifest
+  │          │   └── no PNGs + pptx_path set → upload PPTX + manifest (remote export)
   │          → GPUVideoClient.submit_job()          # POST /api/v1/video-jobs
   │          → GPUVideoClient.poll_until_complete() # poll status, emit [Video] GPU: lines
   │          → GCSVideoClient.download_videos()     # MP4s ← GCS
   └── NO  → build_videos()                          # local Kokoro pipeline (unchanged)
 ```
+
+### LibreOffice Fallback for Remote Workers
+
+The CPU pipeline container does not include LibreOffice, so PPTX-to-PNG slide export cannot run locally on Cloud Run. `_get_slide_images()` catches `FileNotFoundError` and returns `[]`. When this occurs:
+
+- The generated PPTX is uploaded to GCS as-is (`pptx_path` in the manifest).
+- The GPU or CPU-video worker (both include `libreoffice-impress`) downloads the PPTX and performs the conversion.
+- The manifest field `pptx_name` tells the remote worker which file to convert.
+
+This means slide images are never missing — they are produced wherever LibreOffice is available.
+
+!!! warning "Local development"
+    Running the video pipeline locally (no `GPU_SERVICE_URL`) requires LibreOffice installed on the dev machine. Install with `brew install libreoffice` (macOS) or `apt-get install libreoffice-impress` (Linux).
 
 See [GCS Client](../services/gcs-client.md) and [GPU Client](../services/gpu-client.md) for the transfer layer details. See [GCP Cloud Run](../deployment/gcp-cloud-run.md) for the two-service deployment setup.
 
@@ -223,3 +241,4 @@ On 8 GB machines, close memory-heavy apps before video jobs. On 16 GB+ machines,
 - Hardware H.264 encoders (VideoToolbox, NVENC, QSV, AMF) are auto-detected and preferred over software `libx264`
 - Each parallel ffmpeg worker gets `cpu_count // max_workers` threads to prevent CPU contention
 - When `GPU_SERVICE_URL` is set, `_build_videos_dispatch()` in `agent_generate.py` bypasses `build_videos()` entirely and routes through the GCS+GPU service path
+- On Cloud Run, the CPU pipeline container does not include LibreOffice — slide export is deferred to the remote worker by uploading the PPTX to GCS. Workers in `gpu_service/` and `cpu_video_service/` include `libreoffice-impress` and `pymupdf` to perform the conversion.

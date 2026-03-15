@@ -37,8 +37,17 @@ class GCSVideoClient:
         job_id: str,
         slide_images: list[str],
         manifest: dict,
+        pptx_path: str | None = None,
     ) -> str:
-        """Upload slide PNGs and manifest.json to GCS.
+        """Upload slide PNGs (or PPTX for remote export) and manifest.json to GCS.
+
+        Args:
+            job_id: Unique job identifier.
+            slide_images: Pre-exported slide PNG paths (may be empty).
+            manifest: Job manifest dict.
+            pptx_path: Optional PPTX file to upload when local slide export
+                is unavailable (e.g. no LibreOffice). The GPU worker will
+                convert it to PNGs.
 
         Returns:
             The GCS prefix string, e.g. ``gs://cr8-jobs/job123``.
@@ -62,6 +71,16 @@ class GCSVideoClient:
                 blob = self._bucket.blob(f"{prefix}/input/{name}")
                 blob.upload_from_filename(path, content_type="image/png")
                 logger.debug("Uploaded slide: gs://%s/%s/input/%s", self._bucket.name, prefix, name)
+
+            # Upload PPTX for remote slide export when no local images
+            if pptx_path and not slide_images:
+                name = os.path.basename(pptx_path)
+                blob = self._bucket.blob(f"{prefix}/input/{name}")
+                blob.upload_from_filename(
+                    pptx_path,
+                    content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                )
+                logger.info("Uploaded PPTX for remote export: gs://%s/%s/input/%s", self._bucket.name, prefix, name)
 
             return f"gs://{self._bucket.name}/{prefix}"
         except Exception as exc:
