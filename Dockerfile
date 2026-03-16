@@ -33,13 +33,16 @@ RUN uv sync --frozen --no-dev --no-editable --no-extra video
 # ---- Stage 2: Runtime ----
 FROM python:3.11-slim AS runtime
 
-# Runtime deps: pymupdf (libglib), PDF tools (poppler).
-# Video deps (ffmpeg, espeak-ng, libreoffice) are NOT included — video
+# Runtime deps: pymupdf (libglib), PDF tools (poppler), LibreOffice (PPTX→PDF
+# for slide image export — needed so the PPT carousel can show gap analysis
+# slides without relying on the GPU service).
+# Video deps (ffmpeg, espeak-ng, kokoro/torch) are NOT included — video
 # processing is offloaded to dedicated GPU/CPU-video Cloud Run services.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libsndfile1 \
     poppler-utils \
+    libreoffice-impress \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/.venv /app/.venv

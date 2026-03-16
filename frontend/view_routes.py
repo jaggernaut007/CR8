@@ -105,13 +105,10 @@ def _resolve_slide_dir(result: dict) -> str | None:
     """Determine the slide image output directory from result paths."""
     video_dir = result.get("video_dir", "")
     ppt_path = result.get("ppt_path", "")
-    pdf_path = result.get("pdf_path", "")
     if video_dir:
         return os.path.join(video_dir, "slide_images")
     if ppt_path:
         return os.path.join(os.path.dirname(ppt_path), "slide_images")
-    if pdf_path:
-        return os.path.join(os.path.dirname(pdf_path), "slide_images")
     return None
 
 
@@ -147,21 +144,22 @@ def _ensure_slide_images(result: dict) -> list[str]:
         result["slide_images"] = cached
         return cached
 
+    # Only export from PPT (gap analysis slides) — never fall back to the
+    # curriculum PDF which contains different content.
+    ppt_path = result.get("ppt_path", "")
+    if not ppt_path or not os.path.exists(ppt_path):
+        return []
+
     from backend.services.file_parser import export_slides_as_images
 
-    # Try PPT first (needs LibreOffice), then PDF (always works via PyMuPDF)
-    for source in [result.get("ppt_path", ""), result.get("pdf_path", "")]:
-        if not source or not os.path.exists(source):
-            continue
-        try:
-            images = export_slides_as_images(source, slide_dir)
-            result["slide_images"] = images
-            logger.info("Generated %d slide images from %s", len(images), source)
-            return images
-        except (RuntimeError, FileNotFoundError, ValueError, OSError):
-            logger.info("Slide export failed for %s, trying next source", source)
-
-    return []
+    try:
+        images = export_slides_as_images(ppt_path, slide_dir)
+        result["slide_images"] = images
+        logger.info("Generated %d slide images from %s", len(images), ppt_path)
+        return images
+    except (RuntimeError, FileNotFoundError, ValueError, OSError):
+        logger.warning("Slide export failed for %s", ppt_path, exc_info=True)
+        return []
 
 
 def _list_mp4_files(video_dir: str) -> list[str]:
