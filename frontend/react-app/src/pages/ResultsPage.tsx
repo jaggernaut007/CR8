@@ -18,7 +18,6 @@ import VideoPlayer from "@/components/viewers/VideoPlayer";
 const DOWNLOAD_TYPES: { key: string; label: string; icon: string }[] = [
   { key: "pdf", label: "Learning Guide", icon: "PDF" },
   { key: "ppt", label: "Slide Deck", icon: "PPT" },
-  { key: "scripts", label: "Video Scripts", icon: "TXT" },
   { key: "videos", label: "Videos", icon: "MP4" },
 ];
 
@@ -153,7 +152,7 @@ function availableDownloads(job: Job) {
   return DOWNLOAD_TYPES.filter(({ key }) => {
     if (key === "pdf") return true; // PDF guide is always generated
     if (key === "ppt") return job.formats.includes("ppt");
-    if (key === "scripts" || key === "videos") return job.formats.includes("video");
+    if (key === "videos") return job.formats.includes("video");
     return false;
   });
 }

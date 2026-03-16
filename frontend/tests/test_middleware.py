@@ -272,6 +272,12 @@ class TestAuthMiddlewarePublicPaths:
         resp = client.post("/api/auth/logout", follow_redirects=False)
         assert resp.status_code != 302
 
+    def test_api_download_does_not_require_auth(self, client):
+        """Download routes are public — job_id is the capability token."""
+        resp = client.get("/api/download/deadbeef/pdf", follow_redirects=False)
+        assert resp.status_code != 401
+        assert resp.status_code != 302
+
 
 # ---------------------------------------------------------------------------
 # AuthMiddleware — protected paths require auth
@@ -310,9 +316,10 @@ class TestAuthMiddlewareProtectedPaths:
         resp = client.post("/api/start", json={"job_id": "deadbeef"})
         assert resp.status_code == 401
 
-    def test_api_download_without_auth_returns_401(self, client):
+    def test_api_download_without_auth_is_public(self, client):
+        """Downloads are public (job_id is capability token) — must not 401."""
         resp = client.get("/api/download/deadbeef/pdf")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
     def test_authenticated_request_passes_through(self, authed_client):
         resp = authed_client.get("/")

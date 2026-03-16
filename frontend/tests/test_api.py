@@ -165,9 +165,10 @@ class TestAuthEnforcement:
         resp = client.get("/api/progress/abc12345")
         assert resp.status_code == 401
 
-    def test_download_without_session_returns_401(self, client):
+    def test_download_without_session_is_public(self, client):
+        """Downloads are public — job_id is the capability token."""
         resp = client.get("/api/download/abc12345/pdf")
-        assert resp.status_code == 401
+        assert resp.status_code != 401
 
 
 # ---------------------------------------------------------------------------

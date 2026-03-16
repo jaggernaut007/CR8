@@ -50,7 +50,20 @@ export default function PptCarousel({ jobId }: PptCarouselProps) {
   }
 
   if (error || !data || total === 0) {
-    return <div className="text-center text-text-muted">No slides available</div>;
+    return (
+      <div className="flex flex-col items-center gap-4 py-8 text-center">
+        <p className="text-text-secondary">
+          Slide preview is not available for this job.
+        </p>
+        <a
+          href={`/api/download/${jobId}/ppt`}
+          download
+          className="accent-gradient rounded-lg px-6 py-2.5 text-sm font-medium text-white transition hover:opacity-90"
+        >
+          Download Presentation
+        </a>
+      </div>
+    );
   }
 
   return (

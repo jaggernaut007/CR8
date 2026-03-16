@@ -8,6 +8,7 @@ Serves generated content inline for the React SPA's viewer components:
 All routes require authentication via ``AuthMiddleware``.
 """
 
+import asyncio
 import logging
 import os
 
@@ -100,6 +101,69 @@ def _validate_job_id(job_id: str) -> JSONResponse | None:
     return None
 
 
+def _resolve_slide_dir(result: dict) -> str | None:
+    """Determine the slide image output directory from result paths."""
+    video_dir = result.get("video_dir", "")
+    ppt_path = result.get("ppt_path", "")
+    pdf_path = result.get("pdf_path", "")
+    if video_dir:
+        return os.path.join(video_dir, "slide_images")
+    if ppt_path:
+        return os.path.join(os.path.dirname(ppt_path), "slide_images")
+    if pdf_path:
+        return os.path.join(os.path.dirname(pdf_path), "slide_images")
+    return None
+
+
+def _cached_pngs(slide_dir: str) -> list[str]:
+    """Return sorted PNG paths from a directory, or empty list."""
+    if not os.path.isdir(slide_dir):
+        return []
+    return sorted(
+        os.path.join(slide_dir, f)
+        for f in os.listdir(slide_dir)
+        if f.endswith(".png")
+    )
+
+
+def _ensure_slide_images(result: dict) -> list[str]:
+    """Generate slide images on-demand if not already available.
+
+    Tries the PPT file first (requires LibreOffice), then falls back to
+    the PDF learning guide (PyMuPDF — always available). Generated images
+    are cached on disk so subsequent requests are instant.
+    """
+    existing = [s for s in result.get("slide_images", []) if os.path.exists(s)]
+    if existing:
+        return existing
+
+    slide_dir = _resolve_slide_dir(result)
+    if not slide_dir:
+        return []
+
+    # Check disk cache from a prior request
+    cached = _cached_pngs(slide_dir)
+    if cached:
+        result["slide_images"] = cached
+        return cached
+
+    from backend.services.file_parser import export_slides_as_images
+
+    # Try PPT first (needs LibreOffice), then PDF (always works via PyMuPDF)
+    for source in [result.get("ppt_path", ""), result.get("pdf_path", "")]:
+        if not source or not os.path.exists(source):
+            continue
+        try:
+            images = export_slides_as_images(source, slide_dir)
+            result["slide_images"] = images
+            logger.info("Generated %d slide images from %s", len(images), source)
+            return images
+        except (RuntimeError, FileNotFoundError, ValueError, OSError):
+            logger.info("Slide export failed for %s, trying next source", source)
+
+    return []
+
+
 def _list_mp4_files(video_dir: str) -> list[str]:
     """Return sorted list of MP4 filenames in the given directory.
 
@@ -173,9 +237,7 @@ async def list_slides(request: Request, job_id: str):
     if not result:
         return JSONResponse({"error": "Job not found or not complete"}, status_code=404)
 
-    slide_images = result.get("slide_images", [])
-    # Filter to only existing files
-    existing = [s for s in slide_images if os.path.exists(s)]
+    existing = await asyncio.to_thread(_ensure_slide_images, result)
 
     slides = [
         f"/api/view/{job_id}/slide/{i + 1}"
@@ -209,8 +271,7 @@ async def view_slide(request: Request, job_id: str, index: int):
     if not result:
         return JSONResponse({"error": "Job not found or not complete"}, status_code=404)
 
-    slide_images = result.get("slide_images", [])
-    existing = [s for s in slide_images if os.path.exists(s)]
+    existing = await asyncio.to_thread(_ensure_slide_images, result)
 
     if index < 1 or index > len(existing):
         return JSONResponse({"error": "Slide not found"}, status_code=404)

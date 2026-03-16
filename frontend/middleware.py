@@ -179,7 +179,7 @@ class AuthMiddleware:
         # Public paths, static assets, and view routes pass through
         if (
             path in _PUBLIC_PATHS
-            or path.startswith(("/static/", "/assets/", "/api/view/"))
+            or path.startswith(("/static/", "/assets/", "/api/view/", "/api/download/"))
         ):
             await self.app(scope, receive, send)
             return
