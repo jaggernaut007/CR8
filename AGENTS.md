@@ -141,3 +141,12 @@ Do NOT run Snyk on every wave — use ruff + manual security checklist for per-w
 - Architectural decisions → check `docs/adr/` before changing structure
 - Prompt changes → run eval comparison (`python -m backend.evals`) before committing
 - Environment → requires `.env` file with OPENAI_API_KEY, TAVILY_API_KEY (see `.env.example`)
+
+## Cross-harness compatibility
+`AGENTS.md` is the single source of truth for every agent harness driving this repo. Per-tool bridges:
+- Claude Code → `CLAUDE.md` (`@AGENTS.md` import) + `.claude/rules/`
+- Codex CLI → reads this file natively (keep it lean)
+- Cline → `.clinerules/00-source-of-truth.md`; no parallel Memory Bank
+- Antigravity CLI → `GEMINI.md` thin bridge, speculative until its discovery mechanism is documented
+Durable rules go here (portable) — never into a tool-specific file.
+
