@@ -26,15 +26,25 @@
 
 ### Changes
 - `deploy.sh` — added `write_env_file` helper (python3 YAML emitter, skips empty values) + `ENV_FILES` cleanup trap + required-secret guard; CPU and GPU deploys use `--env-vars-file` instead of `--set-secrets`/`--set-env-vars`; `--setup` prints Doppler steps, drops `secretmanager.googleapis.com` + secretAccessor IAM grants. Header documents `doppler run -- ./deploy.sh`.
-- `.github/workflows/deploy.yml` — `dopplerhq/secrets-fetch-action@v1.3.0` (`inject-env-vars: true`) + `--env-vars-file` built by inline python3. Needs repo secret `DOPPLER_TOKEN` (service token, config `prd`).
+- `.github/workflows/deploy.yml` — now builds+deploys all 3 services (`cr8-gpu` west4, `cr8-cpu-video` west2, `cr8-pipeline` west2) on Cloud Build. `dopplerhq/secrets-fetch-action@v1.3.0` (`inject-env-vars: true`) on the gpu + pipeline jobs; `--env-vars-file` built by inline python3 (skips empty values). Repo secret `DOPPLER_TOKEN` = service token, config `prd`.
+  - Cloud Build submitted with `--async` + `.github/scripts/wait-build.sh` polls `gcloud builds describe` — the deploy SA can't stream the regional default logs bucket, so a foreground `gcloud builds submit` exits 1 even on success.
+  - `gcloud builds submit --tag` is single-valued → pipeline build uses an inline build-config for its two tags (`:$SHA` + `:latest`), like gpu/cpu-video.
+  - `--clear-secrets` on each `gcloud run deploy` — but it does NOT resolve a same-command type clash (`--env-vars-file` setting a key that's currently a `secretKeyRef` fails validation before the clear applies). One-time `gcloud run services update <svc> --clear-secrets` was run out-of-band on `cr8-gpu` + `cr8-pipeline` to strip the dangling refs; `--clear-secrets` in the workflow is now a harmless no-op / future guard.
 - `.env.example` — header note on `doppler run -- make dev`; `.env` kept as local fallback.
 - Docs: `mk-docs/deployment/gcp-cloud-run.md`, `mk-docs/deployment/index.md`, `mk-docs/security.md`, `SECURITY.md`, `AGENTS.md`, `CHANGELOG.md`.
+- IAM: `github-deploy@cr8-learning` gained `roles/logging.viewer` (belt-and-suspenders for build log streaming; not strictly needed with the async+poll approach).
 
-### Follow-ups / not done
-- Create the Doppler `cr8` project + `prd` config and populate secret values (manual, needs Doppler account).
-- Add `DOPPLER_TOKEN` to GitHub repo secrets before next CI deploy.
-- Optionally delete the old GCP secrets: `for s in OPENAI_API_KEY TAVILY_API_KEY AUTH_PASSWORD HF_TOKEN HEYGEN_API_KEY LANGCHAIN_API_KEY DATABASE_URL JWT_SECRET; do gcloud secrets delete "$s" --quiet; done`
+### Status — DONE
+- Doppler `cr8` project populated: all 8 secret values in both `prd` and `dev` configs.
+- All 8 GCP Secret Manager secrets deleted from `cr8-learning`. No secret values were printed to any transcript.
+- `DOPPLER_TOKEN` repo secret set on `jaggernaut007/CR8`.
+- Deploy run [33354746723](https://github.com/jaggernaut007/CR8/actions/runs/33354746723) fully green — all 3 services redeployed from image `93f43c6` with Doppler-sourced env vars, `secret-refs: NONE`, all `Ready: True`. `cr8-pipeline` `/login` → HTTP 200.
+- Branch `chore/secrets-to-doppler` (6 commits ahead of `main`), pushed. **Not yet merged to `main`.**
+
+### Follow-ups
+- Merge `chore/secrets-to-doppler` → `main`.
 - Tradeoff accepted: secret values now visible in Cloud Run revision config to `run.viewer` IAM holders.
+- Tech debt: `deploy.sh` (local path) still uses `docker buildx --platform linux/amd64` which segfaults under Colima QEMU emulation on Apple Silicon for the gpu/cpu-video images — local full deploy is not viable on this machine, use the GH Actions workflow.
 
 ## Ruff Refactor — agent_generate.py + file_parser.py (2026-03-15)
 > Eliminated all 51 ruff violations in agent_generate.py and 3 in file_parser.py. Zero linting errors in all modified files. 1158 pytest all passing.
