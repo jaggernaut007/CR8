@@ -50,6 +50,14 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
+      - name: Fetch secrets from Doppler
+        uses: dopplerhq/secrets-fetch-action@v1.3.0
+        id: doppler
+        with:
+          # Doppler service token (config: prd). Add in repo → Settings → Secrets.
+          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
+          inject-env-vars: true
+
       - name: Build image with Cloud Build
         run: |
           gcloud builds submit \
@@ -66,6 +74,46 @@ jobs:
           CPU_VIDEO_URL=$(gcloud run services describe cr8-cpu-video \
             --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} \
             --format='value(status.url)' 2>/dev/null || echo "")
+
+          # Build a mode 600 YAML --env-vars-file: secrets (injected into the
+          # environment by the Doppler fetch step) + static config. Secret values
+          # never appear on the gcloud command line.
+          ENV_FILE="$(mktemp)"
+          chmod 600 "$ENV_FILE"
+          trap 'rm -f "$ENV_FILE"' EXIT
+          GPU_URL="$GPU_URL" CPU_VIDEO_URL="$CPU_VIDEO_URL" \
+          GCS_BUCKET="cr8-jobs-${{ env.PROJECT_ID }}" \
+          python3 - > "$ENV_FILE" <<'PY'
+          import os
+
+          KEYS = [
+              "OPENAI_API_KEY", "TAVILY_API_KEY", "AUTH_PASSWORD", "HF_TOKEN",
+              "HEYGEN_API_KEY", "LANGCHAIN_API_KEY", "DATABASE_URL", "JWT_SECRET",
+              "GPU_SERVICE_URL", "CPU_VIDEO_SERVICE_URL", "GCS_BUCKET",
+          ]
+          pairs = {k: os.environ.get(k, "") for k in KEYS}
+          pairs["GPU_SERVICE_URL"] = os.environ.get("GPU_URL", "")
+          pairs["CPU_VIDEO_SERVICE_URL"] = os.environ.get("CPU_VIDEO_URL", "")
+          pairs.update({
+              "OPENAI_MODEL": "gpt-5.1",
+              "OPENAI_MODEL_PREMIUM": "gpt-5.1",
+              "OPENAI_MODEL_MINI": "gpt-5-mini",
+              "OPENAI_MODEL_NANO": "gpt-5-nano",
+              "CHROMA_PERSIST_DIR": "./chroma_db",
+              "LANGCHAIN_TRACING_V2": "true",
+              "LANGCHAIN_PROJECT": "cr8-prototype",
+              "MAX_WORKERS": "12",
+              "VIDEO_MAX_WORKERS": "6",
+              "VIDEO_PROVIDER": "kokoro",
+              "COOKIE_SECURE": "true",
+          })
+          for k, v in pairs.items():
+              if v == "":
+                  continue  # unset — let the app fall back to its default
+              esc = v.replace("\\", "\\\\").replace('"', '\\"')
+              print(f'{k}: "{esc}"')
+          PY
+
           gcloud run deploy ${{ env.SERVICE }} \
             --project=${{ env.PROJECT_ID }} \
             --region=${{ env.REGION }} \
@@ -78,8 +126,7 @@ jobs:
             --min-instances=0 \
             --max-instances=1 \
             --no-cpu-throttling \
-            --set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest,TAVILY_API_KEY=TAVILY_API_KEY:latest,AUTH_PASSWORD=AUTH_PASSWORD:latest,HF_TOKEN=HF_TOKEN:latest,HEYGEN_API_KEY=HEYGEN_API_KEY:latest,LANGCHAIN_API_KEY=LANGCHAIN_API_KEY:latest,DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest" \
-            --set-env-vars="GPU_SERVICE_URL=${GPU_URL},CPU_VIDEO_SERVICE_URL=${CPU_VIDEO_URL},GCS_BUCKET=cr8-jobs-${{ env.PROJECT_ID }},OPENAI_MODEL=gpt-5.1,OPENAI_MODEL_PREMIUM=gpt-5.1,OPENAI_MODEL_MINI=gpt-5-mini,OPENAI_MODEL_NANO=gpt-5-nano,CHROMA_PERSIST_DIR=./chroma_db,LANGCHAIN_TRACING_V2=true,LANGCHAIN_PROJECT=cr8-prototype,MAX_WORKERS=12,VIDEO_MAX_WORKERS=6,VIDEO_PROVIDER=kokoro,COOKIE_SECURE=true" \
+            --env-vars-file="$ENV_FILE" \
             --quiet
 
       - name: Verify deployment

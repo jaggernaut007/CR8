@@ -23,9 +23,13 @@ User ──HTTPS──>     │  Gunicorn + Uvicorn (1 worker)      │
                     │                                      │
                     └──────────────┬───────────────────────┘
                                    │
-                         GCP Secret Manager
-                         (OPENAI_API_KEY, TAVILY_API_KEY)
+                    Doppler ──> deploy-time env injection
+                    (OPENAI_API_KEY, TAVILY_API_KEY, …)
 ```
+
+Secrets live in **Doppler**, not GCP Secret Manager. `deploy.sh` (run via
+`doppler run`) reads them from the environment and writes them into the Cloud
+Run service as environment variables through a mode `600` `--env-vars-file`.
 
 **Key design decisions:**
 - Single instance (`max-instances=1`) — the app enforces one job at a time
@@ -40,7 +44,8 @@ User ──HTTPS──>     │  Gunicorn + Uvicorn (1 worker)      │
 1. **Google Cloud account** with billing enabled
 2. **gcloud CLI** — [Install guide](https://cloud.google.com/sdk/docs/install)
 3. **Docker** — installed and running
-4. **API keys** ready:
+4. **Doppler CLI** — [Install guide](https://docs.doppler.com/docs/install-cli); run `doppler login` and `doppler setup`
+5. **API keys** ready:
    - OpenAI API key (`sk-...`)
    - Tavily API key (`tvly-...`)
    - HeyGen API key (optional, for video generation)
@@ -64,7 +69,7 @@ gcloud config set project YOUR_PROJECT_ID
 gcloud services enable \
     run.googleapis.com \
     artifactregistry.googleapis.com \
-    secretmanager.googleapis.com
+    storage.googleapis.com
 
 # Create container registry
 gcloud artifacts repositories create cr8 \
@@ -75,52 +80,46 @@ gcloud artifacts repositories create cr8 \
 
 ---
 
-## Step 2: Create Secrets
+## Step 2: Create Secrets in Doppler
 
-Store API keys in GCP Secret Manager (never in code or environment files):
+Secrets are stored in **Doppler** and injected as environment variables at
+deploy time — nothing is written to GCP Secret Manager.
 
 ```bash
+doppler login
+doppler projects create cr8
+doppler setup --project cr8 --config prd
+
 # Required
-echo -n 'sk-your-openai-key' | gcloud secrets create OPENAI_API_KEY \
-    --data-file=- --replication-policy=automatic
+doppler secrets set OPENAI_API_KEY='sk-your-openai-key'
+doppler secrets set TAVILY_API_KEY='tvly-your-tavily-key'
+doppler secrets set AUTH_PASSWORD='your-web-ui-password'
+doppler secrets set DATABASE_URL='postgresql://user:pass@host/db?sslmode=require'
+doppler secrets set JWT_SECRET="$(openssl rand -hex 32)"
 
-echo -n 'tvly-your-tavily-key' | gcloud secrets create TAVILY_API_KEY \
-    --data-file=- --replication-policy=automatic
-
-echo -n 'postgresql://user:pass@host/db?sslmode=require' | gcloud secrets create DATABASE_URL \
-    --data-file=- --replication-policy=automatic
-
-echo -n "$(openssl rand -hex 32)" | gcloud secrets create JWT_SECRET \
-    --data-file=- --replication-policy=automatic
-
-# Optional (for video generation)
-echo -n 'your-heygen-key' | gcloud secrets create HEYGEN_API_KEY \
-    --data-file=- --replication-policy=automatic
+# Optional
+doppler secrets set HF_TOKEN='hf_your-token'          # GPU model downloads
+doppler secrets set HEYGEN_API_KEY='your-heygen-key'  # HeyGen video
+doppler secrets set LANGCHAIN_API_KEY='ls_your-key'   # LangSmith tracing
 ```
 
-Grant the Cloud Run service account access to read secrets:
-
-```bash
-PROJECT_NUMBER=$(gcloud projects describe YOUR_PROJECT_ID --format='value(projectNumber)')
-
-for SECRET in OPENAI_API_KEY TAVILY_API_KEY DATABASE_URL JWT_SECRET; do
-    gcloud secrets add-iam-policy-binding $SECRET \
-        --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-        --role="roles/secretmanager.secretAccessor"
-done
-```
-
-To update a secret later:
-
-```bash
-echo -n 'new-key-value' | gcloud secrets versions add OPENAI_API_KEY --data-file=-
-```
+To update a secret later, run `doppler secrets set KEY='new-value'` and redeploy.
 
 ---
 
 ## Step 3: Deploy
 
+Run the deploy script through `doppler run` so secret values are present in the
+environment:
+
 ```bash
+doppler run --project cr8 --config prd -- ./deploy.sh YOUR_PROJECT_ID
+```
+
+For CI / non-interactive deploys, use a Doppler **service token** instead:
+
+```bash
+export DOPPLER_TOKEN=$(doppler configs tokens create ci --project cr8 --config prd --plain)
 ./deploy.sh YOUR_PROJECT_ID
 ```
 
@@ -134,7 +133,7 @@ The script will:
 To deploy to a different region:
 
 ```bash
-./deploy.sh YOUR_PROJECT_ID us-east1
+doppler run -- ./deploy.sh YOUR_PROJECT_ID us-east1
 ```
 
 ---
@@ -251,7 +250,7 @@ For local development or when GPU is not available, video runs locally on CPU:
 
 ### Environment Variables
 
-Set via `--set-env-vars` in deploy.sh:
+Set via the `--env-vars-file` that deploy.sh generates:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -269,15 +268,19 @@ The production GCS bucket is `gs://cr8-jobs-cr8-learning`.
 
 ### Secrets
 
-Injected from Secret Manager via `--set-secrets`:
+Pulled from Doppler by `deploy.sh` and written into the service via a
+mode `600` `--env-vars-file` (never on the gcloud command line):
 
 | Secret | Required | Description |
 |--------|----------|-------------|
 | `OPENAI_API_KEY` | Yes | OpenAI API key |
 | `TAVILY_API_KEY` | Yes | Tavily web search key |
+| `AUTH_PASSWORD` | Yes | Web UI login password |
 | `DATABASE_URL` | Yes | Neon Postgres connection string (auth/jobs/quiz) |
 | `JWT_SECRET` | Yes | 32+ byte hex string for JWT token signing |
+| `HF_TOKEN` | No | HuggingFace token (GPU model downloads) |
 | `HEYGEN_API_KEY` | No | HeyGen video generation key |
+| `LANGCHAIN_API_KEY` | No | LangSmith tracing key |
 
 ---
 
@@ -327,15 +330,15 @@ If you see OOM errors, increase memory:
 gcloud run services update cr8-pipeline --memory=4Gi --region=europe-west2
 ```
 
-### Secret access denied
+### Missing secret at deploy time
 
-Ensure the Cloud Run service account has `secretmanager.secretAccessor` role:
+`deploy.sh` aborts with `missing required secret(s) in environment` when it is
+not run through Doppler. Wrap the command:
 ```bash
-PROJECT_NUMBER=$(gcloud projects describe YOUR_PROJECT_ID --format='value(projectNumber)')
-gcloud secrets add-iam-policy-binding OPENAI_API_KEY \
-    --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-    --role="roles/secretmanager.secretAccessor"
+doppler run --project cr8 --config prd -- ./deploy.sh YOUR_PROJECT_ID
 ```
+Confirm the values exist with `doppler secrets` (or `doppler secrets get OPENAI_API_KEY --plain`).
+For CI, check that the `DOPPLER_TOKEN` service token is set and scoped to the `prd` config.
 
 ### GPU service not responding
 

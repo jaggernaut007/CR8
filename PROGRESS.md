@@ -3,9 +3,24 @@
      Updated at the end of every session using the session-handoff skill. -->
 
 ## Current Status
-**Last updated:** 2026-03-15
+**Last updated:** 2026-08-31
 **Overall project phase:** v0.5.5+ — Ruff refactor: agent_generate.py 51 violations → 0 (context classes, extracted helpers, logger migration); file_parser.py 3 violations → 0; ruff now clean across all modified files; 1158 pytest all passing
 **Current version:** v0.5.5
+
+## Secrets → Doppler (2026-08-31)
+> Migrated deployment secrets off GCP Secret Manager onto Doppler. Deploy-time env injection (option 1): `doppler run` supplies secret values as env vars; `deploy.sh` writes them into Cloud Run via a mode 600 `--env-vars-file`. No application code changed — the app already reads plain env vars via `backend/config.py`.
+
+### Changes
+- `deploy.sh` — added `write_env_file` helper (python3 YAML emitter, skips empty values) + `ENV_FILES` cleanup trap + required-secret guard; CPU and GPU deploys use `--env-vars-file` instead of `--set-secrets`/`--set-env-vars`; `--setup` prints Doppler steps, drops `secretmanager.googleapis.com` + secretAccessor IAM grants. Header documents `doppler run -- ./deploy.sh`.
+- `.github/workflows/deploy.yml` — `dopplerhq/secrets-fetch-action@v1.3.0` (`inject-env-vars: true`) + `--env-vars-file` built by inline python3. Needs repo secret `DOPPLER_TOKEN` (service token, config `prd`).
+- `.env.example` — header note on `doppler run -- make dev`; `.env` kept as local fallback.
+- Docs: `mk-docs/deployment/gcp-cloud-run.md`, `mk-docs/deployment/index.md`, `mk-docs/security.md`, `SECURITY.md`, `AGENTS.md`, `CHANGELOG.md`.
+
+### Follow-ups / not done
+- Create the Doppler `cr8` project + `prd` config and populate secret values (manual, needs Doppler account).
+- Add `DOPPLER_TOKEN` to GitHub repo secrets before next CI deploy.
+- Optionally delete the old GCP secrets: `for s in OPENAI_API_KEY TAVILY_API_KEY AUTH_PASSWORD HF_TOKEN HEYGEN_API_KEY LANGCHAIN_API_KEY DATABASE_URL JWT_SECRET; do gcloud secrets delete "$s" --quiet; done`
+- Tradeoff accepted: secret values now visible in Cloud Run revision config to `run.viewer` IAM holders.
 
 ## Ruff Refactor — agent_generate.py + file_parser.py (2026-03-15)
 > Eliminated all 51 ruff violations in agent_generate.py and 3 in file_parser.py. Zero linting errors in all modified files. 1158 pytest all passing.

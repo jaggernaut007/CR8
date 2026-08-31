@@ -19,7 +19,7 @@ If you discover a security vulnerability in CR8, please report it responsibly:
 
 ## Security Best Practices for Deployment
 
-- **API Keys**: Store all API keys (`OPENAI_API_KEY`, `TAVILY_API_KEY`, etc.) in environment variables or a secrets manager. Never commit `.env` files.
+- **API Keys**: Local development reads keys from `.env` (never committed). Production keys live in **Doppler** and are injected as environment variables at deploy time by `deploy.sh` (run via `doppler run`). Never commit `.env` files.
 - **LangSmith Tracing**: Tracing is opt-in (disabled by default). Set `LANGCHAIN_API_KEY` and `LANGCHAIN_TRACING_V2=true` only if you want trace data sent to LangSmith.
 - **Temp Files**: The video pipeline uses `tempfile.TemporaryDirectory()` for all intermediate files, ensuring cleanup on completion or failure.
 - **Subprocess Calls**: All external process calls (e.g., LibreOffice for PPTX conversion) use explicit argument lists with timeouts — no `shell=True`.

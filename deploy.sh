@@ -1,17 +1,23 @@
 #!/usr/bin/env bash
 # deploy.sh — Build, push, and deploy CR8 Pipeline to GCP Cloud Run.
 #
+# Secrets are supplied by Doppler at deploy time — run this script through
+# `doppler run` so secret values are present in the environment:
+#
+#   doppler run -- ./deploy.sh <GCP_PROJECT_ID> [REGION]
+#
 # Usage:
-#   ./deploy.sh <GCP_PROJECT_ID> [REGION]        # deploy all services
-#   ./deploy.sh <GCP_PROJECT_ID> --cpu            # deploy CPU pipeline only
-#   ./deploy.sh <GCP_PROJECT_ID> --gpu            # deploy GPU services only
-#   ./deploy.sh <GCP_PROJECT_ID> --cpu-video      # deploy CPU video fallback only
-#   ./deploy.sh --setup <GCP_PROJECT_ID> [REGION] # one-time GCP setup
+#   doppler run -- ./deploy.sh <GCP_PROJECT_ID> [REGION]        # deploy all services
+#   doppler run -- ./deploy.sh <GCP_PROJECT_ID> --cpu            # deploy CPU pipeline only
+#   doppler run -- ./deploy.sh <GCP_PROJECT_ID> --gpu            # deploy GPU services only
+#   doppler run -- ./deploy.sh <GCP_PROJECT_ID> --cpu-video      # deploy CPU video fallback only
+#   ./deploy.sh --setup <GCP_PROJECT_ID> [REGION]                # one-time GCP setup
 #
 # Prerequisites:
 #   - gcloud CLI installed and authenticated (`gcloud auth login`)
 #   - Docker installed and running
-#   - Secrets already created in Secret Manager (see --setup flag)
+#   - Doppler CLI installed and configured (`doppler login` + `doppler setup`),
+#     or a DOPPLER_TOKEN service token exported in the environment (see --setup)
 
 set -euo pipefail
 
@@ -70,6 +76,54 @@ echo "GCS Bucket: ${GCS_BUCKET}"
 echo "Tag:        ${TAG}"
 echo ""
 
+# ── Secret plumbing (Doppler → Cloud Run env-vars file) ───────────
+# Secret values arrive as environment variables (via `doppler run` or a
+# DOPPLER_TOKEN in the environment). We never pass them on the gcloud
+# command line — instead each service gets a mode 600 --env-vars-file
+# that is deleted on exit.
+
+ENV_FILES=()
+cleanup_env_files() {
+    for f in "${ENV_FILES[@]:-}"; do
+        [[ -n "${f}" ]] && rm -f "${f}"
+    done
+}
+trap cleanup_env_files EXIT
+
+# write_env_file <path> KEY=VALUE [KEY=VALUE ...]
+# Emits a YAML env-vars file (double-quoted scalars, safely escaped).
+write_env_file() {
+    local path="$1"
+    shift
+    : >"${path}"
+    chmod 600 "${path}"
+    python3 - "$@" >"${path}" <<'PY'
+import sys
+
+for pair in sys.argv[1:]:
+    key, _, value = pair.partition("=")
+    if value == "":
+        continue  # unset — let the app fall back to its default
+    esc = value.replace("\\", "\\\\").replace('"', '\\"')
+    print(f'{key}: "{esc}"')
+PY
+    ENV_FILES+=("${path}")
+}
+
+# Guard: required secrets must be present in the environment for a deploy.
+if [[ "${RUN_SETUP}" != "true" ]]; then
+    _missing=()
+    for _var in OPENAI_API_KEY TAVILY_API_KEY AUTH_PASSWORD DATABASE_URL JWT_SECRET; do
+        [[ -z "${!_var:-}" ]] && _missing+=("${_var}")
+    done
+    if [[ ${#_missing[@]} -gt 0 ]]; then
+        echo "ERROR: missing required secret(s) in environment: ${_missing[*]}" >&2
+        echo "       Run this script through Doppler:  doppler run -- ./deploy.sh ${PROJECT_ID}" >&2
+        echo "       (or export a DOPPLER_TOKEN service token first)" >&2
+        exit 1
+    fi
+fi
+
 # ── One-time setup ────────────────────────────────────────────────
 if [[ "${RUN_SETUP}" == "true" ]]; then
     echo "==> Setting GCP project..."
@@ -79,7 +133,6 @@ if [[ "${RUN_SETUP}" == "true" ]]; then
     gcloud services enable \
         run.googleapis.com \
         artifactregistry.googleapis.com \
-        secretmanager.googleapis.com \
         storage.googleapis.com
 
     echo "==> Creating Artifact Registry repositories..."
@@ -101,41 +154,38 @@ if [[ "${RUN_SETUP}" == "true" ]]; then
     gsutil mb -l EU "gs://${GCS_BUCKET}" 2>/dev/null || echo "    (bucket already exists)"
 
     echo ""
-    echo "==> Now create your secrets. Run these commands, replacing the values:"
+    echo "==> Secrets live in Doppler (not GCP Secret Manager)."
+    echo "    One-time: install the Doppler CLI, then create a project + config and"
+    echo "    populate it. Replace the placeholder values:"
+    echo ""
+    echo "  doppler login"
+    echo "  doppler projects create cr8"
+    echo "  doppler setup --project cr8 --config prd"
     echo ""
     echo "  # Required"
-    echo "  echo -n 'sk-YOUR-KEY' | gcloud secrets create OPENAI_API_KEY --data-file=- --replication-policy=automatic"
-    echo "  echo -n 'tvly-YOUR-KEY' | gcloud secrets create TAVILY_API_KEY --data-file=- --replication-policy=automatic"
+    echo "  doppler secrets set OPENAI_API_KEY='sk-YOUR-KEY'"
+    echo "  doppler secrets set TAVILY_API_KEY='tvly-YOUR-KEY'"
+    echo "  doppler secrets set AUTH_PASSWORD='your-web-ui-password'"
+    echo "  doppler secrets set DATABASE_URL='postgresql://user:pass@host/db?sslmode=require'"
+    echo "  doppler secrets set JWT_SECRET=\"\$(openssl rand -hex 32)\""
     echo ""
-    echo "  # Web UI login password"
-    echo "  echo -n 'your-password' | gcloud secrets create AUTH_PASSWORD --data-file=- --replication-policy=automatic"
+    echo "  # Optional"
+    echo "  doppler secrets set HF_TOKEN='hf_YOUR-TOKEN'          # GPU model downloads"
+    echo "  doppler secrets set HEYGEN_API_KEY='YOUR-KEY'         # HeyGen video"
+    echo "  doppler secrets set LANGCHAIN_API_KEY='ls_YOUR-KEY'   # LangSmith tracing"
     echo ""
-    echo "  # Optional — HuggingFace token (GPU service model downloads)"
-    echo "  echo -n 'hf_YOUR-TOKEN' | gcloud secrets create HF_TOKEN --data-file=- --replication-policy=automatic"
+    echo "==> Deploy with secrets injected from Doppler:"
     echo ""
-    echo "  # Required — Database (Neon PostgreSQL)"
-    echo "  echo -n 'postgresql://user:pass@host/db?sslmode=require' | gcloud secrets create DATABASE_URL --data-file=- --replication-policy=automatic"
+    echo "  doppler run --project cr8 --config prd -- ./deploy.sh ${PROJECT_ID}"
     echo ""
-    echo "  # Required — JWT signing secret (32+ bytes)"
-    echo "  echo -n \"\$(openssl rand -hex 32)\" | gcloud secrets create JWT_SECRET --data-file=- --replication-policy=automatic"
+    echo "  # For CI / non-interactive deploys, use a service token instead:"
+    echo "  #   export DOPPLER_TOKEN=\$(doppler configs tokens create ci --project cr8 --config prd --plain)"
+    echo "  #   ./deploy.sh ${PROJECT_ID}"
     echo ""
-    echo "  # Optional — HeyGen video generation"
-    echo "  echo -n 'YOUR-KEY' | gcloud secrets create HEYGEN_API_KEY --data-file=- --replication-policy=automatic"
-    echo ""
-    echo "  # Optional — LangSmith tracing"
-    echo "  echo -n 'ls_YOUR-KEY' | gcloud secrets create LANGCHAIN_API_KEY --data-file=- --replication-policy=automatic"
-    echo ""
-    echo "==> Then grant the Cloud Run service account access to secrets and GCS:"
+    echo "==> Grant the Cloud Run service account access to GCS:"
     echo ""
     echo "  PROJECT_NUMBER=\$(gcloud projects describe ${PROJECT_ID} --format='value(projectNumber)')"
     echo "  SA=\"\${PROJECT_NUMBER}-compute@developer.gserviceaccount.com\""
-    echo ""
-    echo "  # Secrets access (all secrets)"
-    echo "  for SECRET in OPENAI_API_KEY TAVILY_API_KEY AUTH_PASSWORD HF_TOKEN HEYGEN_API_KEY LANGCHAIN_API_KEY DATABASE_URL JWT_SECRET; do"
-    echo "    gcloud secrets add-iam-policy-binding \$SECRET \\"
-    echo "      --member=\"serviceAccount:\${SA}\" \\"
-    echo "      --role=\"roles/secretmanager.secretAccessor\" 2>/dev/null || true"
-    echo "  done"
     echo ""
     echo "  # GCS bucket access (all services need read/write)"
     echo "  gsutil iam ch \"serviceAccount:\${SA}:roles/storage.objectAdmin\" gs://${GCS_BUCKET}"
@@ -160,6 +210,15 @@ if [[ "${DEPLOY_GPU}" == "true" ]]; then
         -f Dockerfile.gpu -t "${GPU_IMAGE}:${TAG}" --push .
 
     echo "==> Deploying GPU service to Cloud Run (${GPU_REGION})..."
+    GPU_ENV_FILE="$(mktemp -t cr8-gpu-env.XXXXXX)"
+    write_env_file "${GPU_ENV_FILE}" \
+        "HF_TOKEN=${HF_TOKEN:-}" \
+        "GCS_BUCKET=${GCS_BUCKET}" \
+        "VIDEO_DEVICE=auto" \
+        "VIDEO_MAX_WORKERS=6" \
+        "KOKORO_VOICE=af_heart" \
+        "KOKORO_LANG=a" \
+        "VIDEO_FPS=2"
     gcloud run deploy "${GPU_SERVICE_NAME}" \
         --image="${GPU_IMAGE}:${TAG}" \
         --region="${GPU_REGION}" \
@@ -174,8 +233,7 @@ if [[ "${DEPLOY_GPU}" == "true" ]]; then
         --min-instances=0 \
         --max-instances=1 \
         --no-cpu-throttling \
-        --set-secrets="HF_TOKEN=HF_TOKEN:latest" \
-        --set-env-vars="GCS_BUCKET=${GCS_BUCKET},VIDEO_DEVICE=auto,VIDEO_MAX_WORKERS=6,KOKORO_VOICE=af_heart,KOKORO_LANG=a,VIDEO_FPS=2"
+        --env-vars-file="${GPU_ENV_FILE}"
 
     GPU_URL=$(gcloud run services describe "${GPU_SERVICE_NAME}" \
         --region="${GPU_REGION}" --format='value(status.url)')
@@ -235,6 +293,30 @@ if [[ "${DEPLOY_CPU}" == "true" ]]; then
     fi
 
     echo "==> Deploying CPU service to Cloud Run (${REGION})..."
+    CPU_ENV_FILE="$(mktemp -t cr8-cpu-env.XXXXXX)"
+    write_env_file "${CPU_ENV_FILE}" \
+        "OPENAI_API_KEY=${OPENAI_API_KEY}" \
+        "TAVILY_API_KEY=${TAVILY_API_KEY}" \
+        "AUTH_PASSWORD=${AUTH_PASSWORD}" \
+        "HF_TOKEN=${HF_TOKEN:-}" \
+        "HEYGEN_API_KEY=${HEYGEN_API_KEY:-}" \
+        "LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}" \
+        "DATABASE_URL=${DATABASE_URL}" \
+        "JWT_SECRET=${JWT_SECRET}" \
+        "GPU_SERVICE_URL=${GPU_URL}" \
+        "CPU_VIDEO_SERVICE_URL=${CPU_VIDEO_URL}" \
+        "GCS_BUCKET=${GCS_BUCKET}" \
+        "OPENAI_MODEL=gpt-5.1" \
+        "OPENAI_MODEL_PREMIUM=gpt-5.1" \
+        "OPENAI_MODEL_MINI=gpt-5-mini" \
+        "OPENAI_MODEL_NANO=gpt-5-nano" \
+        "CHROMA_PERSIST_DIR=./chroma_db" \
+        "LANGCHAIN_TRACING_V2=true" \
+        "LANGCHAIN_PROJECT=cr8-prototype" \
+        "MAX_WORKERS=12" \
+        "VIDEO_MAX_WORKERS=6" \
+        "VIDEO_PROVIDER=kokoro" \
+        "COOKIE_SECURE=true"
     gcloud run deploy "${CPU_SERVICE_NAME}" \
         --image="${CPU_IMAGE}:${TAG}" \
         --region="${REGION}" \
@@ -247,8 +329,7 @@ if [[ "${DEPLOY_CPU}" == "true" ]]; then
         --min-instances=0 \
         --max-instances=1 \
         --no-cpu-throttling \
-        --set-secrets="OPENAI_API_KEY=OPENAI_API_KEY:latest,TAVILY_API_KEY=TAVILY_API_KEY:latest,AUTH_PASSWORD=AUTH_PASSWORD:latest,HF_TOKEN=HF_TOKEN:latest,HEYGEN_API_KEY=HEYGEN_API_KEY:latest,LANGCHAIN_API_KEY=LANGCHAIN_API_KEY:latest,DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest" \
-        --set-env-vars="GPU_SERVICE_URL=${GPU_URL},CPU_VIDEO_SERVICE_URL=${CPU_VIDEO_URL},GCS_BUCKET=${GCS_BUCKET},OPENAI_MODEL=gpt-5.1,OPENAI_MODEL_PREMIUM=gpt-5.1,OPENAI_MODEL_MINI=gpt-5-mini,OPENAI_MODEL_NANO=gpt-5-nano,CHROMA_PERSIST_DIR=./chroma_db,LANGCHAIN_TRACING_V2=true,LANGCHAIN_PROJECT=cr8-prototype,MAX_WORKERS=12,VIDEO_MAX_WORKERS=6,VIDEO_PROVIDER=kokoro,COOKIE_SECURE=true"
+        --env-vars-file="${CPU_ENV_FILE}"
 
     CPU_URL=$(gcloud run services describe "${CPU_SERVICE_NAME}" \
         --region="${REGION}" --format='value(status.url)')

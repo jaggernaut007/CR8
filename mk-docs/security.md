@@ -218,16 +218,19 @@ API keys are loaded via `pydantic_settings` from `.env` at startup.
 
 === "Production (Cloud Run)"
 
-    Secrets are injected from **GCP Secret Manager** via `--set-secrets` in `deploy.sh`. See [GCP Cloud Run deployment](deployment/gcp-cloud-run.md) for setup instructions.
+    Secrets live in **Doppler** and are injected as environment variables at deploy time — `deploy.sh` (run via `doppler run`) writes them into the Cloud Run service through a mode `600` `--env-vars-file`. Nothing is stored in GCP Secret Manager. See [GCP Cloud Run deployment](deployment/gcp-cloud-run.md) for setup instructions.
 
     ```bash title="Create a secret"
-    echo -n 'sk-your-key' | gcloud secrets create OPENAI_API_KEY \
-        --data-file=- --replication-policy=automatic
+    doppler secrets set OPENAI_API_KEY='sk-your-key' --project cr8 --config prd
     ```
 
     ```bash title="Rotate a secret"
-    echo -n 'sk-new-key' | gcloud secrets versions add OPENAI_API_KEY --data-file=-
+    doppler secrets set OPENAI_API_KEY='sk-new-key' --project cr8 --config prd
+    # then redeploy:  doppler run -- ./deploy.sh <PROJECT_ID>
     ```
+
+    !!! note "Tradeoff"
+        Values are visible in the Cloud Run revision config to anyone with the `run.viewer` IAM role. Keep that role tightly scoped.
 
 ---
 

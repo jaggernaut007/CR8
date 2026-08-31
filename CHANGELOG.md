@@ -7,6 +7,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ---
 
+## [Unreleased]
+
+### Changed — Secrets management (Doppler)
+- Secrets moved from **GCP Secret Manager** to **Doppler**, injected as environment variables at deploy time
+- `deploy.sh` — replaced `--set-secrets` (CPU + GPU services) with a generated mode `600` `--env-vars-file`; reads secret values from the environment (run via `doppler run -- ./deploy.sh <PROJECT_ID>`); aborts early if a required secret is missing
+- `deploy.sh --setup` — prints Doppler setup steps instead of `gcloud secrets create`; drops `secretmanager.googleapis.com` from enabled APIs and the `secretmanager.secretAccessor` IAM grants
+- `.github/workflows/deploy.yml` — fetches secrets via `dopplerhq/secrets-fetch-action` (needs a `DOPPLER_TOKEN` repo secret scoped to the `prd` config); deploys with `--env-vars-file`
+- `.env.example` — documents the `doppler run -- make dev` path; `.env` remains the supported local fallback
+- Docs updated: `mk-docs/deployment/gcp-cloud-run.md`, `mk-docs/deployment/index.md`, `mk-docs/security.md`, `SECURITY.md`, `AGENTS.md`
+
+---
+
 ## [0.5.4] — 2026-03-09 — Quiz Agent + Quiz UI (MCQ, Bloom's Taxonomy, One-Attempt)
 
 ### Added — Quiz Pipeline (`backend/pipeline/`)

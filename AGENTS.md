@@ -18,7 +18,7 @@ AI voiceover videos). Stack: Python 3.11+, FastAPI, LangGraph, OpenAI, ChromaDB,
 - Testing: pytest — 1158 backend tests + 124 Vitest + 17 Playwright E2E = 1299 total, zero real API calls (pytest-xdist parallel, ~42s)
 - Linting: Ruff (line-length = 100)
 - Docs: MkDocs Material — source in `mk-docs/`, config at `mkdocs.yml`
-- Deployment: Docker + GCP Cloud Run
+- Deployment: Docker + GCP Cloud Run; secrets from Doppler (`doppler run -- ./deploy.sh`), not GCP Secret Manager
 
 ## Build & Test Commands
 ```bash

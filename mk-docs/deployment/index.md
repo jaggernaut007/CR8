@@ -10,7 +10,7 @@ CR8 deploys as a **dual-service architecture**: a CPU service for the pipeline a
 ``` mermaid
 graph TB
     User[Browser] -->|HTTPS| CPU[CPU Service<br/>europe-west2]
-    CPU -->|env vars| SM[Secret Manager]
+    CPU -->|env vars at deploy| DP[Doppler]
     CPU -->|API calls| OAI[OpenAI API]
     CPU -->|API calls| TAV[Tavily API]
     CPU -->|slide PNGs| GCS[(GCS Bucket<br/>cr8-jobs)]
@@ -42,7 +42,7 @@ graph TB
 | Build CPU Docker image | `make docker-build` |
 | Build GPU Docker image | `docker build -f Dockerfile.gpu -t cr8-gpu-service .` |
 | Run locally in Docker | `make docker-run` |
-| Deploy to Cloud Run | `./deploy.sh PROJECT_ID` (deploys both services) |
+| Deploy to Cloud Run | `doppler run -- ./deploy.sh PROJECT_ID` (deploys both services) |
 | Deploy details | See [GCP Cloud Run guide](gcp-cloud-run.md) |
 
 ## Requirements
@@ -50,4 +50,5 @@ graph TB
 - Docker 20.10+ (for local builds)
 - GCP account with Cloud Run enabled (for production)
 - GCS bucket for CPU↔GPU data transfer (production video rendering)
-- All API keys configured in `.env` or GCP Secret Manager
+- API keys in `.env` (local dev) or Doppler (production, injected at deploy time)
+- Doppler CLI for production deploys (`doppler login` + `doppler setup`)
