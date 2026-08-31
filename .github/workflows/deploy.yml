@@ -133,6 +133,7 @@ jobs:
             --max-instances=1 \
             --no-cpu-throttling \
             --env-vars-file="$ENV_FILE" \
+            --clear-secrets \
             --quiet
 
   # ── CPU video fallback service (cr8-cpu-video, europe-west2) ──────────
@@ -208,6 +209,7 @@ jobs:
             --max-instances=1 \
             --no-cpu-throttling \
             --env-vars-file="$ENV_FILE" \
+            --clear-secrets \
             --quiet
 
   # ── CPU pipeline service (cr8-pipeline, europe-west2) ────────────────
@@ -242,11 +244,25 @@ jobs:
 
       - name: Build image with Cloud Build
         run: |
+          # gcloud's --tag takes a single value, so a two-tag build needs a
+          # build config (otherwise only one tag is pushed and the deploy step
+          # below cannot find :$GITHUB_SHA).
+          cat > "$RUNNER_TEMP/cloudbuild-cpu.yaml" <<'YAML'
+          steps:
+            - name: gcr.io/cloud-builders/docker
+              args: ['build', '-f', 'Dockerfile', '-t', '${_IMAGE}:${_TAG}', '-t', '${_IMAGE}:latest', '.']
+          images:
+            - '${_IMAGE}:${_TAG}'
+            - '${_IMAGE}:latest'
+          options:
+            machineType: E2_HIGHCPU_8
+          timeout: 3600s
+          YAML
           BUILD_ID="$(gcloud builds submit --async \
-            --project=${{ env.PROJECT_ID }} \
-            --region=${{ env.REGION }} \
-            --tag="${{ env.CPU_REGISTRY }}:${{ github.sha }}" \
-            --tag="${{ env.CPU_REGISTRY }}:latest" \
+            --project="${{ env.PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --config="$RUNNER_TEMP/cloudbuild-cpu.yaml" \
+            --substitutions=_IMAGE="${{ env.CPU_REGISTRY }}",_TAG="${{ github.sha }}" \
             --format='value(id)')"
           echo "Submitted Cloud Build: $BUILD_ID"
           bash "$GITHUB_WORKSPACE/.github/scripts/wait-build.sh" "$BUILD_ID" "${{ env.PROJECT_ID }}" "${{ env.REGION }}"
@@ -263,6 +279,9 @@ jobs:
           # Build a mode 600 YAML --env-vars-file: secrets (injected into the
           # environment by the Doppler fetch step) + static config. Secret values
           # never appear on the gcloud command line.
+          # --clear-secrets on the deploy drops the old Secret Manager
+          # valueFrom refs; --env-vars-file only replaces literal env vars, so
+          # without it the deleted GCP secrets carry into the new revision.
           ENV_FILE="$(mktemp)"
           chmod 600 "$ENV_FILE"
           trap 'rm -f "$ENV_FILE"' EXIT
@@ -312,6 +331,7 @@ jobs:
             --max-instances=1 \
             --no-cpu-throttling \
             --env-vars-file="$ENV_FILE" \
+            --clear-secrets \
             --quiet
 
       - name: Verify deployment

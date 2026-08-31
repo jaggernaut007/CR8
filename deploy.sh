@@ -233,7 +233,8 @@ if [[ "${DEPLOY_GPU}" == "true" ]]; then
         --min-instances=0 \
         --max-instances=1 \
         --no-cpu-throttling \
-        --env-vars-file="${GPU_ENV_FILE}"
+        --env-vars-file="${GPU_ENV_FILE}" \
+        --clear-secrets
 
     GPU_URL=$(gcloud run services describe "${GPU_SERVICE_NAME}" \
         --region="${GPU_REGION}" --format='value(status.url)')
@@ -329,7 +330,8 @@ if [[ "${DEPLOY_CPU}" == "true" ]]; then
         --min-instances=0 \
         --max-instances=1 \
         --no-cpu-throttling \
-        --env-vars-file="${CPU_ENV_FILE}"
+        --env-vars-file="${CPU_ENV_FILE}" \
+        --clear-secrets
 
     CPU_URL=$(gcloud run services describe "${CPU_SERVICE_NAME}" \
         --region="${REGION}" --format='value(status.url)')
