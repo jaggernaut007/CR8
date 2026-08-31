@@ -85,12 +85,14 @@ jobs:
             diskSizeGb: 200
           timeout: 3600s
           YAML
-          gcloud builds submit \
+          BUILD_ID="$(gcloud builds submit --async \
             --project="${{ env.PROJECT_ID }}" \
             --region="${{ env.GPU_REGION }}" \
             --config="$RUNNER_TEMP/cloudbuild-gpu.yaml" \
             --substitutions=_IMAGE="${{ env.GPU_REGISTRY }}",_TAG="${{ github.sha }}" \
-            --suppress-logs   # SA cannot stream the regional default logs bucket; build result still gates this step
+            --format='value(id)')"
+          echo "Submitted Cloud Build: $BUILD_ID"
+          bash "$GITHUB_WORKSPACE/.github/scripts/wait-build.sh" "$BUILD_ID" "${{ env.PROJECT_ID }}" "${{ env.GPU_REGION }}"
 
       - name: Deploy cr8-gpu to Cloud Run
         run: |
@@ -163,12 +165,14 @@ jobs:
             diskSizeGb: 100
           timeout: 3600s
           YAML
-          gcloud builds submit \
+          BUILD_ID="$(gcloud builds submit --async \
             --project="${{ env.PROJECT_ID }}" \
             --region="${{ env.REGION }}" \
             --config="$RUNNER_TEMP/cloudbuild-cpu-video.yaml" \
             --substitutions=_IMAGE="${{ env.CPU_VIDEO_REGISTRY }}",_TAG="${{ github.sha }}" \
-            --suppress-logs
+            --format='value(id)')"
+          echo "Submitted Cloud Build: $BUILD_ID"
+          bash "$GITHUB_WORKSPACE/.github/scripts/wait-build.sh" "$BUILD_ID" "${{ env.PROJECT_ID }}" "${{ env.REGION }}"
 
       - name: Deploy cr8-cpu-video to Cloud Run
         run: |
@@ -238,12 +242,14 @@ jobs:
 
       - name: Build image with Cloud Build
         run: |
-          gcloud builds submit \
+          BUILD_ID="$(gcloud builds submit --async \
             --project=${{ env.PROJECT_ID }} \
             --region=${{ env.REGION }} \
             --tag="${{ env.CPU_REGISTRY }}:${{ github.sha }}" \
             --tag="${{ env.CPU_REGISTRY }}:latest" \
-            --suppress-logs
+            --format='value(id)')"
+          echo "Submitted Cloud Build: $BUILD_ID"
+          bash "$GITHUB_WORKSPACE/.github/scripts/wait-build.sh" "$BUILD_ID" "${{ env.PROJECT_ID }}" "${{ env.REGION }}"
 
       - name: Deploy to Cloud Run
         run: |
