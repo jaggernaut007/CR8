@@ -7,6 +7,15 @@ on:
         description: "Type 'deploy' to confirm deployment to production"
         required: true
         type: string
+      services:
+        description: "Which services to deploy"
+        required: false
+        default: all
+        type: choice
+        options:
+          - all       # cr8-gpu + cr8-cpu-video + cr8-pipeline
+          - cpu       # cr8-pipeline only
+          - video     # cr8-gpu + cr8-cpu-video only
 
 concurrency:
   group: deploy
@@ -15,8 +24,11 @@ concurrency:
 env:
   PROJECT_ID: cr8-learning
   REGION: europe-west2
-  SERVICE: cr8-pipeline
-  REGISTRY: europe-west2-docker.pkg.dev/cr8-learning/cr8/cr8-pipeline
+  GPU_REGION: europe-west4
+  GCS_BUCKET: cr8-jobs-cr8-learning
+  CPU_REGISTRY: europe-west2-docker.pkg.dev/cr8-learning/cr8/cr8-pipeline
+  GPU_REGISTRY: europe-west4-docker.pkg.dev/cr8-learning/cr8/cr8-gpu
+  CPU_VIDEO_REGISTRY: europe-west2-docker.pkg.dev/cr8-learning/cr8/cr8-cpu-video
 
 permissions:
   contents: read
@@ -36,8 +48,172 @@ jobs:
     needs: guard
     uses: ./.github/workflows/ci.yml
 
-  deploy:
+  # ── GPU video service (cr8-gpu, europe-west4, NVIDIA L4) ──────────────
+  deploy-gpu:
     needs: ci
+    if: inputs.services == 'all' || inputs.services == 'video'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1000325314523/locations/global/workloadIdentityPools/github-actions/providers/github-oidc
+          service_account: github-deploy@cr8-learning.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Fetch secrets from Doppler
+        uses: dopplerhq/secrets-fetch-action@v1.3.0
+        with:
+          # Doppler service token (config: prd). Add in repo → Settings → Secrets.
+          doppler-token: ${{ secrets.DOPPLER_TOKEN }}
+          inject-env-vars: true
+
+      - name: Build cr8-gpu image with Cloud Build
+        run: |
+          cat > "$RUNNER_TEMP/cloudbuild-gpu.yaml" <<'YAML'
+          steps:
+            - name: gcr.io/cloud-builders/docker
+              args: ['build', '-f', 'Dockerfile.gpu', '-t', '${_IMAGE}:${_TAG}', '-t', '${_IMAGE}:latest', '.']
+          images:
+            - '${_IMAGE}:${_TAG}'
+            - '${_IMAGE}:latest'
+          options:
+            machineType: E2_HIGHCPU_8
+            diskSizeGb: 200
+          timeout: 3600s
+          YAML
+          gcloud builds submit \
+            --project="${{ env.PROJECT_ID }}" \
+            --region="${{ env.GPU_REGION }}" \
+            --config="$RUNNER_TEMP/cloudbuild-gpu.yaml" \
+            --substitutions=_IMAGE="${{ env.GPU_REGISTRY }}",_TAG="${{ github.sha }}"
+
+      - name: Deploy cr8-gpu to Cloud Run
+        run: |
+          ENV_FILE="$(mktemp)"
+          chmod 600 "$ENV_FILE"
+          trap 'rm -f "$ENV_FILE"' EXIT
+          GCS_BUCKET="${{ env.GCS_BUCKET }}" python3 - > "$ENV_FILE" <<'PY'
+          import os
+
+          pairs = {"HF_TOKEN": os.environ.get("HF_TOKEN", "")}
+          pairs.update({
+              "GCS_BUCKET": os.environ["GCS_BUCKET"],
+              "VIDEO_DEVICE": "auto",
+              "VIDEO_MAX_WORKERS": "6",
+              "KOKORO_VOICE": "af_heart",
+              "KOKORO_LANG": "a",
+              "VIDEO_FPS": "2",
+          })
+          for k, v in pairs.items():
+              if v == "":
+                  continue  # unset — let the app fall back to its default
+              esc = v.replace("\\", "\\\\").replace('"', '\\"')
+              print(f'{k}: "{esc}"')
+          PY
+
+          gcloud run deploy cr8-gpu \
+            --project="${{ env.PROJECT_ID }}" \
+            --region="${{ env.GPU_REGION }}" \
+            --image="${{ env.GPU_REGISTRY }}:${{ github.sha }}" \
+            --no-allow-unauthenticated \
+            --port=8080 \
+            --memory=16Gi \
+            --cpu=4 \
+            --gpu=1 \
+            --gpu-type=nvidia-l4 \
+            --timeout=3600 \
+            --min-instances=0 \
+            --max-instances=1 \
+            --no-cpu-throttling \
+            --env-vars-file="$ENV_FILE" \
+            --quiet
+
+  # ── CPU video fallback service (cr8-cpu-video, europe-west2) ──────────
+  deploy-cpu-video:
+    needs: ci
+    if: inputs.services == 'all' || inputs.services == 'video'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1000325314523/locations/global/workloadIdentityPools/github-actions/providers/github-oidc
+          service_account: github-deploy@cr8-learning.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build cr8-cpu-video image with Cloud Build
+        run: |
+          cat > "$RUNNER_TEMP/cloudbuild-cpu-video.yaml" <<'YAML'
+          steps:
+            - name: gcr.io/cloud-builders/docker
+              args: ['build', '-f', 'Dockerfile.cpu-video', '-t', '${_IMAGE}:${_TAG}', '-t', '${_IMAGE}:latest', '.']
+          images:
+            - '${_IMAGE}:${_TAG}'
+            - '${_IMAGE}:latest'
+          options:
+            machineType: E2_HIGHCPU_8
+            diskSizeGb: 100
+          timeout: 3600s
+          YAML
+          gcloud builds submit \
+            --project="${{ env.PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --config="$RUNNER_TEMP/cloudbuild-cpu-video.yaml" \
+            --substitutions=_IMAGE="${{ env.CPU_VIDEO_REGISTRY }}",_TAG="${{ github.sha }}"
+
+      - name: Deploy cr8-cpu-video to Cloud Run
+        run: |
+          ENV_FILE="$(mktemp)"
+          chmod 600 "$ENV_FILE"
+          trap 'rm -f "$ENV_FILE"' EXIT
+          GCS_BUCKET="${{ env.GCS_BUCKET }}" python3 - > "$ENV_FILE" <<'PY'
+          import os
+
+          pairs = {
+              "GCS_BUCKET": os.environ["GCS_BUCKET"],
+              "VIDEO_DEVICE": "cpu",
+              "VIDEO_MAX_WORKERS": "6",
+              "KOKORO_VOICE": "af_heart",
+              "KOKORO_LANG": "a",
+              "VIDEO_FPS": "2",
+          }
+          for k, v in pairs.items():
+              esc = v.replace("\\", "\\\\").replace('"', '\\"')
+              print(f'{k}: "{esc}"')
+          PY
+
+          gcloud run deploy cr8-cpu-video \
+            --project="${{ env.PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --image="${{ env.CPU_VIDEO_REGISTRY }}:${{ github.sha }}" \
+            --no-allow-unauthenticated \
+            --port=8080 \
+            --memory=32Gi \
+            --cpu=8 \
+            --timeout=3600 \
+            --min-instances=0 \
+            --max-instances=1 \
+            --no-cpu-throttling \
+            --env-vars-file="$ENV_FILE" \
+            --quiet
+
+  # ── CPU pipeline service (cr8-pipeline, europe-west2) ────────────────
+  # Runs after the video services so it picks up their fresh URLs.
+  deploy:
+    needs: [ci, deploy-gpu, deploy-cpu-video]
+    if: >-
+      always() &&
+      needs.ci.result == 'success' &&
+      needs.deploy-gpu.result != 'failure' && needs.deploy-gpu.result != 'cancelled' &&
+      needs.deploy-cpu-video.result != 'failure' && needs.deploy-cpu-video.result != 'cancelled' &&
+      (inputs.services == 'all' || inputs.services == 'cpu')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -63,13 +239,13 @@ jobs:
           gcloud builds submit \
             --project=${{ env.PROJECT_ID }} \
             --region=${{ env.REGION }} \
-            --tag="${{ env.REGISTRY }}:${{ github.sha }}" \
-            --tag="${{ env.REGISTRY }}:latest"
+            --tag="${{ env.CPU_REGISTRY }}:${{ github.sha }}" \
+            --tag="${{ env.CPU_REGISTRY }}:latest"
 
       - name: Deploy to Cloud Run
         run: |
           GPU_URL=$(gcloud run services describe cr8-gpu \
-            --region=europe-west4 --project=${{ env.PROJECT_ID }} \
+            --region=${{ env.GPU_REGION }} --project=${{ env.PROJECT_ID }} \
             --format='value(status.url)' 2>/dev/null || echo "")
           CPU_VIDEO_URL=$(gcloud run services describe cr8-cpu-video \
             --region=${{ env.REGION }} --project=${{ env.PROJECT_ID }} \
@@ -82,7 +258,7 @@ jobs:
           chmod 600 "$ENV_FILE"
           trap 'rm -f "$ENV_FILE"' EXIT
           GPU_URL="$GPU_URL" CPU_VIDEO_URL="$CPU_VIDEO_URL" \
-          GCS_BUCKET="cr8-jobs-${{ env.PROJECT_ID }}" \
+          GCS_BUCKET="${{ env.GCS_BUCKET }}" \
           python3 - > "$ENV_FILE" <<'PY'
           import os
 
@@ -114,10 +290,10 @@ jobs:
               print(f'{k}: "{esc}"')
           PY
 
-          gcloud run deploy ${{ env.SERVICE }} \
+          gcloud run deploy cr8-pipeline \
             --project=${{ env.PROJECT_ID }} \
             --region=${{ env.REGION }} \
-            --image="${{ env.REGISTRY }}:${{ github.sha }}" \
+            --image="${{ env.CPU_REGISTRY }}:${{ github.sha }}" \
             --allow-unauthenticated \
             --port=8080 \
             --memory=4Gi \
@@ -131,7 +307,7 @@ jobs:
 
       - name: Verify deployment
         run: |
-          URL=$(gcloud run services describe ${{ env.SERVICE }} \
+          URL=$(gcloud run services describe cr8-pipeline \
             --project=${{ env.PROJECT_ID }} \
             --region=${{ env.REGION }} \
             --format="value(status.url)")

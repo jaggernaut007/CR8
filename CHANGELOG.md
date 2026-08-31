@@ -13,7 +13,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Secrets moved from **GCP Secret Manager** to **Doppler**, injected as environment variables at deploy time
 - `deploy.sh` — replaced `--set-secrets` (CPU + GPU services) with a generated mode `600` `--env-vars-file`; reads secret values from the environment (run via `doppler run -- ./deploy.sh <PROJECT_ID>`); aborts early if a required secret is missing
 - `deploy.sh --setup` — prints Doppler setup steps instead of `gcloud secrets create`; drops `secretmanager.googleapis.com` from enabled APIs and the `secretmanager.secretAccessor` IAM grants
-- `.github/workflows/deploy.yml` — fetches secrets via `dopplerhq/secrets-fetch-action` (needs a `DOPPLER_TOKEN` repo secret scoped to the `prd` config); deploys with `--env-vars-file`
+- `.github/workflows/deploy.yml` — fetches secrets via `dopplerhq/secrets-fetch-action` (needs a `DOPPLER_TOKEN` repo secret scoped to the `prd` config); deploys with `--env-vars-file`. Now builds and deploys **all three** services on Cloud Build (`cr8-gpu`, `cr8-cpu-video`, `cr8-pipeline`) via a `services` input (`all` / `cpu` / `video`); the GPU/cpu-video images use an inline `cloudbuild.yaml` to build from their alternate Dockerfiles
 - `.env.example` — documents the `doppler run -- make dev` path; `.env` remains the supported local fallback
 - Docs updated: `mk-docs/deployment/gcp-cloud-run.md`, `mk-docs/deployment/index.md`, `mk-docs/security.md`, `SECURITY.md`, `AGENTS.md`
 
