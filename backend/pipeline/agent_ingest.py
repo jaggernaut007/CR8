@@ -53,7 +53,7 @@ def _summarize_file(source, texts, llm):
         # Short file — direct summarization
         prompt = SUMMARIZE_FILE.format(source=source, text=file_text)
         response = llm.invoke(prompt, config={"run_name": f"summarize_{source}"})
-        print(f"[Ingest] Summarized {source} (direct)")
+        logger.info("Summarized %s (direct)", source)
         return f"## {source}\n{response.content}"
 
     # Long file — map-reduce: split → summarize chunks → combine
@@ -62,7 +62,7 @@ def _summarize_file(source, texts, llm):
         for i in range(0, len(file_text), _CHUNK_SIZE)
     ]
     total = len(chunks)
-    print(f"[Ingest] {source}: {len(file_text)} chars → map-reduce ({total} chunks)")
+    logger.info("%s: %d chars -> map-reduce (%d chunks)", source, len(file_text), total)
 
     # Map phase: summarize each chunk
     chunk_summaries = []
@@ -81,7 +81,7 @@ def _summarize_file(source, texts, llm):
         ),
     )
     response = llm.invoke(prompt, config={"run_name": f"reduce_{source}"})
-    print(f"[Ingest] Summarized {source} (map-reduce, {total} chunks)")
+    logger.info("Summarized %s (map-reduce, %d chunks)", source, total)
     return f"## {source}\n{response.content}"
 
 
@@ -103,7 +103,7 @@ def ingest_node(state: PipelineState) -> dict:
         (concatenated extracted text), ``curriculum_scope`` (one-sentence
         domain boundary), and ``current_stage`` set to ``"ingested"``.
     """
-    print("[Ingest] Starting...")
+    logger.info("Starting ingest")
 
     store = ChromaStore(settings.chroma_persist_dir)
     store.reset_collections()
@@ -114,10 +114,10 @@ def ingest_node(state: PipelineState) -> dict:
     for path in state["file_paths"]:
         pages = extract_text(path)
         if not pages:
-            print(f"[Ingest] WARNING: No text extracted from {path}, skipping")
+            logger.warning("No text extracted from %s, skipping", path)
             continue
         all_pages.extend(pages)
-        print(f"[Ingest] Parsed {pages[0]['source']} — {len(pages)} pages")
+        logger.info("Parsed %s - %d pages", pages[0]["source"], len(pages))
 
     raw_text = "\n\n".join(p["text"] for p in all_pages)
 
@@ -143,7 +143,6 @@ def ingest_node(state: PipelineState) -> dict:
             except Exception as exc:
                 source = file_items[idx][0]
                 logger.exception("Summarization failed for '%s'", source)
-                print(f"[Ingest] ERROR: summarization of '{source}' failed — {exc}")
                 summaries[idx] = f"## {source}\n\n*Summarization failed: {exc}*"
 
     # 3. Extract topics from combined summaries
@@ -160,11 +159,10 @@ def ingest_node(state: PipelineState) -> dict:
         curriculum_scope = data.get("curriculum_scope", "")
     except json.JSONDecodeError:
         logger.warning("Malformed JSON from LLM during topic extraction, using single-topic fallback")
-        print("[Ingest] WARNING: malformed JSON from LLM during topic extraction, using single-topic fallback")
         topics = [{"name": "Curriculum Overview", "description": "Full curriculum content", "key_techniques": []}]
         curriculum_scope = "General curriculum content"
-    print(f"[Ingest] Scope: {curriculum_scope}")
-    print(f"[Ingest] Extracted {len(topics)} topics")
+    logger.info("Scope: %s", curriculum_scope)
+    logger.info("Extracted %d topics", len(topics))
 
     # 4. Chunk and embed into ChromaDB
     # 1500-char chunks with 150-char overlap give good retrieval granularity:
@@ -177,7 +175,7 @@ def ingest_node(state: PipelineState) -> dict:
     ids = [f"cur_{hashlib.md5(c.encode()).hexdigest()[:12]}" for c in chunks]
     metadatas = [{"collection": "curriculum"} for _ in chunks]
     store.add_documents("curriculum", chunks, metadatas, ids)
-    print(f"[Ingest] Embedded {len(chunks)} chunks into ChromaDB")
+    logger.info("Embedded %d chunks into ChromaDB", len(chunks))
 
     return {
         "topics": topics,

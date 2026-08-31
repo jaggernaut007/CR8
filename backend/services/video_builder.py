@@ -20,6 +20,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import re
@@ -300,7 +301,7 @@ def _compose_video(
     target_size = (1920, 1080)
 
     clips = []
-    for seg, audio_path in zip(segments, audio_paths):
+    for seg, audio_path in zip(segments, audio_paths, strict=False):
         # Match segment to slide image by slide_num (1-based), clamp to bounds
         img_idx = max(0, min(seg["slide_num"] - 1, len(slide_images) - 1))
         img_path = slide_images[img_idx]
@@ -372,14 +373,10 @@ def _compose_video(
     finally:
         # Close all clips to release file handles and free memory
         for clip in clips:
-            try:
+            with contextlib.suppress(Exception):
                 clip.close()
-            except Exception:
-                pass
-        try:
+        with contextlib.suppress(Exception):
             final.close()
-        except Exception:
-            pass
 
     elapsed = time.monotonic() - t0
     logger.info("Composed %s in %.1fs (encoder=%s)", fname, elapsed, used_encoder)
@@ -423,18 +420,18 @@ def _process_single_video(
     # Save script to disk
     with open(script_path, "w", encoding="utf-8") as f:
         f.write(script)
-    print(f"[Video]   Script saved: {script_path}")
+    logger.info("Script saved: %s", script_path)
 
     # Submit to video provider
     title = f"{prefix} - {topic_name} (Slide)"
-    print(f"[Video] Topic {idx + 1}/{total}: {topic_name} — submitting to {provider}...")
+    logger.info("Topic %d/%d: %s - submitting to %s", idx + 1, total, topic_name, provider)
 
     if provider == "synthesia":
         video_id = _create_video_synthesia(api_key, script, avatar_id, title)
     else:
         video_id = _create_video(api_key, script, avatar_id, voice_id, title, emotion, speed)
 
-    print(f"[Video]   {topic_name}: video_id={video_id}, polling for completion...")
+    logger.info("%s: video_id=%s, polling for completion", topic_name, video_id)
 
     # Poll until done
     if provider == "synthesia":
@@ -443,14 +440,14 @@ def _process_single_video(
         status_data = _poll_status(api_key, video_id)
 
     duration = status_data.get("duration", 0)
-    print(f"[Video]   {topic_name}: completed — {duration:.1f}s duration")
+    logger.info("%s: completed - %.1fs duration", topic_name, duration)
 
     # Download
     video_url = status_data.get("video_url") or status_data.get("download", "")
     if not video_url:
         raise RuntimeError(f"No download URL in status response for '{topic_name}': {status_data}")
     _download_video(video_url, video_path)
-    print(f"[Video]   {topic_name}: saved to {video_path}")
+    logger.info("%s: saved to %s", topic_name, video_path)
 
     return video_path
 
@@ -472,7 +469,7 @@ def build_videos(
     kokoro_voice: str = "af_heart",
     kokoro_lang: str = "a",
     video_fps: int = 5,
-    cancel_check: "callable | None" = None,
+    cancel_check: callable | None = None,
 ) -> list[str | None]:
     """Build videos for the given topics and scripts.
 
@@ -529,7 +526,7 @@ def _build_kokoro_videos(
     voice: str = "af_heart",
     lang: str = "a",
     fps: int = 5,
-    cancel_check: "callable | None" = None,
+    cancel_check: callable | None = None,
 ) -> list[str | None]:
     """Build Kokoro videos in two phases for performance.
 
@@ -554,7 +551,6 @@ def _build_kokoro_videos(
     if not slide_images:
         msg = "No slide images provided — cannot generate videos"
         logger.error(msg)
-        print(f"[Video] ERROR: {msg}")
         raise RuntimeError(msg)
 
     # Pad scripts list if fewer scripts than topics (single-script mode)
@@ -562,7 +558,7 @@ def _build_kokoro_videos(
         scripts = list(scripts) + [scripts[-1]] * (total - len(scripts))
 
     # ---- Phase 1: Sequential TTS (shared engine, ~3.4 GB peak RAM) ----
-    print("[Video] Phase 1: Synthesizing audio (sequential, shared TTS engine)...")
+    logger.info("Phase 1: Synthesizing audio (sequential, shared TTS engine)")
     engine = TTSEngine(voice=voice, lang=lang)
     tts_results: list[tuple[list[dict], list[str], list[str], str] | None] = []
 
@@ -579,12 +575,12 @@ def _build_kokoro_videos(
         # Save script
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(scripts[i])
-        print(f"[Video]   Script saved: {script_path}")
+        logger.info("Script saved: %s", script_path)
 
         topic_name = topics[i]["name"]
         topic_images = _get_topic_images(topic_name, slide_images, topic_slide_map)
 
-        print(f"[Video] Topic {i + 1}/{total}: {topic_name} — TTS ({len(topic_images)} slides)...")
+        logger.info("Topic %d/%d: %s - TTS (%d slides)", i + 1, total, topic_name, len(topic_images))
         try:
             segments = parse_script(scripts[i], num_slides=len(topic_images))
             audio_dir = os.path.join(output_dir, f"_audio_{prefix}")
@@ -593,8 +589,7 @@ def _build_kokoro_videos(
         except Exception as exc:
             error_msg = f"'{topic_name}' TTS failed — {exc}"
             errors.append(error_msg)
-            logger.error("TTS failed for '%s'", topic_name, exc_info=True)
-            print(f"[Video] ERROR: {error_msg}")
+            logger.exception("TTS failed for '%s'", topic_name)
             tts_results.append(None)
 
     # Check before starting expensive composition phase
@@ -611,9 +606,9 @@ def _build_kokoro_videos(
     )
     # Distribute CPU threads evenly across workers to prevent over-subscription
     threads_per_worker = max(1, cpu_count // max_workers)
-    print(
-        f"[Video] Phase 2: Composing {len(compose_jobs)} videos "
-        f"({max_workers} workers, {threads_per_worker} threads each)..."
+    logger.info(
+        "Phase 2: Composing %d videos (%d workers, %d threads each)",
+        len(compose_jobs), max_workers, threads_per_worker,
     )
 
     def _compose_one(idx: int, segments, audio_paths, topic_images, video_path):
@@ -648,20 +643,15 @@ def _build_kokoro_videos(
                 _, path = future.result()
                 video_paths[idx] = path
                 logger.info("Video saved: %s", path)
-                print(f"[Video]   {topic_name}: saved to {path}")
             except Exception as exc:
                 error_msg = f"'{topic_name}' compose failed — {exc}"
                 errors.append(error_msg)
-                logger.error("Video composition failed for '%s'", topic_name, exc_info=True)
-                print(f"[Video] ERROR: {error_msg}")
+                logger.exception("Video composition failed for '%s'", topic_name)
 
     succeeded = sum(1 for p in video_paths if p is not None)
     logger.info("Video generation complete: %d/%d succeeded", succeeded, total)
     if errors:
-        logger.warning("Video errors summary: %s", "; ".join(errors))
-        print(f"[Video] WARNING: {len(errors)}/{total} videos failed:")
-        for err in errors:
-            print(f"[Video]   - {err}")
+        logger.warning("%d/%d videos failed: %s", len(errors), total, "; ".join(errors))
 
     return video_paths
 

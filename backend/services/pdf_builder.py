@@ -149,8 +149,7 @@ def _strip_latex(text: str) -> str:
     """Strip all LaTeX notation from a text string (fallback converter)."""
     text = _INLINE_LATEX_RE.sub(lambda m: _strip_latex_expr(m.group(1)), text)
     text = _DISPLAY_LATEX_RE.sub(lambda m: _strip_latex_expr(m.group(1)), text)
-    text = re.sub(r"\$\$(.+?)\$\$", lambda m: _strip_latex_expr(m.group(1)), text)
-    return text
+    return re.sub(r"\$\$(.+?)\$\$", lambda m: _strip_latex_expr(m.group(1)), text)
 
 
 def _render_latex_to_png(
@@ -473,7 +472,7 @@ def _render_markdown_line(pdf: FPDF, line: str):
         return
 
     # --- Bullet points — teal dash with rich text ---
-    if stripped.startswith("- ") or stripped.startswith("* "):
+    if stripped.startswith(("- ", "* ")):
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(*_CHARCOAL)
         text = stripped[2:]
@@ -633,7 +632,7 @@ def build_pdf(
                  new_x="LMARGIN", new_y="NEXT")
 
     # --- Chapters ---
-    for i, (topic, module_md) in enumerate(zip(topics, modules_md)):
+    for i, (topic, module_md) in enumerate(zip(topics, modules_md, strict=False)):
         pdf.add_page()
 
         # Teal left accent bar alongside chapter title

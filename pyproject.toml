@@ -91,18 +91,37 @@ extend-select = [
     "PLR",    # pylint refactor — function size/complexity limits
     "RUF",    # ruff-specific — cleanup rules
 ]
+ignore = [
+    # Ambiguous-unicode: en/em dashes and × in prose docstrings/comments are intentional
+    "RUF002",
+    "RUF003",
+]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
-# Tests: allow print, magic values, too-many-args (test fixtures are verbose by nature)
-"**/tests/**/*.py" = ["T201", "PLR2004", "PLR0913", "PLR0915"]
-# Eval harness: allow print (CLI output) and magic values
-"backend/evals/**/*.py" = ["T201", "PLR2004"]
-# Scripts: allow print
+# Tests: allow print, magic values, verbose fixtures, nested-with, throwaway unpacks
+"**/tests/**/*.py" = ["T201", "PLR2004", "PLR0913", "PLR0915", "SIM117", "RUF059", "ERA001"]
+# Eval harness: CLI-style scripts — allow print, magic values, large procedural bodies
+"backend/evals/**/*.py" = [
+    "T201", "PLR2004", "C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915", "SIM110", "UP042",
+]
+# Scripts / CLI entrypoints: allow print + large arg-parsing/orchestration bodies
 "scripts/**/*.py" = ["T201"]
-"regenerate_from_raw.py" = ["T201"]
+"regenerate_from_raw.py" = ["T201", "PLR2004"]
+"backend/run_pipeline.py" = ["T201", "C901", "PLR0915"]
+# GPU worker service: long procedural job runner — refactor tracked separately
+"gpu_service/**/*.py" = ["C901", "PLR0912", "PLR0915"]
+# Document/media builders: large procedural functions emitting PPTX/PDF/video.
+# Structural cleanup is tracked as tech debt (see PROGRESS.md); suppressed here
+# so the size/complexity rules still guard the rest of the codebase.
+"backend/services/ppt_builder.py" = ["PLR0913", "PLR0915", "PLR2004", "B008"]
+"backend/services/pdf_builder.py" = ["C901", "PLR0911", "PLR0915", "PLR2004"]
+"backend/services/video_builder.py" = ["C901", "PLR0912", "PLR0913", "PLR0915"]
+"backend/services/script_parser.py" = ["PLR0915"]
+"backend/pipeline/agent_ingest.py" = ["PLR0915"]
+"backend/pipeline/agent_research.py" = ["C901", "PLR0913", "PLR0915"]
 
 [tool.ruff.lint.pylint]
 max-args = 5

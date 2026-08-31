@@ -502,7 +502,6 @@ class TestSanitize:
         """If somehow None slips through, it should not crash the whole pipeline."""
         # _sanitize expects str — but we test that the pipeline won't crash
         # by ensuring build_pdf handles missing descriptions
-        pass
 
 
 # ---------------------------------------------------------------------------

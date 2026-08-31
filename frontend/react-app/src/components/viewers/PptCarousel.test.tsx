@@ -24,7 +24,7 @@ describe("PptCarousel", () => {
     mockFetchSlides.mockResolvedValue({ slides: [], total: 0 });
     renderWithProviders(<PptCarousel jobId="abc12345" />);
     await waitFor(() => {
-      expect(screen.getByText("No slides available")).toBeInTheDocument();
+      expect(screen.getByText("Slide preview is not available for this job.")).toBeInTheDocument();
     });
   });
 
@@ -200,7 +200,7 @@ describe("PptCarousel", () => {
     renderWithProviders(<PptCarousel jobId="abc12345" />);
 
     await waitFor(() => {
-      expect(screen.getByText("No slides available")).toBeInTheDocument();
+      expect(screen.getByText("Slide preview is not available for this job.")).toBeInTheDocument();
     });
   });
 });

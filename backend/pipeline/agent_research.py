@@ -19,7 +19,7 @@ def _research_topic(i, topic, total, store, llm, curriculum_scope):
     desc = topic.get("description", "")
     techniques = topic.get("key_techniques", [])
     domain_ctx = topic.get("domain_context", name)
-    print(f"[Research] Topic {i + 1}/{total}: {name}")
+    logger.info("Topic %d/%d: %s", i + 1, total, name)
 
     # 1. Web search — two parallel Tavily queries per topic:
     #   - "skills/applications" query: surfaces job market relevance
@@ -37,17 +37,15 @@ def _research_topic(i, topic, total, store, llm, curriculum_scope):
             job_results = job_future.result(timeout=30)
         except PipelineCancelledError:
             raise
-        except Exception as exc:
+        except Exception:
             logger.exception("Job search failed for '%s'", name)
-            print(f"[Research] WARNING: job search failed for '{name}': {exc}")
             job_results = []
         try:
             trend_results = trend_future.result(timeout=30)
         except PipelineCancelledError:
             raise
-        except Exception as exc:
+        except Exception:
             logger.exception("Trend search failed for '%s'", name)
-            print(f"[Research] WARNING: trend search failed for '{name}': {exc}")
             trend_results = []
 
     job_text = "\n".join(
@@ -83,8 +81,7 @@ def _research_topic(i, topic, total, store, llm, curriculum_scope):
     except json.JSONDecodeError:
         analysis = {"topic": name, "gaps": [], "enrichments": []}
 
-    gap_count = len(analysis.get("gaps", []))
-    print(f"[Research]   {name}: found {gap_count} gaps")
+    logger.info("%s: found %d gaps", name, len(analysis.get("gaps", [])))
 
     # 4. Store research in ChromaDB — deduplicate using MD5 hash prefix.
     #    12-char hex prefix gives 48 bits of entropy (~2.8 × 10^14 possible IDs),
@@ -138,7 +135,7 @@ def research_node(state: PipelineState) -> dict:
         each containing ``topic``, ``gaps``, ``enrichments``, and
         ``severity``) and ``current_stage`` set to ``"researched"``.
     """
-    print("[Research] Starting...")
+    logger.info("Starting research")
 
     store = ChromaStore(settings.chroma_persist_dir)
     llm = get_llm("mini", temperature=settings.temp_analysis)
@@ -160,13 +157,12 @@ def research_node(state: PipelineState) -> dict:
                 gap_summary[idx] = future.result()
             except PipelineCancelledError:
                 raise
-            except Exception as exc:
+            except Exception:
                 topic_name = topics[idx]["name"]
                 logger.exception("Research failed for topic '%s'", topic_name)
-                print(f"[Research] ERROR: topic '{topic_name}' failed — {exc}")
                 gap_summary[idx] = {"topic": topic_name, "gaps": [], "enrichments": [], "severity": "minor"}
 
-    print(f"[Research] Completed — {len(gap_summary)} topics analyzed")
+    logger.info("Completed - %d topics analyzed", len(gap_summary))
     return {
         "gap_summary": gap_summary,
         "current_stage": "researched",

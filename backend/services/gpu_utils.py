@@ -67,7 +67,7 @@ def get_ffmpeg_encoder() -> str:
     Returns:
         Encoder name string suitable for ``-c:v`` or moviepy's ``codec`` param.
     """
-    global _cached_encoder  # noqa: PLW0603
+    global _cached_encoder
     if _cached_encoder is not None:
         return _cached_encoder
 

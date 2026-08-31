@@ -7,6 +7,20 @@
 **Overall project phase:** v0.5.5+ — Ruff refactor: agent_generate.py 51 violations → 0 (context classes, extracted helpers, logger migration); file_parser.py 3 violations → 0; ruff now clean across all modified files; 1158 pytest all passing
 **Current version:** v0.5.5
 
+## CI green-up (2026-08-31)
+> The `CI` workflow had been failing on every run since 2026-03: `lint`/`test` jobs ran `uv sync --frozen` without `--extra dev`, so `ruff`/`pytest` were never installed. Fixed that, then cleared the resulting 178 real ruff violations (pragmatic approach) and 3 stale frontend tests.
+
+### Changes
+- `.github/workflows/ci.yml` — `uv sync --frozen --extra dev` in `lint` + `test` jobs.
+- `pyproject.toml` — `[tool.ruff.lint] ignore = ["RUF002","RUF003"]` (prose dashes); expanded `per-file-ignores`:
+  - tests: + `SIM117`, `RUF059`, `ERA001`
+  - `backend/evals/**`: + `C901`, `PLR09xx`, `SIM110`, `UP042` (CLI-style harness)
+  - `backend/run_pipeline.py`, `gpu_service/**`: structural rules (CLI / long job runner)
+  - **document/media builders** (`ppt_builder`, `pdf_builder`, `video_builder`, `script_parser`) + `agent_ingest`/`agent_research`: `PLR0913`/`PLR0915`/`C901`/`PLR0912` suppressed — **tracked tech debt: these procedural functions should be decomposed**.
+- Real code fixes (not suppressed): 37 `print()` → lazy `logger.*` in `agent_ingest.py`, `agent_research.py`, `video_builder.py`, `tts_engine.py`; `.error(exc_info=True)` → `.exception()` (`web_search`, `video_builder`); `contextlib.suppress` for try/except/pass (`chromadb_store`, `video_builder`); `zip(strict=False)`, tuple `startswith`, f-string over `%`, ternary, misc — plus ~11 safe `ruff --fix` autofixes.
+- Frontend: fixed 3 stale assertions — `ResultsPage.test.tsx` (expected removed "Video Scripts" download), `PptCarousel.test.tsx` ×2 (expected old "No slides available" copy).
+- Verified locally: `ruff check .` clean · `pytest` 1159 passed (randomized) · `vitest` 142 passed · `npm run build` ok.
+
 ## Secrets → Doppler (2026-08-31)
 > Migrated deployment secrets off GCP Secret Manager onto Doppler. Deploy-time env injection (option 1): `doppler run` supplies secret values as env vars; `deploy.sh` writes them into Cloud Run via a mode 600 `--env-vars-file`. No application code changed — the app already reads plain env vars via `backend/config.py`.
 

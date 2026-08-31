@@ -1,3 +1,4 @@
+import contextlib
 import logging
 
 import chromadb
@@ -83,7 +84,5 @@ class ChromaStore:
         Silently ignores collections that do not exist.
         """
         for name in ["curriculum", "research"]:
-            try:
+            with contextlib.suppress(ValueError, NotFoundError):
                 self.client.delete_collection(name)
-            except (ValueError, NotFoundError):
-                pass

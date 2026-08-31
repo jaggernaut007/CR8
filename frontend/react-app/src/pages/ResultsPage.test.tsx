@@ -92,11 +92,12 @@ describe("ResultsPage", () => {
       expect(screen.getByText("lecture.pdf")).toBeInTheDocument();
     });
 
-    // Should show all 4 download types for pdf+ppt+video
+    // Should show the 3 download types for pdf+ppt+video
+    // (script downloads were intentionally removed in d685634)
     expect(screen.getByText("Learning Guide")).toBeInTheDocument();
     expect(screen.getByText("Slide Deck")).toBeInTheDocument();
-    expect(screen.getByText("Video Scripts")).toBeInTheDocument();
     expect(screen.getByText("Videos")).toBeInTheDocument();
+    expect(screen.queryByText("Video Scripts")).not.toBeInTheDocument();
   });
 
   it("shows only PDF download for pdf-only job", async () => {

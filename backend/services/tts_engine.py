@@ -117,8 +117,7 @@ class TTSEngine:
             out_path = os.path.join(output_dir, filename)
             self.synthesize(seg["text"], out_path)
             paths.append(out_path)
-            logger.debug("TTS segment %d synthesized → %s", seg["slide_num"], filename)
-            print(f"[Video]   TTS segment slide {seg['slide_num']} → {filename}")
+            logger.debug("TTS segment %d synthesized -> %s", seg["slide_num"], filename)
         return paths
 
 
@@ -128,9 +127,7 @@ def _validate_path(path: str) -> None:
     cwd = os.path.realpath(os.getcwd())
     tmp = os.path.realpath(tempfile.gettempdir())
     if not (
-        resolved.startswith(cwd + os.sep)
-        or resolved.startswith(tmp + os.sep)
-        or resolved == cwd
-        or resolved == tmp
+        resolved.startswith((cwd + os.sep, tmp + os.sep))
+        or resolved in (cwd, tmp)
     ):
         raise ValueError(f"Path traversal detected: {path}")

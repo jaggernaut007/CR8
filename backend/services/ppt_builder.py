@@ -257,10 +257,7 @@ def _add_multiline_textbox(slide, left, top, width, height, lines,
     tf.auto_size = None
 
     for i, line_text in enumerate(lines):
-        if i == 0:
-            p = tf.paragraphs[0]
-        else:
-            p = tf.add_paragraph()
+        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
         p.text = _strip_latex(str(line_text))
         p.font.size = size
         p.font.name = font_family

@@ -19,7 +19,7 @@ def main():
         sys.exit(1)
 
     raw_path = sys.argv[1]
-    with open(raw_path, "r", encoding="utf-8") as f:
+    with open(raw_path, encoding="utf-8") as f:
         raw = json.load(f)
 
     # Separate _slide_data from topic entries

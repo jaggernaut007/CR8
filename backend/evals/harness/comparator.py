@@ -82,9 +82,7 @@ def compare(results_a: list[EvalResult], results_b: list[EvalResult]) -> Compari
             pass
 
     # Winner
-    if p_value is not None and p_value < 0.05:
-        winner = "b" if agg_b > agg_a else "a"
-    elif abs(agg_b - agg_a) > 0.3:
+    if (p_value is not None and p_value < 0.05) or abs(agg_b - agg_a) > 0.3:
         winner = "b" if agg_b > agg_a else "a"
     else:
         winner = "tie"

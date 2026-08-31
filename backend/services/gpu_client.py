@@ -138,7 +138,7 @@ class VideoServiceClient:
         video_job_id = data.get("video_job_id")
         if not video_job_id:
             raise RuntimeError(
-                "GPU service response missing 'video_job_id': %r" % data
+                f"GPU service response missing 'video_job_id': {data!r}"
             )
         logger.info("Video job submitted to %s: %s", self.base_url, video_job_id)
         return video_job_id

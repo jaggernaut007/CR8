@@ -88,13 +88,11 @@ class TestEncoderAvailable:
         """Encoder probe should fail gracefully on timeout."""
         with patch("backend.services.gpu_utils.tempfile.mkstemp") as mock_mkstemp:
             mock_mkstemp.return_value = (0, "/tmp/probe.mp4")
-            with patch("backend.services.gpu_utils.os.close"):
-                with patch(
-                    "backend.services.gpu_utils.subprocess.run",
-                    side_effect=subprocess.TimeoutExpired(cmd="ffmpeg", timeout=15),
-                ):
-                    with patch("backend.services.gpu_utils.os.path.exists", return_value=False):
-                        assert _encoder_available("h264_nvenc") is False
+            with patch("backend.services.gpu_utils.os.close"), patch(
+                "backend.services.gpu_utils.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(cmd="ffmpeg", timeout=15),
+            ), patch("backend.services.gpu_utils.os.path.exists", return_value=False):
+                assert _encoder_available("h264_nvenc") is False
 
     def test_writes_to_real_file_not_null(self):
         """The probe command must use a temp file path, not '-f null -'."""
