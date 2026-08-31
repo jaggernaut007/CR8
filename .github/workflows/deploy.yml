@@ -89,7 +89,8 @@ jobs:
             --project="${{ env.PROJECT_ID }}" \
             --region="${{ env.GPU_REGION }}" \
             --config="$RUNNER_TEMP/cloudbuild-gpu.yaml" \
-            --substitutions=_IMAGE="${{ env.GPU_REGISTRY }}",_TAG="${{ github.sha }}"
+            --substitutions=_IMAGE="${{ env.GPU_REGISTRY }}",_TAG="${{ github.sha }}" \
+            --suppress-logs   # SA cannot stream the regional default logs bucket; build result still gates this step
 
       - name: Deploy cr8-gpu to Cloud Run
         run: |
@@ -166,7 +167,8 @@ jobs:
             --project="${{ env.PROJECT_ID }}" \
             --region="${{ env.REGION }}" \
             --config="$RUNNER_TEMP/cloudbuild-cpu-video.yaml" \
-            --substitutions=_IMAGE="${{ env.CPU_VIDEO_REGISTRY }}",_TAG="${{ github.sha }}"
+            --substitutions=_IMAGE="${{ env.CPU_VIDEO_REGISTRY }}",_TAG="${{ github.sha }}" \
+            --suppress-logs
 
       - name: Deploy cr8-cpu-video to Cloud Run
         run: |
@@ -240,7 +242,8 @@ jobs:
             --project=${{ env.PROJECT_ID }} \
             --region=${{ env.REGION }} \
             --tag="${{ env.CPU_REGISTRY }}:${{ github.sha }}" \
-            --tag="${{ env.CPU_REGISTRY }}:latest"
+            --tag="${{ env.CPU_REGISTRY }}:latest" \
+            --suppress-logs
 
       - name: Deploy to Cloud Run
         run: |
