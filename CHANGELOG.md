@@ -9,6 +9,17 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added — Forgot password / password reset
+- `POST /api/auth/forgot-password` — starts a password reset by emailing a one-time link; always returns `202` to prevent account enumeration
+- `POST /api/auth/reset-password` — resets a password using a one-time token (`{token, password}`); token is single-use, expires after `PASSWORD_RESET_TOKEN_TTL_MINUTES`
+- `backend/services/email_service.py` — Resend API delivery (sole provider) with a dev-mode log fallback when unconfigured
+- `backend/services/auth_service.py` — `generate_password_reset_token()` + `hash_password_reset_token()` (SHA-256, only the hash is stored)
+- `backend/db/schema.sql` — new `password_reset_tokens` table + index
+- `backend/services/db_client.py` — reset-token CRUD (`upsert_password_reset_token`, `get_password_reset_token_by_hash`, `delete_password_reset_tokens`) + `update_user_password`
+- `frontend/middleware.py` — dedicated 5-per-15-min reset-request rate limiter + new public paths
+- React SPA — `ForgotPasswordPage`, `ResetPasswordPage`, routes, and a "Forgot password?" link on `LoginPage`
+- Config: `PASSWORD_RESET_BASE_URL`, `PASSWORD_RESET_TOKEN_TTL_MINUTES`, `RESEND_API_KEY` / `RESEND_FROM_EMAIL`
+
 ### Changed — Secrets management (Doppler)
 - Secrets moved from **GCP Secret Manager** to **Doppler**, injected as environment variables at deploy time
 - `deploy.sh` — replaced `--set-secrets` (CPU + GPU services) with a generated mode `600` `--env-vars-file`; reads secret values from the environment (run via `doppler run -- ./deploy.sh <PROJECT_ID>`); aborts early if a required secret is missing

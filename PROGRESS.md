@@ -3,9 +3,25 @@
      Updated at the end of every session using the session-handoff skill. -->
 
 ## Current Status
-**Last updated:** 2026-08-31
-**Overall project phase:** v0.5.5+ — Ruff refactor: agent_generate.py 51 violations → 0 (context classes, extracted helpers, logger migration); file_parser.py 3 violations → 0; ruff now clean across all modified files; 1158 pytest all passing
-**Current version:** v0.5.5
+**Last updated:** 2026-09-06
+**Overall project phase:** v0.5.6+ — Forgot-password / password-reset flow added (Resend email + one-time tokens); 1178 pytest + 149 Vitest all passing
+**Current version:** v0.5.6
+
+## Forgot Password / Password Reset (2026-09-06)
+> Added a complete forgot-password flow: `POST /api/auth/forgot-password` (emails a one-time reset link, always returns 202 to prevent account enumeration) and `POST /api/auth/reset-password` (validates a single-use token and sets the new password).
+
+### Changes
+- `backend/config.py` — `password_reset_base_url`, `password_reset_token_ttl_minutes`, `resend_api_key`, `resend_from_email`.
+- `backend/services/auth_service.py` — `generate_password_reset_token()` (256-bit `secrets.token_urlsafe`) + `hash_password_reset_token()` (SHA-256; only the hash is stored).
+- `backend/services/email_service.py` (new) — Resend REST API delivery (sole provider) via `requests`, with a dev-mode log fallback when unconfigured.
+- `backend/services/db_client.py` — `upsert_password_reset_token`, `get_password_reset_token_by_hash`, `delete_password_reset_tokens`, `update_user_password`.
+- `backend/db/schema.sql` — `password_reset_tokens` table (one active token per user, `ON DELETE CASCADE`) + index.
+- `frontend/middleware.py` — dedicated reset-request rate limiter (`check_reset_rate_limit`/`record_reset_attempt`, 5-per-15-min) + `/api/auth/forgot-password` & `/api/auth/reset-password` added to `_PUBLIC_PATHS`.
+- `frontend/auth_routes.py` — two new endpoints (202 anti-enumeration, single-use token, expiry, min 6-char password).
+- React SPA — `ForgotPasswordPage.tsx` + `ResetPasswordPage.tsx` + routes in `App.tsx` + "Forgot password?" link on `LoginPage`; `api/auth.ts` gains `requestPasswordReset`/`resetPassword`.
+- Tests — +4 `backend/tests/test_auth_service.py`, +13 `frontend/tests/test_auth_routes.py`, +3 `backend/tests/test_email_service.py`, +7 Vitest page tests.
+- Docs — `mk-docs/api/frontend.md`, `mk-docs/security.md`, `frontend/CLAUDE.md`, `docs/research/resend-api.md`, `.env.example`.
+- Deployment/Doppler — `deploy.sh` (required-secret guard + `--setup` Doppler instructions + CPU `--env-vars-file`) and `.github/workflows/deploy.yml` (`KEYS` list) now include `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `PASSWORD_RESET_BASE_URL`; `mk-docs/deployment/gcp-cloud-run.md` updated.
 
 ## CI green-up (2026-08-31)
 > The `CI` workflow had been failing on every run since 2026-03: `lint`/`test` jobs ran `uv sync --frozen` without `--extra dev`, so `ruff`/`pytest` were never installed. Fixed that, then cleared the resulting 178 real ruff violations (pragmatic approach) and 3 stale frontend tests.
@@ -467,5 +483,5 @@ CPU service (europe-west2, 2 vCPU, 4 GiB)
 ## Environment Notes
 - Dev server: `make dev` → http://localhost:8080
 - Docs preview: `make docs-serve` → http://localhost:8000
-- Tests: `make test` → 1158 pytest + 124 Vitest + 17 Playwright E2E = 1299 total
+- Tests: `make test` → 1178 pytest + 149 Vitest + 17 Playwright E2E = 1344 total
 - Requires: `.env` file with OPENAI_API_KEY, TAVILY_API_KEY (copy from `.env.example`)

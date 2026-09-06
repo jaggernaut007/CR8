@@ -22,6 +22,10 @@ interface RegisterResponse {
   email: string;
 }
 
+interface MessageResponse {
+  message: string;
+}
+
 export async function login(email: string, password: string): Promise<User> {
   const data = await apiFetch<LoginResponse>("/api/auth/login", {
     method: "POST",
@@ -52,6 +56,23 @@ export async function logout(): Promise<void> {
   } finally {
     clearToken();
   }
+}
+
+export async function requestPasswordReset(email: string): Promise<MessageResponse> {
+  return apiFetch<MessageResponse>("/api/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resetPassword(
+  token: string,
+  password: string,
+): Promise<MessageResponse> {
+  return apiFetch<MessageResponse>("/api/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, password }),
+  });
 }
 
 export async function fetchCurrentUser(): Promise<User> {

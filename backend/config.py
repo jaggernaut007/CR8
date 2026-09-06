@@ -60,7 +60,8 @@ class Settings(BaseSettings):
     # Kokoro TTS (local video generation — no API key needed)
     kokoro_voice: str = "af_heart"
     kokoro_lang: str = "a"
-    video_fps: int = 2                     # 2 fps for static slides — small file size, smooth playback
+    # 2 fps for static slides — small file size, smooth playback
+    video_fps: int = 2
 
     # Slide export resolution
     slide_export_dpi: int = 144            # 144 = exactly 1920x1080 for 13.333"x7.5" slides
@@ -96,6 +97,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_expiry_minutes: int = 480  # 8 hours
     jwt_refresh_expiry_days: int = 7
+
+    # Password reset (forgot password) + outbound email (Resend)
+    password_reset_base_url: str = "http://localhost:8080"  # origin for reset links
+    password_reset_token_ttl_minutes: int = 60  # reset link lifetime
+    resend_api_key: str = ""         # API key with the "re_" prefix
+    resend_from_email: str = ""      # e.g. "CR8 <noreply@yourdomain.com>"
 
     # Upload limits
     max_upload_size_mb: int = 50  # max file upload size in megabytes

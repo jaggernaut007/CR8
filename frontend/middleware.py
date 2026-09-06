@@ -28,6 +28,7 @@ MAX_UPLOAD_BYTES = settings.max_upload_size_mb * 1024 * 1024
 _PUBLIC_PATHS = frozenset({
     "/login", "/api/auth/login", "/api/auth/register",
     "/api/auth/refresh", "/api/auth/logout", "/health",
+    "/api/auth/forgot-password", "/api/auth/reset-password",
 })
 
 # ---------------------------------------------------------------------------
@@ -56,6 +57,32 @@ def record_failed_attempt(ip: str) -> None:
         attempts = [t for t in _failed_attempts.get(ip, []) if now - t < LOCKOUT_WINDOW]
         attempts.append(now)
         _failed_attempts[ip] = attempts
+
+
+# ---------------------------------------------------------------------------
+# Password-reset request limiter (forgot/reset password endpoints)
+# ---------------------------------------------------------------------------
+
+_reset_attempts: dict[str, list[float]] = {}
+_reset_attempts_lock = threading.Lock()
+
+
+def check_reset_rate_limit(ip: str) -> bool:
+    """Return True if this IP is still allowed to request password resets."""
+    now = time.time()
+    with _reset_attempts_lock:
+        attempts = [t for t in _reset_attempts.get(ip, []) if now - t < LOCKOUT_WINDOW]
+        _reset_attempts[ip] = attempts
+        return len(attempts) < MAX_ATTEMPTS
+
+
+def record_reset_attempt(ip: str) -> None:
+    """Record a password-reset request for rate-limiting."""
+    now = time.time()
+    with _reset_attempts_lock:
+        attempts = [t for t in _reset_attempts.get(ip, []) if now - t < LOCKOUT_WINDOW]
+        attempts.append(now)
+        _reset_attempts[ip] = attempts
 
 
 # ---------------------------------------------------------------------------

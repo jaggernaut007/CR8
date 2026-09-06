@@ -91,16 +91,21 @@ doppler projects create cr8
 doppler setup --project cr8 --config prd
 
 # Required
-doppler secrets set OPENAI_API_KEY='sk-your-openai-key'
-doppler secrets set TAVILY_API_KEY='tvly-your-tavily-key'
-doppler secrets set AUTH_PASSWORD='your-web-ui-password'
-doppler secrets set DATABASE_URL='postgresql://user:pass@host/db?sslmode=require'
-doppler secrets set JWT_SECRET="$(openssl rand -hex 32)"
+doppler secrets set OPENAI_API_KEY='sk-your-openai-key' --project cr8 --config prd
+doppler secrets set TAVILY_API_KEY='tvly-your-tavily-key' --project cr8 --config prd
+doppler secrets set AUTH_PASSWORD='your-web-ui-password' --project cr8 --config prd
+doppler secrets set DATABASE_URL='postgresql://user:pass@host/db?sslmode=require' --project cr8 --config prd
+doppler secrets set JWT_SECRET="$(openssl rand -hex 32)" --project cr8 --config prd
+
+# Forgot password / email (Resend — required for password-reset emails)
+doppler secrets set RESEND_API_KEY='re_your-key' --project cr8 --config prd
+doppler secrets set RESEND_FROM_EMAIL='CR8 <noreply@yourdomain.com>' --project cr8 --config prd
+doppler secrets set PASSWORD_RESET_BASE_URL='https://cr8-pipeline-1000325314523.europe-west2.run.app' --project cr8 --config prd
 
 # Optional
-doppler secrets set HF_TOKEN='hf_your-token'          # GPU model downloads
-doppler secrets set HEYGEN_API_KEY='your-heygen-key'  # HeyGen video
-doppler secrets set LANGCHAIN_API_KEY='ls_your-key'   # LangSmith tracing
+doppler secrets set HF_TOKEN='hf_your-token' --project cr8 --config prd
+doppler secrets set HEYGEN_API_KEY='your-heygen-key' --project cr8 --config prd
+doppler secrets set LANGCHAIN_API_KEY='ls_your-key' --project cr8 --config prd
 ```
 
 To update a secret later, run `doppler secrets set KEY='new-value'` and redeploy.
@@ -278,6 +283,9 @@ mode `600` `--env-vars-file` (never on the gcloud command line):
 | `AUTH_PASSWORD` | Yes | Web UI login password |
 | `DATABASE_URL` | Yes | Neon Postgres connection string (auth/jobs/quiz) |
 | `JWT_SECRET` | Yes | 32+ byte hex string for JWT token signing |
+| `RESEND_API_KEY` | Yes | Resend API key for password-reset emails |
+| `RESEND_FROM_EMAIL` | Yes | Verified "from" address for Resend (e.g. `CR8 <noreply@yourdomain.com>`) |
+| `PASSWORD_RESET_BASE_URL` | Yes | Public frontend URL used in password-reset links |
 | `HF_TOKEN` | No | HuggingFace token (GPU model downloads) |
 | `HEYGEN_API_KEY` | No | HeyGen video generation key |
 | `LANGCHAIN_API_KEY` | No | LangSmith tracing key |

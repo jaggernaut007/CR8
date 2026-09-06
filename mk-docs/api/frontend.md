@@ -39,6 +39,8 @@ Route logic was extracted from `app.py` into focused sub-modules during the Wave
 | `/api/auth/refresh` | POST | Yes | Issue new access token from `cr8_refresh` cookie |
 | `/api/auth/me` | GET | Yes | Return `{user_id, email, role}` for the authenticated caller |
 | `/api/auth/logout` | POST | No | Invalidate session and clear cookies; returns 204 |
+| `/api/auth/forgot-password` | POST | No | Email a one-time reset link for the given email; always returns 202 to avoid account enumeration |
+| `/api/auth/reset-password` | POST | No | Reset a password using a one-time token; requires `{token, password}` |
 
 ### Job Routes (`/api`)
 
@@ -174,9 +176,43 @@ Set-Cookie: cr8_session=<token>; HttpOnly
 
 The `cr8_session` cookie is accepted as an alternative to JWT Bearer by `get_current_user()`. This path exists for the Jinja2 UI.
 
+### Password Reset (forgot password)
+
+```
+POST /api/auth/forgot-password
+Content-Type: application/json
+
+Body: {"email": "user@example.com"}
+
+Response: 202 {"message": "If that email exists, a reset link has been sent."}
+```
+
+The endpoint always returns the same `202` response whether or not the email
+exists, preventing account enumeration. When the account exists, a
+cryptographically random one-time token is generated; only its SHA-256 hash is
+stored in `password_reset_tokens` (with a `PASSWORD_RESET_TOKEN_TTL_MINUTES`
+expiry, default 60). The reset link is delivered via **Resend** when
+`RESEND_API_KEY` is set, or logged at INFO otherwise.
+
+```
+POST /api/auth/reset-password
+Content-Type: application/json
+
+Body: {"token": "<token-from-link>", "password": "new-secret"}
+
+Response: 200 {"message": "Password has been reset. You can now sign in."}
+```
+
+The token is single-use: on success (or expiry) the stored token is deleted.
+Invalid, expired, or already-used tokens return `400`.
+
 ### Rate Limiting
 
 Login and registration failures are rate-limited per IP: 5 failures within 15 minutes triggers HTTP 429. The counter resets automatically after 15 minutes. Rate limiting applies to both `POST /api/auth/login` and `POST /api/auth/register`.
+
+The password-reset endpoints (`POST /api/auth/forgot-password` and
+`POST /api/auth/reset-password`) share a separate 5-requests-per-15-minutes
+limiter to prevent reset-email flooding and token brute-forcing.
 
 ### DB-Less Mode
 

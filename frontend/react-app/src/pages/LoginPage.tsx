@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, type FormEvent } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useAuth } from "@/context/AuthContext";
 
 export default function LoginPage() {
@@ -141,6 +141,17 @@ export default function LoginPage() {
                   : "Sign In"}
             </button>
           </form>
+
+          {!isRegister && (
+            <div className="mt-3 text-center text-sm">
+              <Link
+                to="/forgot-password"
+                className="text-accent-blue hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
+          )}
 
           <div className="mt-4 text-center text-sm text-text-secondary">
             {isRegister ? "Already have an account?" : "Need an account?"}{" "}

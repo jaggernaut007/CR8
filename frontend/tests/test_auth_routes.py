@@ -32,7 +32,12 @@ os.environ.setdefault("COOKIE_SECURE", "false")
 
 from backend.services import auth_service
 from frontend.app import app
-from frontend.middleware import _failed_attempts, _sessions, create_session
+from frontend.middleware import (
+    _failed_attempts,
+    _reset_attempts,
+    _sessions,
+    create_session,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -45,9 +50,11 @@ def clean_auth_state():
     """Clear rate-limit and session state before and after each test."""
     _sessions.clear()
     _failed_attempts.clear()
+    _reset_attempts.clear()
     yield
     _sessions.clear()
     _failed_attempts.clear()
+    _reset_attempts.clear()
 
 
 @pytest.fixture
@@ -88,9 +95,7 @@ def mock_db_pool(app=app):
 @pytest.fixture
 def valid_access_token(sample_user):
     """A real signed access token for sample_user."""
-    return auth_service.create_access_token(
-        sample_user["id"], sample_user["email"], "user"
-    )
+    return auth_service.create_access_token(sample_user["id"], sample_user["email"], "user")
 
 
 @pytest.fixture
@@ -105,11 +110,14 @@ def valid_refresh_token(sample_user):
 
 
 class TestRegister:
-
     def test_register_returns_201(self, client, mock_db_pool, sample_user):
         with (
-            patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get,
-            patch("frontend.auth_routes.db_client.create_user", new_callable=AsyncMock) as mock_create,
+            patch(
+                "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+            ) as mock_get,
+            patch(
+                "frontend.auth_routes.db_client.create_user", new_callable=AsyncMock
+            ) as mock_create,
         ):
             mock_get.return_value = None
             mock_create.return_value = sample_user
@@ -121,8 +129,12 @@ class TestRegister:
 
     def test_register_returns_user_id(self, client, mock_db_pool, sample_user):
         with (
-            patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get,
-            patch("frontend.auth_routes.db_client.create_user", new_callable=AsyncMock) as mock_create,
+            patch(
+                "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+            ) as mock_get,
+            patch(
+                "frontend.auth_routes.db_client.create_user", new_callable=AsyncMock
+            ) as mock_create,
         ):
             mock_get.return_value = None
             mock_create.return_value = sample_user
@@ -134,8 +146,12 @@ class TestRegister:
 
     def test_register_returns_access_token(self, client, mock_db_pool, sample_user):
         with (
-            patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get,
-            patch("frontend.auth_routes.db_client.create_user", new_callable=AsyncMock) as mock_create,
+            patch(
+                "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+            ) as mock_get,
+            patch(
+                "frontend.auth_routes.db_client.create_user", new_callable=AsyncMock
+            ) as mock_create,
         ):
             mock_get.return_value = None
             mock_create.return_value = sample_user
@@ -147,8 +163,12 @@ class TestRegister:
 
     def test_register_sets_refresh_cookie(self, client, mock_db_pool, sample_user):
         with (
-            patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get,
-            patch("frontend.auth_routes.db_client.create_user", new_callable=AsyncMock) as mock_create,
+            patch(
+                "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+            ) as mock_get,
+            patch(
+                "frontend.auth_routes.db_client.create_user", new_callable=AsyncMock
+            ) as mock_create,
         ):
             mock_get.return_value = None
             mock_create.return_value = sample_user
@@ -159,7 +179,9 @@ class TestRegister:
         assert "cr8_refresh" in resp.cookies
 
     def test_register_duplicate_email_returns_409(self, client, mock_db_pool, sample_user):
-        with patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = sample_user
             resp = client.post(
                 "/api/auth/register",
@@ -168,7 +190,9 @@ class TestRegister:
         assert resp.status_code == 409
 
     def test_register_duplicate_email_error_message(self, client, mock_db_pool, sample_user):
-        with patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = sample_user
             resp = client.post(
                 "/api/auth/register",
@@ -222,7 +246,9 @@ class TestRegister:
 
         with (
             patch("frontend.auth_routes.db_client.get_user_by_email", side_effect=capture_get),
-            patch("frontend.auth_routes.db_client.create_user", new_callable=AsyncMock) as mock_create,
+            patch(
+                "frontend.auth_routes.db_client.create_user", new_callable=AsyncMock
+            ) as mock_create,
         ):
             mock_create.return_value = sample_user
             client.post(
@@ -240,9 +266,13 @@ class TestRegister:
 class TestRegisterRateLimiting:
     """Verify that /register applies rate limiting and records failed attempts."""
 
-    def test_register_rate_limited_after_5_failures_returns_429(self, client, mock_db_pool, sample_user):
+    def test_register_rate_limited_after_5_failures_returns_429(
+        self, client, mock_db_pool, sample_user
+    ):
         """The 6th attempt from the same IP must receive 429 when the first 5 triggered failures."""
-        with patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+        ) as mock_get:
             # Duplicate email so each attempt increments the failed-attempt counter.
             mock_get.return_value = sample_user
             for _ in range(5):
@@ -256,9 +286,13 @@ class TestRegisterRateLimiting:
             )
         assert resp.status_code == 429
 
-    def test_register_rate_limit_error_message_mentions_15_minutes(self, client, mock_db_pool, sample_user):
+    def test_register_rate_limit_error_message_mentions_15_minutes(
+        self, client, mock_db_pool, sample_user
+    ):
         """The 429 response body must tell the user to wait 15 minutes."""
-        with patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = sample_user
             for _ in range(5):
                 client.post(
@@ -289,10 +323,14 @@ class TestRegisterRateLimiting:
             )
         mock_record.assert_called_once()
 
-    def test_register_duplicate_email_records_failed_attempt(self, client, mock_db_pool, sample_user):
+    def test_register_duplicate_email_records_failed_attempt(
+        self, client, mock_db_pool, sample_user
+    ):
         """A 409 duplicate-email response must call record_failed_attempt."""
         with (
-            patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get,
+            patch(
+                "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+            ) as mock_get,
             patch("frontend.auth_routes.record_failed_attempt") as mock_record,
         ):
             mock_get.return_value = sample_user
@@ -302,12 +340,18 @@ class TestRegisterRateLimiting:
             )
         mock_record.assert_called_once()
 
-    def test_register_check_rate_limit_called_on_each_request(self, client, mock_db_pool, sample_user):
+    def test_register_check_rate_limit_called_on_each_request(
+        self, client, mock_db_pool, sample_user
+    ):
         """check_rate_limit must be invoked on every register request."""
         with (
             patch("frontend.auth_routes.check_rate_limit", return_value=True) as mock_check,
-            patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get,
-            patch("frontend.auth_routes.db_client.create_user", new_callable=AsyncMock) as mock_create,
+            patch(
+                "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+            ) as mock_get,
+            patch(
+                "frontend.auth_routes.db_client.create_user", new_callable=AsyncMock
+            ) as mock_create,
         ):
             mock_get.return_value = None
             mock_create.return_value = sample_user
@@ -321,7 +365,9 @@ class TestRegisterRateLimiting:
         """When rate-limited, the register route must not touch the database."""
         with (
             patch("frontend.auth_routes.check_rate_limit", return_value=False),
-            patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get,
+            patch(
+                "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+            ) as mock_get,
         ):
             resp = client.post(
                 "/api/auth/register",
@@ -337,9 +383,10 @@ class TestRegisterRateLimiting:
 
 
 class TestLoginJWT:
-
     def test_jwt_login_returns_200(self, client, mock_db_pool, sample_user):
-        with patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = sample_user
             resp = client.post(
                 "/api/auth/login",
@@ -348,7 +395,9 @@ class TestLoginJWT:
         assert resp.status_code == 200
 
     def test_jwt_login_returns_access_token(self, client, mock_db_pool, sample_user):
-        with patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = sample_user
             resp = client.post(
                 "/api/auth/login",
@@ -357,7 +406,9 @@ class TestLoginJWT:
         assert "access_token" in resp.json()
 
     def test_jwt_login_sets_refresh_cookie(self, client, mock_db_pool, sample_user):
-        with patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = sample_user
             resp = client.post(
                 "/api/auth/login",
@@ -366,7 +417,9 @@ class TestLoginJWT:
         assert "cr8_refresh" in resp.cookies
 
     def test_jwt_login_wrong_password_returns_401(self, client, mock_db_pool, sample_user):
-        with patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = sample_user
             resp = client.post(
                 "/api/auth/login",
@@ -375,7 +428,9 @@ class TestLoginJWT:
         assert resp.status_code == 401
 
     def test_jwt_login_unknown_email_returns_401(self, client, mock_db_pool):
-        with patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = None
             resp = client.post(
                 "/api/auth/login",
@@ -393,7 +448,9 @@ class TestLoginJWT:
         assert resp.status_code == 503
 
     def test_jwt_login_rate_limited_after_5_failures(self, client, mock_db_pool):
-        with patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = None
             for _ in range(5):
                 client.post(
@@ -413,7 +470,6 @@ class TestLoginJWT:
 
 
 class TestLoginLegacy:
-
     def test_legacy_login_correct_password_returns_200(self, client):
         resp = client.post("/api/auth/login", json={"password": "CR8-AI"})
         assert resp.status_code == 200
@@ -442,16 +498,23 @@ class TestLoginLegacy:
 
 
 class TestRefresh:
-
-    def test_refresh_returns_200(self, authed_client, mock_db_pool, sample_user, valid_refresh_token):
-        with patch("frontend.auth_routes.db_client.get_user_by_id", new_callable=AsyncMock) as mock_get:
+    def test_refresh_returns_200(
+        self, authed_client, mock_db_pool, sample_user, valid_refresh_token
+    ):
+        with patch(
+            "frontend.auth_routes.db_client.get_user_by_id", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = sample_user
             authed_client.cookies.set("cr8_refresh", valid_refresh_token)
             resp = authed_client.post("/api/auth/refresh")
         assert resp.status_code == 200
 
-    def test_refresh_returns_new_access_token(self, authed_client, mock_db_pool, sample_user, valid_refresh_token):
-        with patch("frontend.auth_routes.db_client.get_user_by_id", new_callable=AsyncMock) as mock_get:
+    def test_refresh_returns_new_access_token(
+        self, authed_client, mock_db_pool, sample_user, valid_refresh_token
+    ):
+        with patch(
+            "frontend.auth_routes.db_client.get_user_by_id", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = sample_user
             authed_client.cookies.set("cr8_refresh", valid_refresh_token)
             resp = authed_client.post("/api/auth/refresh")
@@ -517,7 +580,9 @@ class TestRefresh:
             "iat": datetime.now(UTC),
             "exp": datetime.now(UTC) + timedelta(days=7),
         }
-        wrong_secret_token = pyjwt.encode(payload, "a-completely-different-secret-key-1234", algorithm="HS256")
+        wrong_secret_token = pyjwt.encode(
+            payload, "a-completely-different-secret-key-1234", algorithm="HS256"
+        )
         authed_client.cookies.set("cr8_refresh", wrong_secret_token)
         resp = authed_client.post("/api/auth/refresh")
         assert resp.status_code == 401
@@ -530,7 +595,6 @@ class TestRefresh:
 
 
 class TestMe:
-
     def test_me_with_valid_jwt_returns_200(self, client, valid_access_token):
         resp = client.get(
             "/api/auth/me",
@@ -595,7 +659,6 @@ class TestMe:
 
 
 class TestLogout:
-
     def test_logout_returns_204(self, authed_client):
         resp = authed_client.post("/api/auth/logout")
         assert resp.status_code == 204
@@ -625,7 +688,6 @@ class TestLogout:
 
 
 class TestGetCurrentUser:
-
     def test_bearer_token_returns_user_dict(self, client, sample_user, valid_access_token):
         resp = client.get(
             "/api/auth/me",
@@ -752,8 +814,12 @@ class TestRegisterBodyValidation:
     def test_extra_fields_in_body_are_ignored(self, client, mock_db_pool, sample_user):
         """Unknown fields in the body dict must not cause errors."""
         with (
-            patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get,
-            patch("frontend.auth_routes.db_client.create_user", new_callable=AsyncMock) as mock_create,
+            patch(
+                "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+            ) as mock_get,
+            patch(
+                "frontend.auth_routes.db_client.create_user", new_callable=AsyncMock
+            ) as mock_create,
         ):
             mock_get.return_value = None
             mock_create.return_value = sample_user
@@ -771,8 +837,12 @@ class TestRegisterBodyValidation:
     def test_password_exactly_6_chars_is_accepted(self, client, mock_db_pool, sample_user):
         """A password of exactly 6 characters is at the minimum — must be accepted."""
         with (
-            patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get,
-            patch("frontend.auth_routes.db_client.create_user", new_callable=AsyncMock) as mock_create,
+            patch(
+                "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+            ) as mock_get,
+            patch(
+                "frontend.auth_routes.db_client.create_user", new_callable=AsyncMock
+            ) as mock_create,
         ):
             mock_get.return_value = None
             mock_create.return_value = sample_user
@@ -811,7 +881,9 @@ class TestLoginBodyValidation:
 
     def test_extra_fields_in_login_body_are_ignored(self, client, mock_db_pool, sample_user):
         """Extra keys in the login dict must not cause errors."""
-        with patch("frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock) as mock_get:
+        with patch(
+            "frontend.auth_routes.db_client.get_user_by_email", new_callable=AsyncMock
+        ) as mock_get:
             mock_get.return_value = sample_user
             resp = client.post(
                 "/api/auth/login",
@@ -827,3 +899,207 @@ class TestLoginBodyValidation:
         """A null password in legacy mode must not authenticate."""
         resp = client.post("/api/auth/login", json={"password": None})
         assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# POST /api/auth/forgot-password
+# ---------------------------------------------------------------------------
+
+
+def _reset_record(expires_in_minutes: int = 30) -> dict:
+    """A fake password_reset_tokens row with a configurable expiry."""
+    from datetime import datetime, timedelta, UTC
+
+    return {
+        "id": str(uuid.uuid4()),
+        "user_id": str(uuid.uuid4()),
+        "token_hash": "hashed-token",
+        "expires_at": datetime.now(UTC) + timedelta(minutes=expires_in_minutes),
+        "created_at": datetime.now(UTC),
+    }
+
+
+class TestForgotPassword:
+    """POST /api/auth/forgot-password."""
+
+    def test_forgot_password_returns_202_for_existing_user(self, client, mock_db_pool, sample_user):
+        with (
+            patch(
+                "frontend.auth_routes.db_client.get_user_by_email",
+                new_callable=AsyncMock,
+            ) as mock_get,
+            patch(
+                "frontend.auth_routes.db_client.upsert_password_reset_token",
+                new_callable=AsyncMock,
+            ) as mock_upsert,
+            patch("frontend.auth_routes.email_service.send_password_reset_email") as mock_send,
+        ):
+            mock_get.return_value = sample_user
+            resp = client.post(
+                "/api/auth/forgot-password",
+                json={"email": sample_user["email"]},
+            )
+        assert resp.status_code == 202
+        assert "reset link" in resp.json()["message"]
+        mock_upsert.assert_awaited_once()
+        mock_send.assert_called_once()
+
+    def test_forgot_password_unknown_email_returns_202_without_emailing(self, client, mock_db_pool):
+        with (
+            patch(
+                "frontend.auth_routes.db_client.get_user_by_email",
+                new_callable=AsyncMock,
+            ) as mock_get,
+            patch("frontend.auth_routes.email_service.send_password_reset_email") as mock_send,
+        ):
+            mock_get.return_value = None
+            resp = client.post(
+                "/api/auth/forgot-password",
+                json={"email": "nobody@example.com"},
+            )
+        assert resp.status_code == 202
+        assert "reset link" in resp.json()["message"]
+        mock_send.assert_not_called()
+
+    def test_forgot_password_missing_email_returns_400(self, client, mock_db_pool):
+        resp = client.post("/api/auth/forgot-password", json={})
+        assert resp.status_code == 400
+
+    def test_forgot_password_no_db_returns_503(self, client):
+        if hasattr(app.state, "db_pool"):
+            del app.state.db_pool
+        resp = client.post(
+            "/api/auth/forgot-password",
+            json={"email": "test@example.com"},
+        )
+        assert resp.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# POST /api/auth/reset-password
+# ---------------------------------------------------------------------------
+
+
+class TestResetPassword:
+    """POST /api/auth/reset-password."""
+
+    def test_reset_password_success(self, client, mock_db_pool):
+        record = _reset_record()
+        with (
+            patch(
+                "frontend.auth_routes.db_client.get_password_reset_token_by_hash",
+                new_callable=AsyncMock,
+            ) as mock_get,
+            patch(
+                "frontend.auth_routes.db_client.update_user_password",
+                new_callable=AsyncMock,
+            ) as mock_update,
+            patch(
+                "frontend.auth_routes.db_client.delete_password_reset_tokens",
+                new_callable=AsyncMock,
+            ) as mock_delete,
+        ):
+            mock_get.return_value = record
+            resp = client.post(
+                "/api/auth/reset-password",
+                json={"token": "some-token", "password": "newpassword"},
+            )
+        assert resp.status_code == 200
+        assert "reset" in resp.json()["message"].lower()
+        mock_update.assert_awaited_once()
+        mock_delete.assert_awaited_once()
+
+    def test_reset_password_unknown_token_returns_400(self, client, mock_db_pool):
+        with patch(
+            "frontend.auth_routes.db_client.get_password_reset_token_by_hash",
+            new_callable=AsyncMock,
+        ) as mock_get:
+            mock_get.return_value = None
+            resp = client.post(
+                "/api/auth/reset-password",
+                json={"token": "bad-token", "password": "newpassword"},
+            )
+        assert resp.status_code == 400
+
+    def test_reset_password_expired_token_returns_400(self, client, mock_db_pool):
+        record = _reset_record(expires_in_minutes=-1)
+        with (
+            patch(
+                "frontend.auth_routes.db_client.get_password_reset_token_by_hash",
+                new_callable=AsyncMock,
+            ) as mock_get,
+            patch(
+                "frontend.auth_routes.db_client.delete_password_reset_tokens",
+                new_callable=AsyncMock,
+            ) as mock_delete,
+        ):
+            mock_get.return_value = record
+            resp = client.post(
+                "/api/auth/reset-password",
+                json={"token": "expired-token", "password": "newpassword"},
+            )
+        assert resp.status_code == 400
+        mock_delete.assert_awaited_once()
+
+    def test_reset_password_short_password_returns_400(self, client, mock_db_pool):
+        resp = client.post(
+            "/api/auth/reset-password",
+            json={"token": "tok", "password": "abc"},
+        )
+        assert resp.status_code == 400
+
+    def test_reset_password_missing_fields_returns_400(self, client, mock_db_pool):
+        resp = client.post("/api/auth/reset-password", json={})
+        assert resp.status_code == 400
+
+    def test_reset_password_no_db_returns_503(self, client):
+        if hasattr(app.state, "db_pool"):
+            del app.state.db_pool
+        resp = client.post(
+            "/api/auth/reset-password",
+            json={"token": "tok", "password": "newpassword"},
+        )
+        assert resp.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# Password-reset rate limiting
+# ---------------------------------------------------------------------------
+
+
+class TestPasswordResetRateLimiting:
+    """Both reset endpoints share a dedicated 5-per-15-min rate limiter."""
+
+    def test_forgot_password_rate_limited_after_5_requests_returns_429(self, client, mock_db_pool):
+        with patch(
+            "frontend.auth_routes.db_client.get_user_by_email",
+            new_callable=AsyncMock,
+        ) as mock_get:
+            mock_get.return_value = None
+            for _ in range(5):
+                client.post(
+                    "/api/auth/forgot-password",
+                    json={"email": "x@example.com"},
+                )
+            resp = client.post(
+                "/api/auth/forgot-password",
+                json={"email": "x@example.com"},
+            )
+        assert resp.status_code == 429
+
+    def test_reset_password_rate_limited_after_5_requests_returns_429(self, client, mock_db_pool):
+        with patch(
+            "frontend.auth_routes.db_client.get_password_reset_token_by_hash",
+            new_callable=AsyncMock,
+        ) as mock_get:
+            mock_get.return_value = None
+            for _ in range(5):
+                client.post(
+                    "/api/auth/reset-password",
+                    json={"token": "tok", "password": "newpassword"},
+                )
+            resp = client.post(
+                "/api/auth/reset-password",
+                json={"token": "tok", "password": "newpassword"},
+            )
+        assert resp.status_code == 429

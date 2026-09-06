@@ -8,6 +8,8 @@ import pytest
 from backend.services.auth_service import (
     create_access_token,
     create_refresh_token,
+    generate_password_reset_token,
+    hash_password_reset_token,
     hash_password,
     verify_password,
     verify_token,
@@ -148,3 +150,33 @@ def test_verify_token_invalid():
     """A garbage string should raise InvalidTokenError."""
     with pytest.raises(jwt.InvalidTokenError):
         verify_token("not-a-valid-jwt-token")
+
+
+# --- Password reset tokens ---
+
+
+def test_generate_password_reset_token_is_unique():
+    """Each call must return a different non-empty token."""
+    token_a = generate_password_reset_token()
+    token_b = generate_password_reset_token()
+    assert token_a
+    assert token_b
+    assert token_a != token_b
+
+
+def test_generate_password_reset_token_is_urlsafe():
+    """Tokens must be safe to embed in a URL query string."""
+    token = generate_password_reset_token()
+    assert all(c.isalnum() or c in "-_" for c in token)
+
+
+def test_hash_password_reset_token_is_stable_sha256():
+    """The same token must always hash to the same 64-char hex digest."""
+    digest = hash_password_reset_token("some-token")
+    assert digest == hash_password_reset_token("some-token")
+    assert len(digest) == 64
+
+
+def test_hash_password_reset_token_differs_per_token():
+    """Different tokens must produce different hashes."""
+    assert hash_password_reset_token("token-a") != hash_password_reset_token("token-b")

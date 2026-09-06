@@ -15,7 +15,7 @@ AI voiceover videos). Stack: Python 3.11+, FastAPI, LangGraph, OpenAI, ChromaDB,
 - Vector store: ChromaDB (local, all-MiniLM-L6-v2 embeddings)
 - Web search: Tavily API
 - Package manager: uv (Astral) — lockfile at `uv.lock`
-- Testing: pytest — 1158 backend tests + 124 Vitest + 17 Playwright E2E = 1299 total, zero real API calls (pytest-xdist parallel, ~42s)
+- Testing: pytest — 1178 backend tests + 149 Vitest + 17 Playwright E2E = 1344 total, zero real API calls (pytest-xdist parallel, ~42s)
 - Linting: Ruff (line-length = 100)
 - Docs: MkDocs Material — source in `mk-docs/`, config at `mkdocs.yml`
 - Deployment: Docker + GCP Cloud Run; secrets from Doppler (`doppler run -- ./deploy.sh`), not GCP Secret Manager
@@ -24,7 +24,7 @@ AI voiceover videos). Stack: Python 3.11+, FastAPI, LangGraph, OpenAI, ChromaDB,
 ```bash
 make install      # uv sync --all-extras
 make dev          # FastAPI dev server → http://localhost:8080
-make test         # uv run pytest -v  (1158 backend tests, ~32s with xdist)
+make test         # uv run pytest -v  (1178 backend tests, ~32s with xdist)
 make e2e          # Playwright E2E tests (17 E2E tests: 5 auth + 5 content viewers + 7 quiz)
 make build-frontend # npm ci + npm run build → frontend/static/
 make lint         # uv run ruff check .
@@ -40,7 +40,7 @@ make run ARGS="path/to/file.pdf"  # CLI pipeline
 - Use typed `TypedDict` for all LangGraph state schemas in `backend/pipeline/state.py`
 - Mock all external API calls in tests — the full test suite runs with zero real API calls
 - Run `ruff check .` and confirm clean before marking any task complete
-- Run `make test` and confirm all 1158 backend tests (0 real API calls) pass before marking any task complete
+- Run `make test` and confirm all 1178 backend tests (0 real API calls) pass before marking any task complete
 
 ## Code Quality (Enforced by Ruff + Agent Rules)
 - **Short functions**: max 25 statements, max 5 args, max cyclomatic complexity 10 (see `.claude/rules/code-quality.md`)
@@ -60,7 +60,7 @@ make run ARGS="path/to/file.pdf"  # CLI pipeline
 
 ## Definition of Done
 A task is complete only when ALL of the following are true:
-1. `make test` passes (all 1158 backend tests (0 real API calls))
+1. `make test` passes (all 1178 backend tests (0 real API calls))
 2. `make lint` passes (ruff clean)
 3. Docs updated if any public behaviour changed
 4. `PROGRESS.md` updated with what was done
@@ -146,7 +146,7 @@ Do NOT run Snyk on every wave — use ruff + manual security checklist for per-w
 `AGENTS.md` is the single source of truth for every agent harness driving this repo. Per-tool bridges:
 - Claude Code → `CLAUDE.md` (`@AGENTS.md` import) + `.claude/rules/`
 - Codex CLI → reads this file natively (keep it lean)
-- Cline → `.clinerules/00-source-of-truth.md`; no parallel Memory Bank
+- Cline → `.clinerules/00-source-of-truth.md`; skills/agents mirrored via `scripts/sync-cline-harness.py`; no parallel Memory Bank
 - Antigravity CLI → `GEMINI.md` thin bridge, speculative until its discovery mechanism is documented
 Durable rules go here (portable) — never into a tool-specific file.
 

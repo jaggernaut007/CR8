@@ -6,7 +6,7 @@ Security controls implemented in CR8, from authentication to input validation to
 
 ## Authentication
 
-All routes except `/login`, `/api/auth/login`, `/api/auth/register`, `/api/auth/refresh`, and `/health` require a valid JWT or session. The enforcement layer is a pure ASGI middleware (`AuthMiddleware`) registered as the outermost middleware — it intercepts every request before FastAPI's router. The pure ASGI implementation avoids Starlette's `BaseHTTPMiddleware` response-body buffering, which caused `Content-Length` corruption on `FileResponse` (PDF/video streaming).
+All routes except `/login`, `/api/auth/login`, `/api/auth/register`, `/api/auth/refresh`, `/api/auth/forgot-password`, `/api/auth/reset-password`, and `/health` require a valid JWT or session. The enforcement layer is a pure ASGI middleware (`AuthMiddleware`) registered as the outermost middleware — it intercepts every request before FastAPI's router. The pure ASGI implementation avoids Starlette's `BaseHTTPMiddleware` response-body buffering, which caused `Content-Length` corruption on `FileResponse` (PDF/video streaming).
 
 ### How it works
 
@@ -49,6 +49,12 @@ Login attempts are rate-limited per source IP:
 
 - **5 failed attempts** within 15 minutes → `429 Too Many Requests`
 - Rate limit resets automatically after the 15-minute window
+
+Password-reset requests (`/api/auth/forgot-password`, `/api/auth/reset-password`)
+use a separate 5-requests-per-15-minutes limiter to prevent reset-email
+flooding and token brute-forcing. Reset tokens are 256-bit random values stored
+only as SHA-256 hashes, single-use, and expire after
+`PASSWORD_RESET_TOKEN_TTL_MINUTES` (default 60).
 
 ---
 

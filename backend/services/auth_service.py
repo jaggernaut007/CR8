@@ -5,7 +5,9 @@ PyJWT and bcrypt. Access tokens (8hr) are sent via Bearer header,
 refresh tokens (7d) are stored in httpOnly cookies.
 """
 
+import hashlib
 import logging
+import secrets
 from datetime import datetime, timedelta, UTC
 
 import bcrypt
@@ -98,6 +100,33 @@ def create_refresh_token(user_id: str) -> str:
         settings.jwt_refresh_expiry_days,
     )
     return token
+
+
+def generate_password_reset_token() -> str:
+    """Generate a cryptographically secure, opaque password-reset token.
+
+    The raw token is emailed to the user; only its SHA-256 hash is stored.
+
+    Returns:
+        A URL-safe random token string (~256 bits of entropy).
+    """
+    logger.info("Generating password reset token")
+    return secrets.token_urlsafe(32)
+
+
+def hash_password_reset_token(token: str) -> str:
+    """Hash a password-reset token for storage.
+
+    Reset tokens are high-entropy random values, so a plain SHA-256 digest
+    (no bcrypt salt) is sufficient and lets us look tokens up by hash.
+
+    Args:
+        token: The raw reset token string.
+
+    Returns:
+        Hex-encoded SHA-256 digest of the token.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def verify_token(token: str, expected_type: str = "access") -> dict:

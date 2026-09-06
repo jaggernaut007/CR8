@@ -113,7 +113,8 @@ PY
 # Guard: required secrets must be present in the environment for a deploy.
 if [[ "${RUN_SETUP}" != "true" ]]; then
     _missing=()
-    for _var in OPENAI_API_KEY TAVILY_API_KEY AUTH_PASSWORD DATABASE_URL JWT_SECRET; do
+    for _var in OPENAI_API_KEY TAVILY_API_KEY AUTH_PASSWORD DATABASE_URL JWT_SECRET \
+            RESEND_API_KEY RESEND_FROM_EMAIL PASSWORD_RESET_BASE_URL; do
         [[ -z "${!_var:-}" ]] && _missing+=("${_var}")
     done
     if [[ ${#_missing[@]} -gt 0 ]]; then
@@ -163,16 +164,21 @@ if [[ "${RUN_SETUP}" == "true" ]]; then
     echo "  doppler setup --project cr8 --config prd"
     echo ""
     echo "  # Required"
-    echo "  doppler secrets set OPENAI_API_KEY='sk-YOUR-KEY'"
-    echo "  doppler secrets set TAVILY_API_KEY='tvly-YOUR-KEY'"
-    echo "  doppler secrets set AUTH_PASSWORD='your-web-ui-password'"
-    echo "  doppler secrets set DATABASE_URL='postgresql://user:pass@host/db?sslmode=require'"
-    echo "  doppler secrets set JWT_SECRET=\"\$(openssl rand -hex 32)\""
+    echo "  doppler secrets set OPENAI_API_KEY='sk-YOUR-KEY' --project cr8 --config prd"
+    echo "  doppler secrets set TAVILY_API_KEY='tvly-YOUR-KEY' --project cr8 --config prd"
+    echo "  doppler secrets set AUTH_PASSWORD='your-web-ui-password' --project cr8 --config prd"
+    echo "  doppler secrets set DATABASE_URL='postgresql://user:pass@host/db?sslmode=require' --project cr8 --config prd"
+    echo "  doppler secrets set JWT_SECRET=\"\$(openssl rand -hex 32)\" --project cr8 --config prd"
+    echo ""
+    echo "  # Forgot password / email (Resend — required for password-reset emails)"
+    echo "  doppler secrets set RESEND_API_KEY='re_YOUR-KEY' --project cr8 --config prd"
+    echo "  doppler secrets set RESEND_FROM_EMAIL='CR8 <noreply@yourdomain.com>' --project cr8 --config prd"
+    echo "  doppler secrets set PASSWORD_RESET_BASE_URL='https://cr8-pipeline-1000325314523.europe-west2.run.app' --project cr8 --config prd"
     echo ""
     echo "  # Optional"
-    echo "  doppler secrets set HF_TOKEN='hf_YOUR-TOKEN'          # GPU model downloads"
-    echo "  doppler secrets set HEYGEN_API_KEY='YOUR-KEY'         # HeyGen video"
-    echo "  doppler secrets set LANGCHAIN_API_KEY='ls_YOUR-KEY'   # LangSmith tracing"
+    echo "  doppler secrets set HF_TOKEN='hf_YOUR-TOKEN' --project cr8 --config prd"
+    echo "  doppler secrets set HEYGEN_API_KEY='YOUR-KEY' --project cr8 --config prd"
+    echo "  doppler secrets set LANGCHAIN_API_KEY='ls_YOUR-KEY' --project cr8 --config prd"
     echo ""
     echo "==> Deploy with secrets injected from Doppler:"
     echo ""
@@ -304,6 +310,9 @@ if [[ "${DEPLOY_CPU}" == "true" ]]; then
         "LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}" \
         "DATABASE_URL=${DATABASE_URL}" \
         "JWT_SECRET=${JWT_SECRET}" \
+        "RESEND_API_KEY=${RESEND_API_KEY}" \
+        "RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL}" \
+        "PASSWORD_RESET_BASE_URL=${PASSWORD_RESET_BASE_URL}" \
         "GPU_SERVICE_URL=${GPU_URL}" \
         "CPU_VIDEO_SERVICE_URL=${CPU_VIDEO_URL}" \
         "GCS_BUCKET=${GCS_BUCKET}" \

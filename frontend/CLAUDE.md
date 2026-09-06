@@ -70,6 +70,8 @@ wiring, and router mounting only.
 - `POST /api/auth/refresh` — Issue new access token from `cr8_refresh` cookie
 - `GET /api/auth/me` — Return current user info
 - `POST /api/auth/logout` — Invalidate session and clear cookies (204)
+- `POST /api/auth/forgot-password` — Email a one-time reset link (202 always, anti-enumeration)
+- `POST /api/auth/reset-password` — Reset password using a one-time token
 
 **Job routes (prefix `/api`):**
 - `POST /api/upload` — Upload PDF or PPTX, returns `{job_id, filename}`
@@ -99,8 +101,8 @@ wiring, and router mounting only.
 - `get_current_user()` dependency in `frontend/middleware.py`: tries JWT Bearer first, falls back to `cr8_session` cookie
 - JWT tokens: access token (short-lived, in response body) + refresh token (httponly cookie, path-scoped to `/api/auth/refresh`)
 - Legacy session: 256-bit random token, 8-hour TTL, stored in process memory; being removed after v0.5.3
-- Rate limiting: 5 failed attempts per 15 minutes per IP (sliding window, in-memory)
-- `AuthMiddleware` enforces auth on all paths except `/login`, `/api/auth/login`, `/api/auth/register`, `/health`, `/static/`
+- Rate limiting: 5 failed attempts per 15 minutes per IP (sliding window, in-memory); password-reset endpoints share a separate 5-per-15-min limiter
+- `AuthMiddleware` enforces auth on all paths except `/login`, `/api/auth/login`, `/api/auth/register`, `/api/auth/forgot-password`, `/api/auth/reset-password`, `/health`, `/static/`
 
 ### Security Headers
 `SecurityHeadersMiddleware` adds to all responses:

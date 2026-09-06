@@ -119,6 +119,94 @@ async def get_user_by_id(
     return dict(row)
 
 
+async def upsert_password_reset_token(
+    pool: asyncpg.Pool,
+    user_id: str,
+    token_hash: str,
+    expires_at: Any,
+) -> None:
+    """Replace any existing password-reset token for a user with a new one.
+
+    At most one active reset token exists per user at a time; issuing a new
+    token invalidates the previous one.
+
+    Args:
+        pool: asyncpg connection pool.
+        user_id: UUID string of the user.
+        token_hash: SHA-256 hex digest of the raw reset token.
+        expires_at: Timezone-aware datetime when the token expires.
+    """
+    logger.info("Upserting password reset token for user_id=%s", user_id)
+    await pool.execute(
+        "DELETE FROM password_reset_tokens WHERE user_id = $1", user_id
+    )
+    await pool.execute(
+        "INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) "
+        "VALUES ($1, $2, $3)",
+        user_id,
+        token_hash,
+        expires_at,
+    )
+    logger.info("Password reset token stored for user_id=%s", user_id)
+
+
+async def get_password_reset_token_by_hash(
+    pool: asyncpg.Pool,
+    token_hash: str,
+) -> dict[str, Any] | None:
+    """Fetch a password-reset token record by its SHA-256 hash.
+
+    Args:
+        pool: asyncpg connection pool.
+        token_hash: SHA-256 hex digest of the raw reset token.
+
+    Returns:
+        Token record dict or None if not found.
+    """
+    logger.info("Looking up password reset token by hash")
+    row = await pool.fetchrow(
+        "SELECT * FROM password_reset_tokens WHERE token_hash = $1", token_hash
+    )
+    if row is None:
+        logger.info("No password reset token found for hash")
+        return None
+    return dict(row)
+
+
+async def delete_password_reset_tokens(pool: asyncpg.Pool, user_id: str) -> None:
+    """Delete all password-reset tokens for a user (invalidates pending links).
+
+    Args:
+        pool: asyncpg connection pool.
+        user_id: UUID string of the user.
+    """
+    logger.info("Deleting password reset tokens for user_id=%s", user_id)
+    await pool.execute(
+        "DELETE FROM password_reset_tokens WHERE user_id = $1", user_id
+    )
+
+
+async def update_user_password(
+    pool: asyncpg.Pool,
+    user_id: str,
+    password_hash: str,
+) -> None:
+    """Update a user's password hash.
+
+    Args:
+        pool: asyncpg connection pool.
+        user_id: UUID string of the user.
+        password_hash: New bcrypt hash of the password.
+    """
+    logger.info("Updating password for user_id=%s", user_id)
+    await pool.execute(
+        "UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2",
+        password_hash,
+        user_id,
+    )
+    logger.info("Password updated for user_id=%s", user_id)
+
+
 # ---------------------------------------------------------------------------
 # Job CRUD
 # ---------------------------------------------------------------------------
@@ -216,10 +304,26 @@ async def update_job_result(
         "progress_pct = 100, updated_at = now(), completed_at = now() "
         "WHERE id = $7",
         status,
-        json.dumps(result_meta) if result_meta and isinstance(result_meta, (dict, list)) else result_meta,
-        json.dumps(topics) if topics and isinstance(topics, (list, dict)) else topics,
-        json.dumps(gap_summary) if gap_summary and isinstance(gap_summary, (list, dict)) else gap_summary,
-        json.dumps(modules_md) if modules_md and isinstance(modules_md, (list, dict)) else modules_md,
+        (
+            json.dumps(result_meta)
+            if result_meta and isinstance(result_meta, (dict, list))
+            else result_meta
+        ),
+        (
+            json.dumps(topics)
+            if topics and isinstance(topics, (list, dict))
+            else topics
+        ),
+        (
+            json.dumps(gap_summary)
+            if gap_summary and isinstance(gap_summary, (list, dict))
+            else gap_summary
+        ),
+        (
+            json.dumps(modules_md)
+            if modules_md and isinstance(modules_md, (list, dict))
+            else modules_md
+        ),
         curriculum_scope,
         job_id,
     )

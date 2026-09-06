@@ -19,7 +19,7 @@ vi.mock("@/api/quiz", () => ({
   submitQuiz: vi.fn(),
 }));
 
-import { fetchQuiz, submitQuiz } from "@/api/quiz";
+import { fetchQuiz } from "@/api/quiz";
 
 const mockQuiz = {
   quiz_id: "quiz-1",
