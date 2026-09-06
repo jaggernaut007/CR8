@@ -1,0 +1,936 @@
+<title>The Curriculum Relevance Gap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+:root{
+  --ink:#16191C;
+  --ink-soft:#4A5055;
+  --ink-faint:#767C7E;
+  --paper:#E9EAE3;
+  --surface:#F5F6F0;
+  --surface-2:#DEE0D6;
+  --rule:#C3C6BA;
+  --rule-soft:#D5D8CC;
+  --accent:#C4AE00;
+  --accent-ink:#6E6200;
+  --mark:rgba(196,174,0,.34);
+  --critical:#9E3B2C;
+  --warn:#A9691F;
+  --positive:#2E6350;
+  --shadow:rgba(22,25,28,.09);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ink:#E4E6DD;
+    --ink-soft:#A6ABA2;
+    --ink-faint:#7E837C;
+    --paper:#141613;
+    --surface:#1C1F1B;
+    --surface-2:#262A24;
+    --rule:#3A3F38;
+    --rule-soft:#2C302A;
+    --accent:#DCC521;
+    --accent-ink:#DCC521;
+    --mark:rgba(220,197,33,.24);
+    --critical:#D9705E;
+    --warn:#D69A4C;
+    --positive:#6BB39B;
+    --shadow:rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#E4E6DD;
+  --ink-soft:#A6ABA2;
+  --ink-faint:#7E837C;
+  --paper:#141613;
+  --surface:#1C1F1B;
+  --surface-2:#262A24;
+  --rule:#3A3F38;
+  --rule-soft:#2C302A;
+  --accent:#DCC521;
+  --accent-ink:#DCC521;
+  --mark:rgba(220,197,33,.24);
+  --critical:#D9705E;
+  --warn:#D69A4C;
+  --positive:#6BB39B;
+  --shadow:rgba(0,0,0,.4);
+}
+
+*{box-sizing:border-box;}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"Archivo",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16.5px;
+  line-height:1.62;
+  margin:0;
+  -webkit-font-smoothing:antialiased;
+}
+
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px 120px;}
+.col{max-width:68ch;}
+
+/* ---------- masthead ---------- */
+.masthead{
+  border-bottom:2px solid var(--ink);
+  padding:56px 0 26px;
+  margin-bottom:46px;
+}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11.5px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--ink-faint);
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px 20px;
+  margin-bottom:26px;
+}
+h1{
+  font-family:"Newsreader",Georgia,serif;
+  font-weight:600;
+  font-size:clamp(2.6rem,6.2vw,4.3rem);
+  line-height:1.02;
+  letter-spacing:-.02em;
+  margin:0 0 20px;
+  text-wrap:balance;
+  max-width:15ch;
+}
+.standfirst{
+  font-family:"Newsreader",Georgia,serif;
+  font-size:clamp(1.13rem,2.1vw,1.4rem);
+  line-height:1.5;
+  color:var(--ink-soft);
+  max-width:56ch;
+  margin:0;
+}
+
+/* ---------- verdict ---------- */
+.verdict{
+  background:var(--surface);
+  border:1px solid var(--rule);
+  border-left:4px solid var(--accent);
+  padding:30px 32px;
+  margin:0 0 62px;
+  display:grid;
+  gap:14px;
+}
+.verdict h2{
+  font-family:"IBM Plex Mono",monospace;
+  font-size:11.5px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--accent-ink);
+  margin:0;
+  font-weight:500;
+}
+.verdict p{margin:0;max-width:72ch;}
+.verdict p.lead{
+  font-family:"Newsreader",Georgia,serif;
+  font-size:1.3rem;
+  line-height:1.42;
+  color:var(--ink);
+}
+
+/* ---------- sections ---------- */
+section{margin-bottom:76px;scroll-margin-top:24px;}
+h2.sec{
+  font-family:"Newsreader",Georgia,serif;
+  font-weight:600;
+  font-size:clamp(1.7rem,3.4vw,2.3rem);
+  line-height:1.12;
+  letter-spacing:-.015em;
+  margin:0 0 6px;
+  text-wrap:balance;
+}
+.sec-tag{
+  font-family:"IBM Plex Mono",monospace;
+  font-size:11px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--ink-faint);
+  display:block;
+  margin-bottom:12px;
+  padding-bottom:10px;
+  border-bottom:1px solid var(--rule);
+}
+h3{
+  font-family:"Archivo",sans-serif;
+  font-weight:600;
+  font-size:1.06rem;
+  letter-spacing:.005em;
+  margin:38px 0 10px;
+  text-wrap:balance;
+}
+h4{
+  font-family:"IBM Plex Mono",monospace;
+  font-weight:500;
+  font-size:11.5px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--ink-faint);
+  margin:30px 0 10px;
+}
+p{margin:0 0 16px;max-width:68ch;}
+a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--accent);text-underline-offset:3px;text-decoration-thickness:1.5px;}
+a:hover{color:var(--accent-ink);}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
+strong{font-weight:600;}
+mark{background:var(--mark);color:inherit;padding:0 2px;border-radius:1px;}
+
+ul,ol{max-width:68ch;padding-left:1.15em;margin:0 0 18px;}
+li{margin-bottom:9px;}
+li::marker{color:var(--ink-faint);}
+
+/* ---------- stat band ---------- */
+.stats{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(168px,1fr));
+  gap:1px;
+  background:var(--rule);
+  border:1px solid var(--rule);
+  margin:28px 0 34px;
+}
+.stat{background:var(--surface);padding:20px 18px;}
+.stat .n{
+  font-family:"Newsreader",Georgia,serif;
+  font-size:2.15rem;
+  line-height:1;
+  font-weight:500;
+  letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;
+  display:block;
+  margin-bottom:8px;
+}
+.stat .l{
+  font-size:12.5px;
+  line-height:1.36;
+  color:var(--ink-soft);
+}
+.stat.hi .n{color:var(--accent-ink);}
+.stat.bad .n{color:var(--critical);}
+
+/* ---------- tables ---------- */
+.scroller{
+  overflow-x:auto;
+  margin:22px 0 30px;
+  border:1px solid var(--rule);
+  background:var(--surface);
+}
+table{border-collapse:collapse;width:100%;min-width:660px;font-size:14px;}
+th,td{
+  text-align:left;
+  padding:11px 14px;
+  border-bottom:1px solid var(--rule-soft);
+  vertical-align:top;
+  line-height:1.44;
+}
+thead th{
+  font-family:"IBM Plex Mono",monospace;
+  font-size:10.5px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:var(--ink-faint);
+  font-weight:500;
+  border-bottom:1px solid var(--rule);
+  background:var(--surface-2);
+  position:sticky;
+  top:0;
+}
+tbody tr:last-child td{border-bottom:none;}
+td.name{font-weight:600;white-space:nowrap;}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap;}
+
+.chip{
+  display:inline-block;
+  font-family:"IBM Plex Mono",monospace;
+  font-size:10px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  padding:3px 7px;
+  border:1px solid currentColor;
+  border-radius:2px;
+  white-space:nowrap;
+  font-weight:500;
+}
+.chip.high{color:var(--critical);}
+.chip.med{color:var(--warn);}
+.chip.low{color:var(--positive);}
+
+/* ---------- callout ---------- */
+.note{
+  border-left:3px solid var(--rule);
+  padding:4px 0 4px 20px;
+  margin:26px 0;
+  color:var(--ink-soft);
+  max-width:66ch;
+}
+.note .t{
+  font-family:"IBM Plex Mono",monospace;
+  font-size:10.5px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--ink-faint);
+  display:block;
+  margin-bottom:7px;
+}
+.note.sharp{border-left-color:var(--critical);}
+.note.sharp .t{color:var(--critical);}
+.note.good{border-left-color:var(--positive);}
+.note.good .t{color:var(--positive);}
+
+/* ---------- ranked cards ---------- */
+.ranked{display:grid;gap:18px;margin:26px 0 10px;}
+.rank{
+  background:var(--surface);
+  border:1px solid var(--rule);
+  padding:24px 26px;
+  display:grid;
+  gap:10px;
+}
+.rank.pick{border-color:var(--accent);border-width:1px 1px 1px 4px;}
+.rank-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 14px;}
+.rank-head .tier{
+  font-family:"IBM Plex Mono",monospace;
+  font-size:11px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--ink-faint);
+}
+.rank-head .who{
+  font-family:"Newsreader",Georgia,serif;
+  font-size:1.42rem;
+  font-weight:600;
+  letter-spacing:-.01em;
+  line-height:1.16;
+}
+.rank dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:4px 0 0;font-size:14.5px;}
+.rank dt{
+  font-family:"IBM Plex Mono",monospace;
+  font-size:10.5px;
+  letter-spacing:.11em;
+  text-transform:uppercase;
+  color:var(--ink-faint);
+  padding-top:4px;
+}
+.rank dd{margin:0;}
+
+/* ---------- timeline ---------- */
+.plan{
+  display:grid;
+  gap:0;
+  margin:26px 0;
+  border-top:1px solid var(--rule);
+}
+.step{
+  display:grid;
+  grid-template-columns:96px 1fr;
+  gap:24px;
+  padding:20px 0;
+  border-bottom:1px solid var(--rule-soft);
+  align-items:start;
+}
+.step .when{
+  font-family:"IBM Plex Mono",monospace;
+  font-size:11px;
+  letter-spacing:.11em;
+  text-transform:uppercase;
+  color:var(--accent-ink);
+  padding-top:3px;
+}
+.step .what{max-width:62ch;}
+.step .what b{display:block;font-weight:600;margin-bottom:5px;}
+.step .what span{color:var(--ink-soft);font-size:14.5px;line-height:1.55;}
+
+/* ---------- sources ---------- */
+.sources{
+  border-top:2px solid var(--ink);
+  padding-top:28px;
+  font-size:13.5px;
+  line-height:1.55;
+}
+.sources ol{columns:2;column-gap:44px;max-width:none;padding-left:1.2em;}
+.sources li{margin-bottom:8px;break-inside:avoid;color:var(--ink-soft);}
+.sources a{text-decoration-thickness:1px;}
+
+@media (max-width:640px){
+  .wrap{padding:0 18px 80px;}
+  .step{grid-template-columns:1fr;gap:8px;}
+  .sources ol{columns:1;}
+  .rank dl{grid-template-columns:1fr;gap:2px 0;}
+  .rank dt{padding-top:10px;}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important;}
+}
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="eyebrow">
+    <span>Competitive &amp; Market Research</span>
+    <span>CR8 · UK Higher Education</span>
+    <span>August 2026</span>
+  </div>
+  <h1>The Curriculum Relevance Gap</h1>
+  <p class="standfirst">Who else is building AI tutoring, AI course creation and curriculum gap analysis — what they charge, what their users actually say, and the one position in this market that nobody currently occupies.</p>
+</header>
+
+<div class="verdict">
+  <h2>The verdict, up front</h2>
+  <p class="lead">Do not sell an AI tutor. That market is being given away for free by OpenAI, Anthropic and Google, and served in the UK by at least five funded specialists. Sell the <strong>gap analysis</strong> — and then sell the content that closes it.</p>
+  <p>Lightcast can tell a university which skills its degree is missing. Blackboard can generate a module outline. <mark>Nobody joins the two.</mark> CR8's pipeline already does — curriculum in, market-enriched diagnosis and remediation material out — and that combination is currently unsold in the UK.</p>
+  <p>But your buyer is not "a university." It is the Associate Dean or Head of Curriculum staring at a programme review with a closure decision attached. And UK higher education, right now, is the poorest customer in this market — so treat it as your credibility engine, not your only revenue line.</p>
+  <p><strong>Since drafting this, one document has sharpened all three points.</strong> MIT's Ad Hoc Committee on AI Use published its final report on 13 August 2026. It recommends universities appoint departmental <em>AI Leads</em> responsible for curricular adaptation — your buyer, with a job title. It recommends departments create an <em>AI Pilot Fund</em> academics can apply to — your budget line, below procurement. And it urges institutions to stay model-agnostic and avoid locking into a single commercial AI ecosystem — which turns your multi-model architecture from a margin story into a procurement argument. <a href="#mit">Section 06</a> works through it.</p>
+</div>
+
+<!-- ============ 1. MARKET CONTEXT ============ -->
+<section id="context">
+  <span class="sec-tag">01 — The ground you're selling into</span>
+  <h2 class="sec">A sector cutting courses faster than it can justify them</h2>
+
+  <div class="col">
+    <p>UK higher education is large, addressable, and in the worst financial state in its modern history. Both halves of that sentence matter to your go-to-market.</p>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><span class="n">304</span><span class="l">UK HE providers reporting to HESA</span></div>
+    <div class="stat"><span class="n">2.86m</span><span class="l">students (2024/25)</span></div>
+    <div class="stat"><span class="n">£52.1bn</span><span class="l">total sector income</span></div>
+    <div class="stat bad"><span class="n">~3,900</span><span class="l">courses closed since 2024, of ~45,000 analysed</span></div>
+    <div class="stat bad"><span class="n">105</span><span class="l">institutions in redundancy or restructuring (Dec 2025)</span></div>
+    <div class="stat bad"><span class="n">−26%</span><span class="l">real-terms fall in tuition fee value, 2017–2025</span></div>
+  </div>
+
+  <div class="col">
+    <p>Around 50 institutions are considered at risk of insolvency within a year, over 12,000 job cuts were announced in a single year, and two-thirds of university staff report considering leaving the sector. Course closures are concentrated exactly where your product is most useful: low-tariff institutions account for <strong>47% of all closures</strong>, with a 12% undergraduate closure rate against 5% at high-tariff universities. Agriculture and food studies lost 19% of undergraduate courses; physical sciences 12%.</p>
+
+    <div class="note sharp">
+      <span class="t">Read this correctly</span>
+      <p style="margin:0">Course closure is not a reason to avoid this market — it is the buying trigger. Every closure is preceded by a portfolio review in which somebody must produce evidence about whether a programme is still relevant to the labour market. That evidence is produced by hand today, usually by an academic who resents the work. That is the artefact CR8 generates.</p>
+    </div>
+
+    <p>Meanwhile the demand side is unambiguous. The HEPI/Kortext <em>Student Generative AI Survey 2026</em> (n=1,054 UK undergraduates, December 2025) found:</p>
+  </div>
+
+  <div class="stats">
+    <div class="stat hi"><span class="n">95%</span><span class="l">of students use AI in at least one way</span></div>
+    <div class="stat hi"><span class="n">38%</span><span class="l">say they have access to <em>institutional</em> AI tools</span></div>
+    <div class="stat"><span class="n">36%</span><span class="l">feel encouraged by their institution to use AI</span></div>
+    <div class="stat"><span class="n">65%</span><span class="l">say assessment has changed significantly because of AI</span></div>
+  </div>
+
+  <div class="col">
+    <p>The 57-point spread between <mark>95% using AI</mark> and <mark>38% given an institutional tool</mark> is the single most quoted statistic in UK HE procurement conversations right now. It is why every vendor in this report has a warm reception and why almost none of them have defensible pricing power: the sector knows it must buy <em>something</em>, and does not yet know what.</p>
+    <p>The wider market is growing fast — AI in education is projected to move from $7.5bn (2025) to $10.6bn (2026) to $42.5bn (2030), roughly 41% CAGR — but that number includes K-12 and corporate, and should not anchor your plan.</p>
+  </div>
+</section>
+
+<!-- ============ 2. LANDSCAPE ============ -->
+<section id="landscape">
+  <span class="sec-tag">02 — Competitive landscape</span>
+  <h2 class="sec">Six segments, and only one of them is worth your first year</h2>
+
+  <div class="col">
+    <p>The space you described — AI tutoring, AI course creation, curriculum gap analysis and fulfilment — is not one market. It is six, with very different economics. Ranked by how directly each threatens CR8:</p>
+  </div>
+
+  <h3>Segment 1 · Horizontal AI assistants — the gravity well</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Player</th><th>Offer to HE</th><th>Price</th><th>UK / notable customers</th><th>Threat</th></tr></thead>
+      <tbody>
+        <tr><td class="name">ChatGPT Edu</td><td>Campus-wide GPT access, admin console, data controls</td><td class="num">$144/user/yr<br><span style="color:var(--ink-faint)">(cut 40% from $240)</span></td><td>CSU ($17m), Univ. of Colorado ($2m/yr), ASU, Oxford, USC</td><td><span class="chip high">Existential</span></td></tr>
+        <tr><td class="name">Claude for&nbsp;Education</td><td>Campus-wide access, Learning Mode, staff research licences</td><td class="num">Campus deal,<br>often free in pilot</td><td><strong>LSE</strong> (all students + 900 staff licences), <strong>Northumbria</strong> (all UG/PG)</td><td><span class="chip high">Existential</span></td></tr>
+        <tr><td class="name">Google NotebookLM</td><td>Upload sources → study guide, audio &amp; video overview, quiz</td><td class="num">Free</td><td>Ubiquitous; cited by Jisc as a student staple</td><td><span class="chip high">Existential</span></td></tr>
+        <tr><td class="name">Microsoft Copilot</td><td>Bundled into existing M365 education agreements</td><td class="num">Bundled</td><td>Sector-wide</td><td><span class="chip med">High</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p>This is the segment that kills naive AI-tutor startups. NotebookLM already turns a set of lecture slides into a study guide, a narrated overview and a quiz, for nothing. If CR8's pitch is "we generate study material from your course files," a procurement officer will ask why they should pay for what Google gives away — and they will be right.</p>
+
+    <div class="note good">
+      <span class="t">The crack in the wall</span>
+      <p style="margin:0">Faculty are pushing back hard on these deals. A petition against one US system-wide OpenAI contract argued ChatGPT Edu is <em>"not educational technology"</em> but <em>"a general-purpose chatbot… identical to the free online version"</em> — bought while the institution was making redundancies. The complaint is not about AI. It is that generic AI knows nothing about <em>their curriculum</em> and produces nothing an institution can act on. That is precisely the ground CR8 stands on.</p>
+    </div>
+  </div>
+
+  <h3>Segment 2 · AI tutoring &amp; student support in HE — crowded, funded, entrenched</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Player</th><th>What it does</th><th>Scale &amp; UK footprint</th><th>Stated USP / proof</th><th>Threat</th></tr></thead>
+      <tbody>
+        <tr><td class="name">LearnWise</td><td>Campus support agent, course-aligned tutor, AI feedback &amp; grader, ops assistant</td><td>200+ institutions. UK: <strong>Surrey, Westminster</strong>. Also Penn State, NYU Grossman, TU Delft. €2m raised</td><td>43% fewer support tickets; 79% of AI feedback delivered near-unchanged; 2,000+ staff hours saved/yr; up to 50% support cost reduction</td><td><span class="chip high">High</span></td></tr>
+        <tr><td class="name">Studiosity</td><td>Human + AI writing feedback; "Support and Validate" framework replacing post-hoc detection</td><td>250+ institutions. <strong>Universities UK strategic partner</strong> with pro bono member trial. UCL, Greenwich, UWE Bristol, Bedfordshire</td><td>8.8% retention uplift; 7.3× ROI; pedagogy-first, explicitly not an answer engine</td><td><span class="chip med">Medium</span></td></tr>
+        <tr><td class="name">Plato Academic</td><td>Curriculum-aware Q&amp;A, revision material, <em>cohort knowledge-gap analytics for staff</em></td><td>UK-native. <strong>Sussex, Liverpool</strong>, Hereford Sixth Form</td><td>88% of students more confident studying independently; positions as governed institutional AI vs "generic, ungoverned tools"</td><td><span class="chip high">High</span></td></tr>
+        <tr><td class="name">StudyStash</td><td>Adaptive pathways, flashcards, practice tests, at-risk flagging; guardrailed to approved course material</td><td>UK. <strong>St Mary's University</strong> pilot. 8 LMS integrations</td><td>59% report improved performance; 74% more confident; 34% engage regularly outside lectures</td><td><span class="chip med">Medium</span></td></tr>
+        <tr><td class="name">Kortext</td><td>Digital textbook platform + <em>study+</em> AI tools (Azure/GPT): summarise, notes, test, cite</td><td>Deep UK library relationships. ARU London, Manchester, Middlesex</td><td>Owns the reading-list workflow; sponsors the HEPI student AI survey</td><td><span class="chip med">Medium</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p><strong>Plato is your closest competitor</strong> and the one to watch. It is UK-native, curriculum-grounded, sells staff-facing knowledge-gap analytics, and already has two Russell-adjacent institutions. It attacks the same insight you have. The difference: Plato diagnoses gaps in <em>student understanding</em>; CR8 diagnoses gaps in the <em>curriculum itself against the labour market</em> — and then produces the material. Keep that distinction razor-sharp in every conversation.</p>
+    <p><strong>LearnWise is your GTM template.</strong> Two things it did that you should copy exactly: it got onto a <a href="https://www.chest.ac.uk/agreements/learnwise-ai/">Chest agreement</a> (Jisc's collective-licensing arm) running March 2025 – February 2028 as a three-year site licence, and it publishes hard operational numbers rather than pedagogy language. Chest removes the procurement objection before it is raised.</p>
+  </div>
+
+  <h3>Segment 3 · AI course creation — where the incumbents give it away free</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Player</th><th>Offer</th><th>Price</th><th>Weakness</th><th>Threat</th></tr></thead>
+      <tbody>
+        <tr><td class="name">Blackboard<br>AI Design Assistant</td><td>Generates modules, descriptions, Bloom's-aligned tests, rubrics, images inside the LMS</td><td class="num"><strong>Included in licence.<br>No extra cost.</strong></td><td>No external market grounding; course-level only; no programme-level diagnosis</td><td><span class="chip high">High</span></td></tr>
+        <tr><td class="name">D2L Lumi</td><td>Lumi Chat, Lumi Tutor, Lumi Feedback — role-aware, in-context</td><td class="num">Bundled / add-on</td><td>Config-dependent; no labour-market layer</td><td><span class="chip med">Medium</span></td></tr>
+        <tr><td class="name">Canvas IgniteAI</td><td>Agent completing Canvas workflows via API (launched Jul 2025)</td><td class="num">Bundled</td><td>Admin automation, not pedagogy</td><td><span class="chip med">Medium</span></td></tr>
+        <tr><td class="name">Coursebox</td><td>Document/prompt → full course with quizzes, video, scenarios, AI grading, SCORM/LTI</td><td class="num">Free → Enterprise<br>(min. 2-yr; SSO +$3,000/yr)</td><td>Credit-metered; rigid templates; "limited branding"; corporate-first</td><td><span class="chip med">Medium</span></td></tr>
+        <tr><td class="name">Nolej</td><td>Any source → interactive micro-learning (H5P), flashcards, glossary, quiz; LMS-native</td><td class="num">from ~$19.99/mo;<br>institutional on request</td><td>Object-level, not programme-level; no market data</td><td><span class="chip med">Medium</span></td></tr>
+        <tr><td class="name">Synthesia / Colossyan</td><td>Script → avatar-narrated video, SCORM export, multilingual</td><td class="num">$29–$89/mo;<br>Enterprise $20k–$100k+/yr</td><td>Minutes expire monthly; re-renders burn quota; pure production tool</td><td><span class="chip low">Low</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <div class="note sharp">
+      <span class="t">The hardest fact in this report</span>
+      <p style="margin:0">Blackboard's AI Design Assistant is <strong>included as standard at no extra cost</strong>, and Anthology reports 96% of instructors say it saves them time — one law professor describing a full day of work reduced to minutes. Any pitch built on "we generate course content faster" is competing with free software the university has already bought. Content generation cannot be your headline. It has to be the <em>fulfilment</em> attached to a diagnosis nobody else provides.</p>
+    </div>
+  </div>
+
+  <h3>Segment 4 · Curriculum gap &amp; skills analysis — your real category</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Player</th><th>What it does</th><th>Data asset</th><th>Reach</th><th>Threat</th></tr></thead>
+      <tbody>
+        <tr><td class="name">Lightcast<br>Skillabi</td><td>Extracts skills from curriculum; scores Program–Occupation Alignment 0–100; flags missing skills vs workforce demand; simulates curriculum changes</td><td class="num">18bn labour-market data points</td><td>1,000+ institutions. <strong>Live in the UK.</strong> Launched June 2025</td><td><span class="chip high">Direct</span></td></tr>
+        <tr><td class="name">Mapademics</td><td>AI curriculum mapping and skills analysis; peer benchmarking; equity analysis</td><td class="num">Proprietary + partner</td><td>Mostly US; claims 80% reduction in analysis time</td><td><span class="chip med">Medium</span></td></tr>
+        <tr><td class="name">Outcomap /<br>HelioCampus</td><td>Curriculum mapping against learning outcomes for accreditation</td><td class="num">Institutional only</td><td>Mostly US; compliance-oriented</td><td><span class="chip low">Low</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p>This is the segment that matters, and it contains a structural hole. Skillabi is an excellent diagnostic and a genuinely strong data moat — but it stops at the score. It tells a programme director that "cloud cost governance" and "prompt evaluation" are missing from a Computing MSc. It does not write the module. It does not produce the revalidation deck. It does not produce the teaching material.</p>
+    <p>Every institution that buys Skillabi generates a to-do list it then has to staff. <mark>The remediation is the unserved half of this market.</mark></p>
+  </div>
+
+  <h3>Segment 5 · B2C study tools — the price floor</h3>
+  <div class="col">
+    <p>StudyFetch (from $8/mo), TurboLearn, Coursology, Scholarly and a dozen others convert lecture slides into notes, flashcards, quizzes and narrated video for pocket money. NotebookLM does it free. This segment sets the market price of CR8's <em>student-facing outputs</em> at approximately zero. Plan accordingly: the PDF guide and the videos are deliverables, not the product.</p>
+  </div>
+
+  <h3>Segment 6 · Consolidation — who is buying, and why it matters to you</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Deal</th><th>Date</th><th>Value</th><th>What it signals</th></tr></thead>
+      <tbody>
+        <tr><td class="name">Coursera ← Udemy</td><td class="num">Closed 11 May 2026</td><td class="num">$2.5bn all-stock</td><td>290m learners, 18,000 enterprise customers, ~$1.5bn combined 2025 revenue, $115m cost cuts. Scale is consolidating; catalogue alone is no longer a moat.</td></tr>
+        <tr><td class="name">DataCamp ← Optima</td><td class="num">Nov 2025</td><td class="num">reported ~$15m</td><td>A profitable content business buying an <em>adaptive engine</em>. See below.</td></tr>
+        <tr><td class="name">Cambridge UP ← CogBooks</td><td class="num">2021</td><td class="num">undisclosed</td><td>UK academic publishers have been buying adaptive-learning tech for five years. A plausible exit path — and a plausible partner.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 3. DATACAMP ============ -->
+<section id="datacamp">
+  <span class="sec-tag">03 — The deal you asked about</span>
+  <h2 class="sec">DataCamp &amp; Optima: a content company buying a brain</h2>
+
+  <div class="col">
+    <p>You were right. In November 2025 DataCamp acquired <strong>Optima</strong>, a Dubai-based AI-native learning platform whose technology personalises pacing, explanation and feedback in real time. Optima's founder Yusuf Saber became DataCamp's <strong>Chief AI Officer</strong>, running global AI operations from the UAE. Reported deal value was around $15m. Optima's technology already powers selected premium DataCamp courses and is being rolled across the curriculum over roughly six months, alongside a new AI Tutor experience.</p>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><span class="n">18m</span><span class="l">learners on platform</span></div>
+    <div class="stat"><span class="n">6,000</span><span class="l">B2B customers</span></div>
+    <div class="stat"><span class="n">30%</span><span class="l">year-on-year B2B growth</span></div>
+    <div class="stat hi"><span class="n">$100m</span><span class="l">ARR projected by end of 2026; cashflow positive</span></div>
+  </div>
+
+  <div class="col">
+    <p><strong>What it means strategically.</strong> DataCamp had content and distribution but static delivery. It bought adaptivity rather than building it, and immediately paired the acquisition with a land-grab: <em>DataCamp Classrooms</em> gives educators and their students the full 630+ course library <strong>free</strong> on a renewable six-month basis, plus a January 2026 pledge of free AI training to a million teachers and students. Free access, then an institution-wide paid upgrade with LMS integration, custom paths and a dedicated account manager.</p>
+
+    <h4>Where DataCamp is weak</h4>
+    <ul>
+      <li><strong>It is domain-locked.</strong> Data and AI only. It cannot serve a Nursing, Law or Business programme. Its own reviewers call this out: <em>"data-only, no web dev, design, business, or general programming."</em></li>
+      <li><strong>Its content is its own, not the institution's.</strong> DataCamp teaches DataCamp's curriculum. It has no mechanism for ingesting a university's validated module and improving <em>that</em>.</li>
+      <li><strong>It sits outside the academic quality system.</strong> Nothing it produces feeds programme review, revalidation, or PSRB accreditation.</li>
+    </ul>
+
+    <h4>What its 628 G2 reviewers say (4.7/5)</h4>
+    <div class="scroller">
+      <table>
+        <thead><tr><th>Praised</th><th>Volume</th><th>Criticised</th><th>Volume</th></tr></thead>
+        <tbody>
+          <tr><td>Hands-on interactive coding — "learning by doing rather than just watching videos"</td><td class="num">60+ reviews</td><td>Thin for advanced learners; wants "deeper end-to-end case studies"</td><td class="num">15+ reviews</td></tr>
+          <tr><td>Beginner-friendly decomposition of hard topics</td><td class="num">50+ reviews</td><td>Over-guided — "filling in blanks rather than solving problems independently"</td><td class="num">12+ reviews</td></tr>
+          <tr><td>Bite-sized lessons that fit a working day</td><td class="num">40+ reviews</td><td>Narrow subject coverage</td><td class="num">11+ reviews</td></tr>
+          <tr><td>Clear structured learning paths</td><td class="num">35+ reviews</td><td>No open-ended projects</td><td class="num">10+ reviews</td></tr>
+          <tr><td>Immediate feedback and AI hints</td><td class="num">30+ reviews</td><td>Certificates carry little standalone employer value</td><td>recurring</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <span class="t">Lesson for CR8's product</span>
+      <p style="margin:0">The two loudest complaints across every platform in this report are the same: <strong>over-guided exercises</strong> and <strong>no open-ended, realistic work</strong>. Learners reward scaffolding at the start and resent it later. If CR8's generated modules can be graded by difficulty and end in genuinely open problems drawn from live job requirements, that is a defensible product claim, not a marketing line.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4. WHAT USERS SAY ============ -->
+<section id="reviews">
+  <span class="sec-tag">04 — What students and staff actually say</span>
+  <h2 class="sec">Trust is the scarce resource, not capability</h2>
+
+  <div class="col">
+    <p>Across HEPI, a Duke CTL student study, published pilot data and public review sites, the sentiment pattern is remarkably consistent — and it points away from "smarter tutor" and towards "verifiable, grounded, institutionally sanctioned."</p>
+
+    <h4>What students say they get wrong</h4>
+    <ul>
+      <li><strong>75%</strong> of surveyed students report AI gives inaccurate answers; <strong>94%</strong> say accuracy varies sharply by discipline.</li>
+      <li><strong>62%</strong> worry AI oversimplifies content and blocks deeper learning.</li>
+      <li>A thematic study of senior engineering students found the recurring failure modes are <em>fabricated citations, confident falsehoods, generic responses, persistent errors after correction, and sycophantic agreement</em>. Only 46% actively verify; <strong>54% rely on intuition alone</strong> to spot hallucination.</li>
+    </ul>
+
+    <h4>What they say they want</h4>
+    <ul>
+      <li>Clear institutional guidance, stated up front. Students repeatedly ask staff to "define clear guidelines at the beginning of class."</li>
+      <li>Tools their institution has actually sanctioned — only 38% currently have one.</li>
+      <li><strong>80%</strong> expect genuinely personalised learning within five years. The appetite is there; the trust is not.</li>
+      <li><strong>68%</strong> believe AI skills are essential to their career — which is an <em>employability</em> argument, and employability is a budget line.</li>
+    </ul>
+
+    <h4>What the vendors' own pilot data claims</h4>
+    <div class="scroller">
+      <table>
+        <thead><tr><th>Vendor</th><th>Claimed outcome</th><th>Where it came from</th></tr></thead>
+        <tbody>
+          <tr><td class="name">Studiosity</td><td>8.8% retention uplift; 7.3× ROI</td><td>Users vs non-users, UK/AU/NZ institutions</td></tr>
+          <tr><td class="name">Plato</td><td>88% more confident studying independently; 94% say peers would benefit</td><td>Sussex / Liverpool deployments</td></tr>
+          <tr><td class="name">StudyStash</td><td>59% report improved performance; 34% engage 3h20/week outside lectures</td><td>St Mary's University pilot</td></tr>
+          <tr><td class="name">LearnWise</td><td>43% ticket reduction; 79% of AI feedback delivered near-unchanged</td><td>Across 200+ institutions</td></tr>
+          <tr><td class="name">Anthology</td><td>96% of instructors say AI Design Assistant saves time</td><td>Vendor survey, April 2026</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note good">
+      <span class="t">Your unfair advantage, and you may not have noticed it</span>
+      <p style="margin:0">Every claim in that table is a satisfaction survey. None of them measure output quality. CR8 already ships an evaluation framework — L1 structural checks plus an L2 LLM-judge scoring against weighted rubrics, with A/B prompt comparison and paired t-tests. <strong>Treat that as a sales asset, not engineering hygiene.</strong> Being the only vendor who can hand a quality committee a measured, reproducible score for generated material is worth more in a UK validation panel than any retention statistic.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5. WHITESPACE ============ -->
+<section id="whitespace">
+  <span class="sec-tag">05 — Positioning</span>
+  <h2 class="sec">The position nobody occupies</h2>
+
+  <div class="col">
+    <p>Plot the market on two axes: <em>does it know your curriculum?</em> and <em>does it know the outside labour market?</em></p>
+  </div>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th></th><th>Doesn't know your curriculum</th><th>Knows your curriculum</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="name">Doesn't know<br>the market</td>
+          <td>ChatGPT Edu · Claude · NotebookLM · Copilot · StudyFetch<br><span style="color:var(--ink-faint)">Generic. Free or nearly free. Infinite supply.</span></td>
+          <td>Plato · StudyStash · LearnWise · Blackboard AI Design Assistant · Nolej<br><span style="color:var(--ink-faint)">Grounded but inward-looking. Improves delivery, not relevance.</span></td>
+        </tr>
+        <tr>
+          <td class="name">Knows<br>the market</td>
+          <td>Lightcast Skillabi · Mapademics<br><span style="color:var(--ink-faint)">Excellent diagnosis. Hands you a to-do list and leaves.</span></td>
+          <td style="background:var(--surface-2)"><strong>Empty.</strong><br><span style="color:var(--ink-faint)">Diagnose the gap against live market demand <em>and</em> generate the material that closes it, grounded in the institution's own validated curriculum.</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <h3>The five things CR8 can say that nobody else can</h3>
+    <ol>
+      <li><strong>Curriculum in, not catalogue out.</strong> Ingests the institution's own lecture PDFs and slide decks. DataCamp, Coursera and Udemy sell you their content instead of improving yours.</li>
+      <li><strong>Severity-graded gap analysis with live external research.</strong> Not "here are your learning outcomes" but "these topics are critical, moderate or minor gaps against what the market is asking for right now."</li>
+      <li><strong>It produces the remediation, not just the report.</strong> A study guide, a gap-analysis deck for the programme team, narrated video, and Bloom's-tagged quizzes — from one run. This is the whole differentiator.</li>
+      <li><strong>Measured output quality.</strong> The eval framework. Nobody else brings evidence to a quality committee.</li>
+      <li><strong>Structurally cheap to run.</strong> Tiered model routing by gap severity plus open-source TTS means marginal content cost near zero — where Synthesia meters you per minute and expires unused quota. That is a real gross-margin advantage, and it lets you price on value rather than on cost.</li>
+    </ol>
+
+    <h4>Positioning statement to test</h4>
+    <div class="note">
+      <p style="margin:0"><em>CR8 shows a programme team exactly where their curriculum has drifted from what employers are hiring for — and then writes the teaching material that closes the gap. In days, not a validation cycle.</em></p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5b. MIT ============ -->
+<section id="mit">
+  <span class="sec-tag">06 — Inside the buyer's own report</span>
+  <h2 class="sec">MIT just wrote your go-to-market for you</h2>
+
+  <div class="col">
+    <p>On 13 August 2026 MIT published the report of its <em>Ad Hoc Committee on AI Use in Teaching, Learning, and Research Training</em> — five months of work, a committee spanning every school, and a set of recommendations the Institute is now acting on. It is the clearest available statement of what a serious university thinks it needs to buy. Four things in it matter enormously to CR8.</p>
+
+    <h3>1. It recommends creating your buyer</h3>
+    <div class="note good">
+      <span class="t">§3.3.2 — Create school- or department-level AI Leads</span>
+      <p style="margin:0">“We recommend appointing <strong>AI Leads</strong> in each school and the college (or possibly each department) to help with local AI <strong>curricular planning, adaptation, and adoption</strong>… Their responsibilities could include shaping tailored AI policies, planning how to <strong>adapt each unit's course offerings in light of AI</strong>, and developing new unit-level education and assessment models.”</p>
+    </div>
+    <p>That is the ICP in this report, described by the institution itself, with a job title attached. Elite universities set the template that the rest of the sector copies within two or three years. Watch for this role appearing in UK org charts — and build your outreach list around it.</p>
+
+    <h3>2. It names a budget line you can sell into without procurement</h3>
+    <div class="note good">
+      <span class="t">§3.3.4 — Create an AI Pilot Fund</span>
+      <p style="margin:0">“We recommend that MIT and departments/schools/the college create an <strong>AI Pilot Fund</strong> that instructors can apply to for resources… to do AI-enabled projects, explore the impact of AI on pedagogy, and create deliberately AI-free experiences.”</p>
+    </div>
+    <p>This is the single most actionable line in the document. A departmental pilot fund is discretionary, sub-threshold, applied for by an academic rather than tendered by procurement, and explicitly earmarked for exactly the kind of work a Programme Relevance Audit is. <mark>Your £4,000–£7,500 audit is not a procurement exercise — it is a pilot fund application.</mark> Write the application template and hand it to the prospect.</p>
+
+    <h3>3. It states your pain in the buyer's own words</h3>
+    <ul>
+      <li><strong>§3.1.10:</strong> “the administrative process for making even small changes to curriculum requirements is time-consuming and burdensome, making it hard for MIT to <strong>respond to fast-moving, far-reaching disruptions</strong>” — and departments should “immediately begin exploring AI-aware substitutions and alterations in their curricula as soon as possible – <strong>or we will be left behind</strong>.”</li>
+      <li><strong>§3.1.1:</strong> instructors “should reconsider their goals for student learning in <em>every subject they teach</em>… Individual instructors and departments will need to assess whether longstanding goals are still important.” That is a full curriculum re-examination, mandated top-down.</li>
+      <li><strong>§3.3.3:</strong> “Transitioning from longstanding classroom practices and assessments to a new set of AI-aware… practices presents a <strong>daunting task for any individual instructor</strong>. Doing this at scale across the Institute will be a massive undertaking.” And critically: “existing instructor and curriculum support units like the Teaching and Learning Lab are <strong>already at capacity</strong>.”</li>
+    </ul>
+    <p>A mandate to review every course, a warning that falling behind is the alternative, and an admission that the humans who would do it have no capacity left. That is the shape of a software purchase.</p>
+
+    <h3>4. It reframes your architecture as a procurement advantage</h3>
+    <div class="note good">
+      <span class="t">§3.3.7 &amp; §3.3.8 — Model agnosticism</span>
+      <p style="margin:0">“MIT should continue to provide a <strong>‘model agnostic’ AI platform</strong>… that does not tie our community to one model provider.” And: “we urge MIT <strong>not to commit to any single commercial AI ecosystem</strong>… We would also like to see MIT offer more hosted access to <strong>local AI models</strong> where users can issue requests without fear of training data capture by commercial providers.”</p>
+    </div>
+    <p>You have been thinking of tiered model routing and open-source TTS as a margin story. It is also a <strong>values-and-procurement story</strong>, and the second framing sells better in a university. CR8 is model-agnostic by construction, can run sensitive material through local models, and does not lock a department into OpenAI or Anthropic. Say that on slide two of every pitch. It is a direct answer to the concern this committee spent five months forming.</p>
+
+    <h3>Two warnings in the same document</h3>
+    <div class="note sharp">
+      <span class="t">The objection you will hear, verbatim</span>
+      <p style="margin:0">“…we urge MIT to <strong>avoid ‘checking the box’ by adopting generic third-party AI training programs</strong> and instead invest in ways for our own community to provide these resources.” (§3.3.5)</p>
+      <p style="margin:12px 0 0">Prepare for this. Your answer is that CR8 is not a third-party training programme — it ingests <em>their</em> validated curriculum and produces material their own academics approve. The distinction is real, but you must make it before they make the objection.</p>
+    </div>
+    <div class="note sharp">
+      <span class="t">Where the demand is actually going</span>
+      <p style="margin:0">§3.1.2 pushes assessment toward “oral exams, semester portfolios, and out-of-class assignments paired with in-class conversations,” and §3.1.9 recommends <em>against</em> AI detectors entirely (“an arms race… a lot of effort on both sides that in the end serves no one”). Some of the budget you are chasing is going to <strong>assessment redesign</strong>, not content generation. That is adjacent to CR8 rather than inside it — worth a roadmap conversation, and worth not over-claiming in a pitch.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6. CUSTOMER ============ -->
+<section id="customer">
+  <span class="sec-tag">07 — Who your customer is</span>
+  <h2 class="sec">Not "universities." One person inside them.</h2>
+
+  <div class="col">
+    <p>"B2B with universities" is the right instinct and the wrong resolution. A university is not a buyer; it is eleven buyers with different budgets, different pain and wildly different sales cycles. Ranked by how fast they will give you money:</p>
+  </div>
+
+  <div class="ranked">
+    <div class="rank pick">
+      <div class="rank-head"><span class="tier">Primary ICP · lead here</span><span class="who">The curriculum &amp; quality layer</span></div>
+      <dl>
+        <dt>Who</dt><dd>Associate Dean (Education) · Head of Curriculum or Quality · Director of Learning &amp; Teaching · academic developers in Centres for Academic Practice</dd>
+        <dt>Pain</dt><dd>Periodic programme review, revalidation, PSRB accreditation, OfS quality conditions, graduate-outcome metrics — and, right now, deciding which programmes survive portfolio rationalisation.</dd>
+        <dt>Trigger</dt><dd>A review cycle with a closure or restructure decision attached. Happening at scale across the sector today.</dd>
+        <dt>Why CR8 wins</dt><dd>The gap-analysis deck is <em>literally the artefact this person builds by hand</em>. You are not introducing a new behaviour; you are automating an existing, resented one.</dd>
+        <dt>Deal shape</dt><dd>Per-programme audit, then departmental licence. Not per-student.</dd>
+        <dt>Beachhead</dt><dd>Computing, Data, Business and Engineering programmes at post-92 / low-tariff institutions — highest closure rate, highest employability pressure, and the subject where market drift is most measurable.</dd>
+      </dl>
+    </div>
+
+    <div class="rank">
+      <div class="rank-head"><span class="tier">Parallel revenue · test in month one</span><span class="who">Professional bodies &amp; CPD providers</span></div>
+      <dl>
+        <dt>Who</dt><dd>Chartered institutes, awarding organisations, CPD accreditors, membership bodies with qualification syllabi</dd>
+        <dt>Pain</dt><dd>Syllabi must be re-accredited and refreshed continuously against a changing profession, with almost no in-house content production capability.</dd>
+        <dt>Why it may beat HE</dt><dd>Commercial budgets, no faculty committee, no six-month DPIA, procurement measured in weeks. The identical product with different labels on the output.</dd>
+      </dl>
+    </div>
+
+    <div class="rank">
+      <div class="rank-head"><span class="tier">Parallel revenue</span><span class="who">Independent training providers &amp; FE</span></div>
+      <dl>
+        <dt>Who</dt><dd>Apprenticeship and levy-funded providers, FE colleges</dd>
+        <dt>Pain</dt><dd>Ofsted inspection, end-point assessment pass rates, standards that change under them, thin curriculum-design capacity.</dd>
+        <dt>Route</dt><dd>Same Jisc/Chest channel as HE — Chest agreements cover FE colleges in the UK and Ireland.</dd>
+      </dl>
+    </div>
+
+    <div class="rank">
+      <div class="rank-head"><span class="tier">Deprioritise</span><span class="who">Student-facing AI tutoring</span></div>
+      <dl>
+        <dt>Why not</dt><dd>Free frontier models plus five funded UK specialists plus a $8/month B2C floor. You would be the sixth entrant with the least capital. Ship it as an included feature; never lead with it.</dd>
+      </dl>
+    </div>
+
+    <div class="rank">
+      <div class="rank-head"><span class="tier">Later</span><span class="who">Publishers &amp; courseware</span></div>
+      <dl>
+        <dt>Who</dt><dd>Cambridge University Press &amp; Assessment, Pearson, Sage, Taylor &amp; Francis</dd>
+        <dt>Why</dt><dd>They have bought adaptive-learning technology repeatedly (CogBooks, Smart Sparrow). Both a channel partner and a realistic acquirer. Not a year-one target, but worth naming early to investors.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 7. PRICING ============ -->
+<section id="pricing">
+  <span class="sec-tag">08 — Pricing</span>
+  <h2 class="sec">Price against the artefact you replace, not the seat</h2>
+
+  <div class="col">
+    <p>Per-student pricing is a trap in a sector cutting headcount. It caps your value at the going rate for a chatbot seat, and it grows your invoice in the one year the customer needs it to shrink.</p>
+
+    <h4>The benchmarks you're pricing against</h4>
+  </div>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Reference point</th><th>Figure</th><th>What it anchors</th></tr></thead>
+      <tbody>
+        <tr><td class="name">ChatGPT Edu per seat</td><td class="num">$144/user/yr</td><td>The ceiling on per-student AI. Falling fast — it was $240.</td></tr>
+        <tr><td class="name">HE per-student AI band</td><td class="num">$10–$40/student/yr</td><td>Where seat pricing actually lands. At 20,000 students that's $300k–$600k/yr.</td></tr>
+        <tr><td class="name">Building one online course</td><td class="num">$46,350–$50,000</td><td class="">The real comparator. Redesign alone runs ~$25,500; Georgia Tech's flagship builds hit $100k–$200k.</td></tr>
+        <tr><td class="name">Course maintenance</td><td class="num">~$7,500/course/yr</td><td>The recurring line CR8 can credibly absorb.</td></tr>
+        <tr><td class="name">Synthesia Enterprise</td><td class="num">$20k–$100k+/yr</td><td>What institutions already pay for video generation alone.</td></tr>
+        <tr><td class="name">"Major" edtech contract</td><td class="num">~$500k</td><td>Realistic ceiling for the whole category. Set expectations accordingly.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <h4>The procurement threshold is the most important number in your pricing</h4>
+    <p>UK universities publish their thresholds, and they are consistent enough to design around. At Exeter: £10,001–£25,000 requires a request for quotes (about ten working days); £25,000–£49,999 an invitation to quote (two to three weeks); £50,000+ triggers a nationally advertised tender taking around two months. At Kingston: under £5,000 needs one written quote; £5,001–£20,000 needs two.</p>
+
+    <div class="note good">
+      <span class="t">Design your entry price around this</span>
+      <p style="margin:0">A first sale priced <strong>under £10,000</strong> can be bought on a departmental card with one or two quotes — no tender, no committee, often no central IT review. A first sale priced at £50,000 takes two months minimum and puts you in a competitive tender against Lightcast. <mark>Your land price should be a number a Dean can approve alone.</mark></p>
+    </div>
+
+    <h4>Recommended structure</h4>
+    <div class="scroller">
+      <table>
+        <thead><tr><th>Tier</th><th>What they get</th><th>Price</th><th>Why this number</th></tr></thead>
+        <tbody>
+          <tr><td class="name">Programme<br>Relevance Audit</td><td>One programme: severity-graded gap analysis vs live market demand, staff-facing deck, evidence pack for the review panel</td><td class="num">£4,000–£7,500<br>one-off</td><td>Sits under every threshold in the sector. Buyable in days. Cheaper than two days of a portfolio-review consultant.</td></tr>
+          <tr><td class="name">Department<br>Licence</td><td>Up to ~10 programmes, annual refresh, full content generation (guides, decks, video, quizzes), LMS delivery</td><td class="num">£18,000–£32,000/yr</td><td>Roughly half the cost of building a single new online course. Still under the £50k tender trigger at most institutions.</td></tr>
+          <tr><td class="name">Institutional</td><td>Portfolio-wide relevance monitoring, integrations, SSO, quality-committee reporting from the eval framework</td><td class="num">£55,000–£95,000/yr</td><td>Only sell this after two departments are live and referenceable. Accept that it means a tender.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Do not discount the audit to zero. A paid pilot, however small, is the only reliable evidence that the pain is real — and a free pilot in this sector will sit unopened for a term.</p>
+  </div>
+</section>
+
+<!-- ============ 8. GTM ============ -->
+<section id="gtm">
+  <span class="sec-tag">09 — Go to market</span>
+  <h2 class="sec">First ninety days</h2>
+
+  <div class="col">
+    <p>Two structural facts shape everything below. First, higher-education sales cycles run six to eighteen months and up to twenty-four in HE, with September the critical inflection point — you are writing this in late August, so the current window is <em>now</em>. Second, and more usefully: <strong>UK universities publish their module handbooks, programme specifications and learning outcomes openly on the web.</strong> You do not need a data-sharing agreement, a DPIA or a security review to generate a gap analysis for any programme in the country.</p>
+
+    <div class="note good">
+      <span class="t">The unlock</span>
+      <p style="margin:0">Every other vendor in this report needs access before they can demonstrate value. CR8 can produce a finished, specific, named artefact for a prospect <em>before the first conversation</em> — from public data. That collapses the top of the funnel from months to hours. Build this first.</p>
+    </div>
+  </div>
+
+  <div class="plan">
+    <div class="step"><div class="when">Weeks 1–2</div><div class="what"><b>Build the cold artefact</b><span>A one-click pipeline: public programme spec in → branded "Programme Relevance Report" out. Severity-graded gaps, named missing skills, three example modules. This is the entire top of your funnel.</span></div></div>
+    <div class="step"><div class="when">Weeks 1–3</div><div class="what"><b>Fix the evidence base for the "gap" claim</b><span>Tavily web search is fine for enrichment but weak in an academic argument. Wire in structured UK job-posting data — Adzuna's API is UK-native and developer-accessible — so a gap claim can be traced to a countable number of live vacancies. This is the one technical change that most raises your win rate against Lightcast.</span></div></div>
+    <div class="step"><div class="when">Weeks 2–4</div><div class="what"><b>Write the pilot-fund application, not a proposal</b><span>MIT's committee recommends departments create an AI Pilot Fund instructors can apply to for AI-enabled curriculum projects (§3.3.4). UK equivalents exist as teaching-development, curriculum-enhancement and strategic-projects funds. Draft a one-page application an academic can submit with their name on it — you are removing their work, not adding a procurement step.</span></div></div>
+    <div class="step"><div class="when">Weeks 2–6</div><div class="what"><b>Run 25 cold audits, then get in the room</b><span>Target Associate Deans of Education in Computing, Data, Business and Engineering at post-92 institutions. Send the finished report, not a deck. Ask for twenty minutes to walk through the gaps you found in their programme. Aim: 5 paid audits at £5k.</span></div></div>
+    <div class="step"><div class="when">Weeks 3–8</div><div class="what"><b>Open the CPD line in parallel</b><span>Same artefact, same pipeline, faster money. Approach chartered institutes and awarding bodies with a relevance audit of one qualification syllabus. Treat this as your cashflow hedge against the HE cycle.</span></div></div>
+    <div class="step"><div class="when">Weeks 4–10</div><div class="what"><b>Publish the sector report</b><span>Copy Kortext's playbook exactly. Run your pipeline across every UK Computing or Business undergraduate programme and publish a <em>Curriculum Relevance Index</em>. This is free, it is genuinely novel, Wonkhe / HEPI / THE will cover it, and it turns your product into the research. Nothing else you can do in ninety days generates comparable inbound.</span></div></div>
+    <div class="step"><div class="when">Weeks 6–12</div><div class="what"><b>Start the channel conversations</b><span>Jisc / Chest for a collective licensing agreement — LearnWise's runs three years as a site licence and removes the procurement objection entirely. Talk to Universities UK about the partnership route Studiosity took. Both are slow; both must be started now.</span></div></div>
+    <div class="step"><div class="when">Ongoing</div><div class="what"><b>Be present where the buyers are</b><span>Jisc Digifest, ALT-C, Advance HE and UCISA events. In a sector this small, three named reference institutions is the difference between cold outreach and inbound.</span></div></div>
+  </div>
+</section>
+
+<!-- ============ 9. RISKS ============ -->
+<section id="risks">
+  <span class="sec-tag">10 — Where this could go wrong</span>
+  <h2 class="sec">Six risks, honestly stated</h2>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>Risk</th><th>Severity</th><th>Why it's real</th><th>What reduces it</th></tr></thead>
+      <tbody>
+        <tr><td class="name">Lightcast adds generation</td><td><span class="chip high">Critical</span></td><td>They have 18bn labour-market data points, 1,000+ institutions and are already live in the UK. Bolting an LLM onto Skillabi to draft the missing module is an obvious roadmap item.</td><td>Move fast on the fulfilment half; make the generated <em>institution-specific</em> material and the eval evidence the moat, since neither is a data-scale problem.</td></tr>
+        <tr><td class="name">LMS natives get good enough</td><td><span class="chip high">High</span></td><td>Blackboard's AI Design Assistant is free with the licence and 96% of instructors say it already saves them time.</td><td>Never compete on generation speed. Compete on <em>knowing what to generate</em> — the external market layer they don't have.</td></tr>
+        <tr><td class="name">Frontier models eat the outputs</td><td><span class="chip high">High</span></td><td>NotebookLM already makes study guides and narrated video from uploaded slides, free.</td><td>Sell the institutional workflow and evidence pack, not the student artefact.</td></tr>
+        <tr><td class="name">HE cannot afford you</td><td><span class="chip high">High</span></td><td>Half the sector is in deficit; buying AI during redundancies draws active faculty hostility.</td><td>Price under the threshold. Lead with cost-avoidance framing. Keep the CPD and training-provider lines running in parallel.</td></tr>
+        <tr><td class="name">Solo founder vs 6–24 month cycles</td><td><span class="chip med">Medium</span></td><td>You are building, selling and delivering. Every HE deal has a DPIA, a security questionnaire and an accessibility statement attached.</td><td>Prepare the compliance pack once, early — DPIA template, VPAT-equivalent accessibility statement, security overview. It is a recurring, predictable gate.</td></tr>
+        <tr><td class="name">Academic trust in generated content</td><td><span class="chip med">Medium</span></td><td>75% of students already report AI inaccuracy; validation panels are conservative by design.</td><td>Lead with the eval framework and human-in-the-loop review. Position generated material as a <em>draft for academic approval</em>, never as finished teaching.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <div class="note sharp">
+      <span class="t">The disagreement worth having</span>
+      <p style="margin:0">You asked about B2B with universities. I think that is right for <em>credibility</em> and wrong as your <em>only</em> revenue plan for year one. UK higher education has the problem, the pain and the public evidence — but it is the least solvent, slowest-procuring buyer in this entire report. Professional bodies and training providers have the same content-relevance problem, commercial budgets and no faculty committee. Run both. Let the universities give you the case studies and the sector report; let CPD pay the bills while the HE pipeline matures.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SOURCES ============ -->
+<section class="sources" id="sources">
+  <h4 style="margin-top:0">Sources</h4>
+  <ol>
+    <li><a href="https://www.businesswire.com/news/home/20251112410509/en/DataCamp-Extends-Market-Leadership-With-Acquisition-of-Optima-Creating-the-AI-Learning-Engine-of-the-Future">DataCamp acquires Optima — Business Wire</a></li>
+    <li><a href="https://www.datacamp.com/blog/datacamp-has-acquired-optima">DataCamp Has Acquired Optima — DataCamp</a></li>
+    <li><a href="https://www.fwdstart.me/p/datacamp-acquires-uae-optima-in-15-million-deal-to-embed-ai-native-learning-into-its-global-platfo">Reported $15m Optima deal value — FWD Start</a></li>
+    <li><a href="https://www.datacamp.com/universities">DataCamp Classrooms for universities</a></li>
+    <li><a href="https://www.g2.com/products/datacamp/reviews?qs=pros-and-cons">DataCamp user pros and cons — G2 (628 reviews)</a></li>
+    <li><a href="https://skillscouter.com/datacamp-review/">DataCamp review and pricing — SkillScouter</a></li>
+    <li><a href="https://www.reworked.co/learning-development/coursera-closes-25b-udemy-merger/">Coursera closes $2.5bn Udemy merger — Reworked</a></li>
+    <li><a href="https://lightcast.io/resources/blog/skillabi-press-release-june-3-2025">Lightcast launches Skillabi</a></li>
+    <li><a href="https://lightcast.io/use-cases/curriculum-design-alignment">Lightcast — program development and review</a></li>
+    <li><a href="https://www.learnwise.ai/">LearnWise AI — product and customers</a></li>
+    <li><a href="https://www.chest.ac.uk/agreements/learnwise-ai/">Chest agreement for LearnWise AI (Jisc)</a></li>
+    <li><a href="https://www.studiosity.com/uuk">Universities UK &amp; Studiosity strategic partnership</a></li>
+    <li><a href="https://www.plato.ac/">Plato Academic</a></li>
+    <li><a href="https://studystash.com/en-gb/who-we-help/universities">StudyStash for universities</a></li>
+    <li><a href="https://studystash.com/en-gb/about/case-studies/st-marys-university">StudyStash — St Mary's University pilot</a></li>
+    <li><a href="https://kortext.com/blog/news/kortext-introduces-ai-powered-study-tools/">Kortext Premium / study+ launch</a></li>
+    <li><a href="https://nationalcentreforai.jiscinvolve.org/wp/2025/08/12/ai-tools-blog-learning-tools/">Jisc National Centre for AI — learning tools directory</a></li>
+    <li><a href="https://wonkhe.com/blogs/how-is-artificial-intelligence-actually-being-used-in-higher-education/">How AI is actually used in UK HE — Wonkhe / Jisc</a></li>
+    <li><a href="https://facultygovernance.mit.edu/committee/committee-ai-use-teaching-learning-and-research-training">Report of MIT's Ad Hoc Committee on AI Use in Teaching, Learning, and Research Training, 13 August 2026</a></li>
+    <li><a href="https://www.hepi.ac.uk/reports/student-generative-ai-survey-2026/">HEPI / Kortext Student Generative AI Survey 2026</a></li>
+    <li><a href="https://ctl.duke.edu/blog/2025/08/duke-students-report-frequent-ai-use-call-for-instructor-guidance-in-new-research-by-caradite/">Duke CTL — student AI use and accuracy concerns</a></li>
+    <li><a href="https://arxiv.org/html/2602.17671">AI Hallucination from Students' Perspective — arXiv</a></li>
+    <li><a href="https://www.hepi.ac.uk/2026/01/24/weekend-reading-death-by-a-thousand-cuts-why-universities-cannot-survive-on-goodwill-alone/">UK university finances 2026 — HEPI</a></li>
+    <li><a href="https://www.timeshighereducation.com/news/almost-4000-courses-closed-uk-universities-2024">Almost 4,000 courses closed at UK universities since 2024 — THE</a></li>
+    <li><a href="https://www.universitiesuk.ac.uk/latest/insights-and-analysis/higher-education-numbers">Higher education in numbers — Universities UK</a></li>
+    <li><a href="https://iet.ucdavis.edu/technews/new-chatgpt-edu-agreement-offers-expanded-features-lower-cost-new-terms">ChatGPT Edu at $144/user/yr — UC Davis IET</a></li>
+    <li><a href="https://uit.stanford.edu/rates/openai-chatgpt-edu">ChatGPT Edu rates — Stanford</a></li>
+    <li><a href="https://www.insidehighered.com/news/tech-innovation/artificial-intelligence/2026/03/27/faculty-push-back-against-openai-deals">Faculty push back against OpenAI deals — Inside Higher Ed</a></li>
+    <li><a href="https://www.lse.ac.uk/news/latest-news-from-lse/d-april/lse-partners-with-anthropic-to-shape-the-future-of-ai-in-education">LSE partners with Anthropic</a></li>
+    <li><a href="https://www.northumbria.ac.uk/about-us/news-events/news/northumbria-launches-new-ai-platform-for-staff-and-students/">Northumbria rolls out Claude for Education</a></li>
+    <li><a href="https://ibl.ai/blog/university-ai-per-seat-cost-true-math">Per-student AI pricing for universities — ibl.ai</a></li>
+    <li><a href="https://www.blackboard.com/solutions/lms/ai">Blackboard AI Design Assistant — included as standard</a></li>
+    <li><a href="https://www.learnwise.ai/guides/ai-in-the-lms-how-it-works-in-canvas-moodle-brightspace-blackboard">Native AI across Canvas, Moodle, Brightspace, Blackboard</a></li>
+    <li><a href="https://www.coursebox.ai/pricing">Coursebox pricing tiers</a></li>
+    <li><a href="https://capterra.com/p/276074/Coursebox/reviews/">Coursebox reviews — Capterra (99 reviews)</a></li>
+    <li><a href="https://aihungry.com/tools/nolej-ai/pricing">Nolej AI pricing</a></li>
+    <li><a href="https://www.arcade.software/post/synthesia-pricing">Synthesia pricing 2026</a></li>
+    <li><a href="https://aigearbase.com/tool/studyfetch">StudyFetch pricing and features</a></li>
+    <li><a href="https://onedtech.philhillaa.com/p/how-much-does-it-cost-to-build-an-online-course">What it costs to build an online course — On EdTech</a></li>
+    <li><a href="https://thecroreport.com/blog/vp-sales-edtech/">EdTech sales cycles, budgets and contract values — CRO Report</a></li>
+    <li><a href="https://www.exeter.ac.uk/departments/finance/buying/procurement/">Procurement thresholds — University of Exeter</a></li>
+    <li><a href="https://assets.kingston.ac.uk/m/c697b5f3d8d4f4ba/original/KU-Procurement-Policy-and-Guide_January-2026.pdf">Procurement policy and thresholds — Kingston University</a></li>
+    <li><a href="https://finance.yahoo.com/sectors/technology/articles/global-10-6b-ai-education-163600564.html">AI in education market size and forecast</a></li>
+    <li><a href="https://developer.adzuna.com/">Adzuna developer API — UK job posting data</a></li>
+    <li><a href="https://www.cogbooks.com/news-cambridge-university-press-assessment-acquires-cogbooks-to-advance-its-adaptive-learning-strategy/">Cambridge University Press &amp; Assessment acquires CogBooks</a></li>
+  </ol>
+</section>
+
+</div>
