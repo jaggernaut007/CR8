@@ -3,9 +3,10 @@
      Updated at the end of every session using the session-handoff skill. -->
 
 ## Current Status
-**Last updated:** 2026-09-06
+**Last updated:** 2026-09-07
 **Overall project phase:** v0.5.6+ — Forgot-password / password-reset flow added (Resend email + one-time tokens); 1178 pytest + 149 Vitest all passing
 **Current version:** v0.5.6
+**Deployed:** forgot-password/password-reset flow is **live** on GCP Cloud Run (`cr8-pipeline`, revision `cr8-pipeline-00042-2jb`, commit `7197b08`) via GitHub Actions `deploy` workflow (`services=cpu`). Live smoke test: `/health` 200, `/login` 200, `POST /api/auth/forgot-password` → 202 anti-enumeration.
 
 ## Forgot Password / Password Reset (2026-09-06)
 > Added a complete forgot-password flow: `POST /api/auth/forgot-password` (emails a one-time reset link, always returns 202 to prevent account enumeration) and `POST /api/auth/reset-password` (validates a single-use token and sets the new password).
